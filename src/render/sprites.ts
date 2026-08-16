@@ -175,10 +175,28 @@ function poseFor(state: PlayerState, animTime: number, speedRatio: number): Pose
 }
 
 /**
+ * Anatomy, in pixels measured up from the feet (the sprite is ~24 px tall and ~12 px wide, a little
+ * roomier than the 10×22 collision box because robots have shoulders and boots).
+ *
+ * ```
+ *  -24 ┬ head (7×6, visor band)
+ *  -18 ┼ shoulders (11 wide) / torso (9×8, chest core)
+ *  -10 ┼ hips (7×2)
+ *   -9 ┼ thighs → shins → boots
+ *    0 ┴ ground
+ * ```
+ */
+const HEAD_TOP = -24;
+const SHOULDER_Y = -18;
+const HIP_Y = -10;
+const LEG_BASE_X = 2;
+const ARM_BASE_X = 5;
+
+/**
  * Draw Optimus.
  *
- * The sprite is a little wider than the 10×22 collision box (robots have shoulders), drawn around
- * the box centre so the visual never desyncs from the physics.
+ * Everything is positioned around the collision box centre so the visual can never desync from the
+ * physics, and `facing` is applied as a horizontal flip so only the right-facing pose is authored.
  */
 export function drawOptimus(ctx: CanvasRenderingContext2D, options: OptimusRenderOptions): void {
   const { x, y, facing, state, animTime, speedRatio, energyRatio } = options;
@@ -188,68 +206,76 @@ export function drawOptimus(ctx: CanvasRenderingContext2D, options: OptimusRende
   ctx.translate(Math.round(x + PLAYER_WIDTH / 2), Math.round(y + PLAYER_HEIGHT));
   ctx.scale(facing, 1);
   // Origin is now the feet, at the horizontal centre of the body, facing right.
-  const stretch = pose.stretch;
-  const bob = pose.bob;
-  const lean = pose.lean;
+  const { stretch, bob, lean } = pose;
 
   if (state === 'thrust') {
     drawThrustFlame(ctx, animTime, energyRatio);
   }
 
-  const hipY = -9 * stretch + bob;
-  const shoulderY = -18 * stretch + bob;
+  const hipY = HIP_Y * stretch + bob;
+  const shoulderY = SHOULDER_Y * stretch + bob;
+  const headY = HEAD_TOP * stretch + bob;
 
-  // Back limbs first so the front ones overlap them.
-  drawLeg(ctx, pose.legBack[0], hipY + pose.legBack[1], bob, palette.shellDark);
-  drawArm(ctx, pose.armBack[0] - 1, shoulderY + pose.armBack[1], palette.shellDark);
+  // Back-side limbs first so the front ones overlap them.
+  drawLeg(ctx, -LEG_BASE_X + pose.legBack[0], hipY + pose.legBack[1], palette.shellDark, palette.joint);
+  drawArm(ctx, -ARM_BASE_X + pose.armBack[0], shoulderY + pose.armBack[1], palette.shellDark);
 
-  // Torso: a bevelled shell with a chest light that tracks the energy meter.
-  const torsoX = -4 + lean * 0.4;
-  const torsoY = shoulderY;
-  const torsoH = 10 * stretch;
-  fill(ctx, torsoX, torsoY, 8, torsoH, palette.shell);
-  fill(ctx, torsoX, torsoY, 8, 1, palette.shellLight);
-  fill(ctx, torsoX + 6, torsoY + 1, 2, torsoH - 1, palette.shellDark);
-  fill(ctx, torsoX + 1, torsoY + torsoH - 1, 6, 1, palette.joint);
+  // Torso: bevelled shell, shoulder yoke, and a chest core that tracks the energy meter.
+  const torsoX = -4.5 + lean * 0.4;
+  const torsoH = hipY - shoulderY;
+  fill(ctx, torsoX - 1, shoulderY, 11, 2, palette.shellDark);
+  fill(ctx, torsoX, shoulderY, 9, torsoH, palette.shell);
+  fill(ctx, torsoX, shoulderY, 9, 1, palette.shellLight);
+  fill(ctx, torsoX + 7, shoulderY + 1, 2, torsoH - 1, palette.shellDark);
   const coreColor = energyRatio > 0.25 ? palette.energy : palette.uiWarn;
-  fill(ctx, torsoX + 2, torsoY + 3, 3, 2, coreColor);
+  fill(ctx, torsoX + 3, shoulderY + 3, 3, 3, palette.joint);
+  fill(ctx, torsoX + 3.5, shoulderY + 3.5, 2, 2, coreColor);
 
-  // Waist joint.
-  fill(ctx, -3 + lean * 0.3, hipY - 1, 6, 2, palette.joint);
+  // Hip block.
+  fill(ctx, -3.5 + lean * 0.3, hipY - 1, 7, 2, palette.joint);
 
-  // Front limbs.
-  drawLeg(ctx, pose.legFront[0], hipY + pose.legFront[1], bob, palette.shell);
-  drawArm(ctx, pose.armFront[0] + 1, shoulderY + pose.armFront[1], palette.shell);
+  // Front-side limbs.
+  drawLeg(ctx, LEG_BASE_X + pose.legFront[0], hipY + pose.legFront[1], palette.shell, palette.joint);
+  drawArm(ctx, ARM_BASE_X + pose.armFront[0], shoulderY + pose.armFront[1], palette.shell);
 
   // Head: helmet with a glowing visor band.
   const headX = -3.5 + lean * 0.8 + pose.headTilt;
-  const headY = torsoY - 7;
+  fill(ctx, headX + 3, headY - 1, 1, 1, palette.joint); // antenna nub
   fill(ctx, headX, headY, 7, 6, palette.shellLight);
   fill(ctx, headX, headY, 7, 1, palette.white);
   fill(ctx, headX + 5, headY + 1, 2, 5, palette.shellDark);
-  fill(ctx, headX + 1, headY + 2, 5, 2, palette.joint);
+  fill(ctx, headX + 1, headY + 2, 6, 2, palette.joint);
   const visorLit = state !== 'dead';
-  fill(ctx, headX + 1.5, headY + 2.5, 4, 1, visorLit ? palette.visor : palette.plateDark);
+  fill(ctx, headX + 1, headY + 2, 5, 1, visorLit ? palette.visor : palette.plateDark);
   if (visorLit && state !== 'hurt') {
-    fill(ctx, headX + 4, headY + 2.5, 1, 1, palette.visorGlow);
+    fill(ctx, headX + 4, headY + 2, 2, 1, palette.visorGlow);
   }
-  // Antenna nub.
-  fill(ctx, headX + 3, headY - 1, 1, 1, palette.joint);
+  // Neck.
+  fill(ctx, -1.5, headY + 6, 3, Math.max(0, shoulderY - headY - 6), palette.joint);
 
   ctx.restore();
 }
 
-function drawLeg(ctx: CanvasRenderingContext2D, dx: number, y: number, bob: number, color: string): void {
-  // Thigh, shin, foot: three chunky segments, offset by the pose.
-  fill(ctx, dx - 1.5, y, 3, 5, color);
-  fill(ctx, dx - 1.5 + Math.sign(dx) * 0.5, y + 5, 3, 4 - bob * 0.2, palette.shellDark);
-  fill(ctx, dx - 2 + Math.sign(dx) * 0.5, y + 9 - bob * 0.2, 4, 1, palette.joint);
+/** Thigh → shin → boot, hanging from the hip at `x`. */
+function drawLeg(
+  ctx: CanvasRenderingContext2D,
+  x: number,
+  hipY: number,
+  color: string,
+  jointColor: string,
+): void {
+  const knee = hipY + 5;
+  fill(ctx, x - 1.5, hipY, 3, 5, color);
+  fill(ctx, x - 1.5, knee, 3, 4, palette.shellDark);
+  // Boots stay 3 px wide so a neutral stance still reads as two feet, not one block.
+  fill(ctx, x - 1.5, knee + 4, 3, 2, jointColor);
 }
 
-function drawArm(ctx: CanvasRenderingContext2D, dx: number, y: number, color: string): void {
-  fill(ctx, dx + 3, y + 1, 2, 5, color);
-  fill(ctx, dx + 3, y + 6, 2, 4, palette.shellDark);
-  fill(ctx, dx + 2.5, y + 10, 3, 2, palette.joint);
+/** Upper arm → forearm → hand, hanging from the shoulder at `x`. */
+function drawArm(ctx: CanvasRenderingContext2D, x: number, shoulderY: number, color: string): void {
+  fill(ctx, x - 1, shoulderY + 1, 2, 4, color);
+  fill(ctx, x - 1, shoulderY + 5, 2, 3, palette.shellDark);
+  fill(ctx, x - 1.5, shoulderY + 8, 3, 2, palette.joint);
 }
 
 function drawThrustFlame(ctx: CanvasRenderingContext2D, animTime: number, energyRatio: number): void {
