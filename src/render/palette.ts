@@ -6,21 +6,21 @@
  */
 
 export const palette = {
-  // Backgrounds
-  skyTop: '#141a26',
-  skyBottom: '#232c3d',
-  farStructure: '#1b2231',
-  midStructure: '#232c3e',
-  nearStructure: '#2c374c',
-  fog: '#39465e',
+  // Backgrounds — deliberately low contrast so the playfield reads first.
+  skyTop: '#0d121c',
+  skyBottom: '#161d2b',
+  farStructure: '#141a27',
+  midStructure: '#1a2231',
+  nearStructure: '#212b3d',
+  fog: '#26314a',
 
-  // Tiles
-  plateFace: '#4c586e',
-  plateLight: '#697894',
-  plateDark: '#333c4e',
-  plateShadow: '#252c3a',
-  grate: '#3b4557',
-  rust: '#8a5a3b',
+  // Tiles — brighter and warmer than the backdrop, so terrain never blends into the skyline.
+  plateFace: '#5d6b86',
+  plateLight: '#93a5c4',
+  plateDark: '#3b4659',
+  plateShadow: '#232a38',
+  grate: '#46536a',
+  rust: '#9c6440',
   hazard: '#d9564f',
   hazardDark: '#8f3833',
 

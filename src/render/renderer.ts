@@ -74,6 +74,9 @@ export class WorldRenderer {
 
     drawSky(ctx);
     drawParallax(ctx, this.layers, cameraX, cameraY);
+    // Atmospheric scrim: pushes the backdrop behind the playfield so terrain and Optimus pop.
+    ctx.fillStyle = 'rgb(9 12 20 / 0.45)';
+    ctx.fillRect(0, 0, INTERNAL_WIDTH, INTERNAL_HEIGHT);
     drawTiles(
       {
         ctx,

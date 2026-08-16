@@ -52,7 +52,7 @@ export function createParallaxLayers(options: ParallaxOptions): ParallaxLayer[] 
     minHeight: 0.25,
     maxHeight: 0.75,
     towerWidth: [14, 34],
-    windowChance: 0.12,
+    windowChance: 0.05,
   });
 
   const mid = createLayerCanvas(width, Math.round(viewHeight * 0.6));
@@ -62,7 +62,7 @@ export function createParallaxLayers(options: ParallaxOptions): ParallaxLayer[] 
     minHeight: 0.3,
     maxHeight: 0.95,
     towerWidth: [10, 26],
-    windowChance: 0.2,
+    windowChance: 0.09,
   });
 
   const near = createLayerCanvas(width, Math.round(viewHeight * 0.4));
@@ -117,7 +117,8 @@ function paintSkyline(
     for (let wy = top + 4; wy < height - 3; wy += 5) {
       for (let wx = x + 2; wx < x + towerWidth - 2; wx += 4) {
         if (!rng.chance(style.windowChance)) continue;
-        ctx.fillStyle = rng.chance(0.25) ? palette.uiWarn : style.accent;
+        // Only a few windows are lit warm; the rest are barely brighter than the tower.
+        ctx.fillStyle = rng.chance(0.18) ? palette.rust : style.accent;
         ctx.fillRect(wx, wy, 2, 2);
       }
     }

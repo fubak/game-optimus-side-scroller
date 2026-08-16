@@ -104,8 +104,13 @@ function drawPlate(context: TileDrawContext, tx: number, ty: number, x: number, 
   const openLeft = !isSolidAt(map, tx - 1, ty);
   const openRight = !isSolidAt(map, tx + 1, ty);
 
+  // Buried tiles are much darker than the surface: a solid mass should read as depth, not as a slab.
   ctx.fillStyle = openAbove ? palette.plateFace : palette.plateDark;
   ctx.fillRect(x, y, TILE_SIZE, TILE_SIZE);
+  if (!openAbove && !openLeft && !openRight) {
+    ctx.fillStyle = palette.plateShadow;
+    ctx.fillRect(x, y, TILE_SIZE, TILE_SIZE);
+  }
 
   // Surface highlight and grime.
   if (openAbove) {
@@ -132,10 +137,10 @@ function drawPlate(context: TileDrawContext, tx: number, ty: number, x: number, 
   }
 
   // Panel seam plus rivets, so large masses do not read as flat colour.
-  ctx.fillStyle = palette.plateDark;
+  ctx.fillStyle = openAbove ? palette.plateDark : palette.plateShadow;
   ctx.fillRect(x + 1, y + 8, TILE_SIZE - 2, 1);
-  if ((hash & 1) === 0) {
-    ctx.fillStyle = palette.plateLight;
+  if ((hash & 3) === 0) {
+    ctx.fillStyle = openAbove ? palette.plateLight : palette.plateDark;
     ctx.fillRect(x + 3, y + 11, 1, 1);
     ctx.fillRect(x + TILE_SIZE - 4, y + 11, 1, 1);
   }
@@ -222,19 +227,28 @@ function drawGoal(context: TileDrawContext, x: number, y: number): void {
   ctx.fillRect(x + 7, y + 6 + wobble, 1, 4);
 }
 
+/**
+ * Background clutter: pipe runs that never collide.
+ *
+ * Drawn dark and *thin*, with no cell fill, so it cannot be mistaken for a platform — an earlier
+ * version filled the whole cell in mid-grey and read exactly like a floating ledge.
+ */
 function drawScenery(ctx: CanvasRenderingContext2D, tx: number, ty: number, x: number, y: number): void {
-  // Background clutter: pipes and cable runs that never collide.
   const hash = tileHash(tx, ty);
-  ctx.fillStyle = palette.midStructure;
-  ctx.fillRect(x, y, TILE_SIZE, TILE_SIZE);
+  const horizontal = (hash & 1) === 0;
   ctx.fillStyle = palette.nearStructure;
-  if ((hash & 1) === 0) {
-    ctx.fillRect(x, y + 5, TILE_SIZE, 6);
-    ctx.fillStyle = palette.plateDark;
-    ctx.fillRect(x, y + 5, TILE_SIZE, 1);
+  if (horizontal) {
+    ctx.fillRect(x, y + 6, TILE_SIZE, 4);
+    ctx.fillStyle = palette.midStructure;
+    ctx.fillRect(x, y + 9, TILE_SIZE, 1);
+    if ((hash & 6) === 0) {
+      // Bracket every few tiles.
+      ctx.fillStyle = palette.nearStructure;
+      ctx.fillRect(x + 6, y + 4, 3, 8);
+    }
   } else {
-    ctx.fillRect(x + 5, y, 6, TILE_SIZE);
-    ctx.fillStyle = palette.plateDark;
-    ctx.fillRect(x + 5, y, 1, TILE_SIZE);
+    ctx.fillRect(x + 6, y, 4, TILE_SIZE);
+    ctx.fillStyle = palette.midStructure;
+    ctx.fillRect(x + 9, y, 1, TILE_SIZE);
   }
 }
