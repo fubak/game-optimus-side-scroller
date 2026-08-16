@@ -27,6 +27,8 @@ import { FullscreenPass, FULLSCREEN_VS } from '../gfx/fullscreen.ts';
 import { SpriteBatch } from '../gfx/batch.ts';
 import { generateBlueNoise, blueNoiseToRGBA, identityLUT } from '../gfx/bluenoise.ts';
 import { SPRITE_VS, SPRITE_FS, OCCLUDER_FS } from '../shaders/sprite.ts';
+import { PARTICLE_VS, PARTICLE_FS } from '../shaders/particle.ts';
+import { InstancedQuads } from '../gfx/instanced.ts';
 import { LIGHTING_FS } from '../shaders/lighting.ts';
 import {
   BRIGHT_PASS_FS,
@@ -39,7 +41,7 @@ import {
   COPY_FS,
 } from '../shaders/post.ts';
 import { LightList } from './lights.ts';
-import { Quality, QUALITY_PRESETS, type QualitySettings } from '../core/config.ts';
+import { Quality, QUALITY_PRESETS, BUDGETS, type QualitySettings } from '../core/config.ts';
 import type { Camera } from '../scene/camera.ts';
 
 /** Per-biome atmospheric settings that drive the lighting and post stages. */
@@ -146,6 +148,13 @@ export interface FrameRequest {
   drawContactAO?(batch: SpriteBatch): void;
   /** Draw unlit UI over the composited image. */
   drawUI?(batch: SpriteBatch): void;
+  /**
+   * Queue particles into the shared instance buffer.
+   *
+   * Called during the G-buffer pass, so particles are fogged by depth and feed
+   * the bloom chain rather than being pasted over the finished image.
+   */
+  emitParticles?(quads: InstancedQuads, submit: (uvRect: [number, number, number, number], texture: WebGLTexture, stretch: number) => void): void;
   timeSeconds: number;
 }
 
@@ -179,6 +188,10 @@ export class Pipeline {
   private compositeProgram!: Program;
   private copyProgram!: Program;
   private blurProgram!: Program;
+  private particleProgram!: Program;
+
+  /** Shared instance buffer for every particle draw this frame. */
+  readonly particleQuads: InstancedQuads;
 
   private blueNoise!: Texture;
   private gradeLUT!: Texture;
@@ -206,6 +219,7 @@ export class Pipeline {
     this.pool = new RenderTargetPool(device);
     this.fullscreen = new FullscreenPass(device);
     this.batch = new SpriteBatch(device, 16384);
+    this.particleQuads = new InstancedQuads(device, BUDGETS.maxLiveParticles);
 
     this.createPrograms();
     this.createTextures();
@@ -227,6 +241,7 @@ export class Pipeline {
     this.fogProgram = new Program(device, FULLSCREEN_VS, FOG_FS, { name: 'fog' });
     this.copyProgram = new Program(device, FULLSCREEN_VS, COPY_FS, { name: 'copy' });
     this.blurProgram = new Program(device, FULLSCREEN_VS, BLUR_FS, { name: 'blur' });
+    this.particleProgram = new Program(device, PARTICLE_VS, PARTICLE_FS, { name: 'particles' });
 
     this.rebuildQualityPrograms();
   }
@@ -529,6 +544,44 @@ export class Pipeline {
     this.spriteProgram.setFloat('uMaterialId', 0);
     request.drawGeometry(this.batch);
     this.batch.end();
+
+    this.renderParticles(request);
+  }
+
+  /**
+   * Draws queued particles with additive blending.
+   *
+   * The submit callback lets the caller flush several batches with different
+   * sprites or stretch factors (dust, then sparks) without the pipeline needing
+   * to know anything about particle kinds.
+   */
+  private renderParticles(request: FrameRequest): void {
+    if (!request.emitParticles) return;
+
+    const program = this.particleProgram;
+    program.use();
+    program.setMat3('uViewProjection', request.camera.viewProjection);
+    program.setVec2('uCameraPosition', request.camera.x, request.camera.y);
+    this.device.setBlend(BlendMode.Additive);
+
+    const submit = (
+      uvRect: [number, number, number, number],
+      texture: WebGLTexture,
+      stretch: number,
+    ): void => {
+      if (this.particleQuads.queued === 0) return;
+      program.use();
+      program.setVec4('uUVRect', uvRect[0], uvRect[1], uvRect[2], uvRect[3]);
+      program.setFloat('uStretch', stretch);
+      program.setTexture('uAlbedo', 0, texture);
+      this.particleQuads.flush(program);
+      this.particleQuads.clear();
+    };
+
+    this.particleQuads.clear();
+    request.emitParticles(this.particleQuads, submit);
+
+    this.device.setBlend(BlendMode.Premultiplied);
   }
 
   private renderContactAO(request: FrameRequest): void {
@@ -821,5 +874,7 @@ export class Pipeline {
     this.compositeProgram.dispose();
     this.copyProgram.dispose();
     this.blurProgram.dispose();
+    this.particleProgram.dispose();
+    this.particleQuads.dispose();
   }
 }

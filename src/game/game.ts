@@ -21,7 +21,6 @@ import {
 } from '../world/biomes/ares.ts';
 import { buildAresApproach, type RoomDefinition } from '../world/rooms/ares-approach.ts';
 import { SpriteBatch, packColor, packMaterial } from '../gfx/batch.ts';
-import { fxRng } from '../core/rng.ts';
 import { Depth } from '../core/config.ts';
 import { PhysicsWorld } from './physics.ts';
 import { PlayerController } from './player/controller.ts';
@@ -31,19 +30,10 @@ import { OptimusRenderer } from './player/renderer.ts';
 import { input } from '../core/input.ts';
 import type { GameLoop } from '../core/loop.ts';
 import { NoiseField } from '../core/math/noise.ts';
+import { ParticleSystem, ParticleKind } from '../fx/particles.ts';
+import type { InstancedQuads } from '../gfx/instanced.ts';
+import { BUDGETS } from '../core/config.ts';
 import { clamp01 } from '../core/math/scalar.ts';
-
-interface Mote {
-  x: number;
-  y: number;
-  size: number;
-  speed: number;
-  phase: number;
-  depth: number;
-  brightness: number;
-  /** Warm sunlit dust versus cooler shadowed ash. */
-  warmth: number;
-}
 
 const driftNoise = new NoiseField(0x4d51);
 
@@ -63,7 +53,14 @@ export class Game {
   animator!: OptimusAnimator;
   private optimusRenderer!: OptimusRenderer;
 
-  private readonly motes: Mote[] = [];
+  /**
+   * All airborne particulate.
+   *
+   * One pooled system drawn with a single instanced call, rather than a few
+   * hundred individual quads. Density is most of what separates a scene that
+   * feels like a place from one that feels like a diagram.
+   */
+  readonly particles = new ParticleSystem(BUDGETS.maxLiveParticles, 0xfa11);
   private readonly dynamicLights: Light[] = [];
   /** Per-light flicker amplitude, parallel to `dynamicLights`. */
   private readonly lightFlicker: number[] = [];
@@ -80,6 +77,8 @@ export class Game {
   private playerLight!: Light;
 
   private time = 0;
+  /** Throttles the running dust trail so it does not flood the pool. */
+  private runDustCooldown = 0;
 
   /** Harness-only overrides. */
   private cameraOverride: { x: number; y: number; viewHeight: number } | null = null;
@@ -219,21 +218,14 @@ export class Game {
   }
 
   private buildAmbientDust(): void {
-    const rng = fxRng;
-    for (let i = 0; i < 420; i++) {
-      // Biased toward the near depths, where motes are large enough to read.
-      const depth = Math.pow(rng.next(), 1.7) * 7;
-      this.motes.push({
-        x: rng.range(-40, 70),
-        y: rng.range(-14, 3),
-        size: rng.range(0.022, 0.07) * (1 + (7 - depth) * 0.12),
-        speed: rng.range(0.2, 0.95),
-        phase: rng.range(0, Math.PI * 2),
-        depth,
-        brightness: rng.range(0.2, 1),
-        warmth: rng.next(),
-      });
-    }
+    // Seeded around the spawn point; the field wraps around the camera, so it
+    // is effectively infinite from here on.
+    this.particles.seedAmbient(3200, this.room.spawn.x, this.room.spawn.y - 4, 70, 26, {
+      warm: [1.0, 0.72, 0.44],
+      cool: [0.58, 0.54, 0.72],
+    });
+    this.particles.windX = 0.62;
+    this.particles.windY = -0.05;
   }
 
   fixedUpdate(dt: number, simTime: number): void {
@@ -254,14 +246,50 @@ export class Game {
     input.beginStep(simTime);
     this.player.update(input, dt);
 
+    this.particles.update(
+      dt,
+      this.camera.x,
+      this.camera.y,
+      this.camera.viewWidthMetres,
+      this.camera.viewHeightMetres,
+    );
+
     // Landing shakes the camera in proportion to the real impact speed, so a
     // short hop and a long drop feel genuinely different.
     if (this.player.landedThisStep > 3) {
-      this.camera.addTrauma(clamp01(this.player.landedThisStep / 30) * 0.45);
+      const strength = clamp01(this.player.landedThisStep / 22);
+      this.camera.addTrauma(strength * 0.45);
+      // Dust kicked outward along the surface, plus chips of the surface
+      // itself on a hard enough impact.
+      this.particles.burstDust(this.player.feetX, this.player.feetY, strength, [1.0, 0.72, 0.46]);
+      if (strength > 0.5) {
+        this.particles.burstDebris(this.player.feetX, this.player.feetY, strength * 0.7, [0.55, 0.34, 0.24]);
+      }
     }
     if (this.player.dashedThisStep) {
       this.camera.addTrauma(0.12);
+      // The dash vents along the character's own cyan.
+      this.particles.burstSparks(
+        this.player.feetX - this.player.facing * 0.3,
+        this.player.feetY - 0.9,
+        -this.player.facing,
+        -0.15,
+        0.55,
+        [0.30, 0.95, 1.0],
+      );
     }
+
+    // Running kicks a thin trail of dust off the surface.
+    if (this.player.grounded && this.player.speed > 4.5 && this.runDustCooldown <= 0) {
+      this.particles.burstDust(
+        this.player.feetX - this.player.facing * 0.2,
+        this.player.feetY,
+        0.14,
+        [1.0, 0.74, 0.5],
+      );
+      this.runDustCooldown = 0.075;
+    }
+    this.runDustCooldown -= dt;
   }
 
   render(_alpha: number, _dt: number, unscaledDt: number): void {
@@ -309,6 +337,7 @@ export class Game {
       drawGeometry: (batch) => this.drawGeometry(batch),
       drawOccluders: (batch) => this.drawOccluders(batch),
       drawContactAO: (batch) => this.drawContactAO(batch),
+      emitParticles: (quads, submit) => this.emitParticles(quads, submit),
     });
 
     if (this.loop) {
@@ -372,8 +401,6 @@ export class Game {
     this.drawProps(batch);
 
     this.optimusRenderer.draw(batch, this.animator.skeleton, this.player.facing);
-
-    this.drawMotes(batch);
 
     batch.setBlend(BlendMode.Premultiplied);
     this.parallax.drawForeground(batch, this.layers, this.time);
@@ -505,65 +532,65 @@ export class Game {
   }
 
   /**
-   * Airborne dust.
+   * Queues every live particle into the shared instance buffer.
    *
-   * Advected along a curl-noise field so the air swirls rather than sliding in
-   * straight lines, drawn additively across a range of depths.
+   * Split into two submissions: soft round motes for dust and smoke, then
+   * stretched streaks for sparks. Two draw calls total, whatever the count.
    */
-  private drawMotes(batch: SpriteBatch): void {
-    const entry = this.atlas.get('mote');
-    batch.setBlend(BlendMode.Additive);
-    const material = packMaterial(1, 1, 0, 0);
-    const visible = this.camera.getVisibleBounds(2);
+  private emitParticles(
+    quads: InstancedQuads,
+    submit: (
+      uvRect: [number, number, number, number],
+      texture: WebGLTexture,
+      stretch: number,
+    ) => void,
+  ): void {
+    const pool = this.particles.pool;
+    const mote = this.atlas.get('mote');
+    const glow = this.atlas.get('glow');
+    const visible = this.camera.getVisibleBounds(3);
 
-    for (const mote of this.motes) {
-      const drift = driftNoise.noise2(mote.x * 0.09 + this.time * 0.07, mote.y * 0.09);
-      const bob = Math.sin(this.time * mote.speed + mote.phase) * 0.3;
+    // --- Round particles ---------------------------------------------------
+    for (let i = 0; i < pool.count; i++) {
+      if (pool.kind[i] === ParticleKind.Spark) continue;
 
-      const x = mote.x + this.time * mote.speed * 0.42 + drift * 1.1;
-      const y = mote.y + bob + drift * 0.5;
+      // Cull against the view, accounting for the layer's parallax offset.
+      const parallax = this.camera.parallaxFactor(pool.depth[i]!);
+      const x = pool.x[i]! + this.camera.x * (1 - parallax);
+      const y = pool.y[i]! + this.camera.y * (1 - parallax);
+      if (x < visible.minX || x > visible.maxX || y < visible.minY || y > visible.maxY) continue;
 
-      const parallax = this.camera.parallaxFactor(mote.depth);
-      const offsetX = this.camera.x * (1 - parallax);
-      const offsetY = this.camera.y * (1 - parallax);
+      const alpha = this.particles.alphaAt(i, this.time);
+      if (alpha < 0.004) continue;
 
-      // Wrap around the camera so the field is effectively infinite without
-      // simulating motes nowhere near the view.
-      const span = 90;
-      let wrappedX = x;
-      const relativeX = x + offsetX - this.camera.x;
-      if (relativeX < -span / 2) wrappedX += span;
-      else if (relativeX > span / 2) wrappedX -= span;
-
-      const finalX = wrappedX + offsetX;
-      const finalY = y + offsetY;
-      if (finalX < visible.minX || finalX > visible.maxX) continue;
-      if (finalY < visible.minY || finalY > visible.maxY) continue;
-
-      const twinkle = 0.55 + Math.sin(this.time * 2.1 + mote.phase) * 0.45;
-      const alpha = clamp01((mote.brightness * twinkle) / (1 + mote.depth * 0.4));
-
-      const r = (0.95 * mote.warmth + 0.55 * (1 - mote.warmth)) * alpha;
-      const g = (0.68 * mote.warmth + 0.52 * (1 - mote.warmth)) * alpha;
-      const b = (0.44 * mote.warmth + 0.62 * (1 - mote.warmth)) * alpha;
-
-      batch.draw(
-        finalX,
-        finalY,
-        mote.size,
-        mote.size,
-        entry.u0,
-        entry.v0,
-        entry.u1,
-        entry.v1,
-        mote.depth,
-        packColor(r, g, b, alpha),
-        material,
-        0,
+      quads.push(
+        pool.x[i]!,
+        pool.y[i]!,
+        pool.depth[i]!,
+        pool.size[i]!,
+        pool.rotation[i]!,
+        packColor(pool.r[i]! * alpha, pool.g[i]! * alpha, pool.b[i]! * alpha, alpha),
       );
     }
+    submit([mote.u0, mote.v0, mote.u1, mote.v1], this.atlas.textures.albedo.handle, 0);
 
-    batch.setBlend(BlendMode.Premultiplied);
+    // --- Sparks ------------------------------------------------------------
+    for (let i = 0; i < pool.count; i++) {
+      if (pool.kind[i] !== ParticleKind.Spark) continue;
+      const alpha = this.particles.alphaAt(i, this.time);
+      if (alpha < 0.004) continue;
+
+      quads.push(
+        pool.x[i]!,
+        pool.y[i]!,
+        pool.depth[i]!,
+        pool.size[i]!,
+        pool.rotation[i]!,
+        packColor(pool.r[i]! * alpha, pool.g[i]! * alpha, pool.b[i]! * alpha, alpha),
+      );
+    }
+    // Stretched along travel, which is what makes a spark read as a streak.
+    submit([glow.u0, glow.v0, glow.u1, glow.v1], this.atlas.textures.albedo.handle, 3.2);
   }
 
   /** Silhouettes for the shadow and god-ray passes. */
@@ -672,7 +699,7 @@ export class Game {
       lightsCulled: this.lights.culled,
       platforms: this.room.platforms.length,
       props: this.room.props.length,
-      motes: this.motes.length,
+      particles: this.particles.count,
       layers: this.layers.length,
       renderWidth: width,
       renderHeight: height,
