@@ -24,6 +24,14 @@ import type { WorldEvent } from './world';
  * headlessly in tests; drawing is the renderer's job.
  */
 
+/**
+ * Debounce between menu actions.
+ *
+ * Long enough that one physical press cannot ripple through two screens, short enough that a quick
+ * "pause, then unpause" is not swallowed (a 200 ms debounce ate exactly that in the browser test).
+ */
+const MENU_DEBOUNCE = 0.08;
+
 export interface GameOptions {
   readonly storage?: StorageLike;
   readonly audio?: Audio;
@@ -293,7 +301,7 @@ export class Game {
 
     if (input.justPressed('pause') && this.menuCooldown <= 0) {
       this.audio.play('menuBack');
-      this.menuCooldown = 0.2;
+      this.menuCooldown = MENU_DEBOUNCE;
       this.dispatch({ type: 'pause' });
       return;
     }
@@ -468,13 +476,13 @@ export class Game {
       if (this.menuCooldown <= 0) {
         this.audio.resume();
         this.audio.play('menuConfirm');
-        this.menuCooldown = 0.15;
+        this.menuCooldown = MENU_DEBOUNCE;
         this.dispatch({ type: 'confirm' });
       }
     } else if (input.justPressed('back') || input.justPressed('pause')) {
       if (this.menuCooldown <= 0) {
         this.audio.play('menuBack');
-        this.menuCooldown = 0.15;
+        this.menuCooldown = MENU_DEBOUNCE;
         this.dispatch({ type: 'back' });
       }
     }
