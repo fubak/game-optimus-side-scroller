@@ -44,11 +44,12 @@ export const SCENARIOS: Scenario[] = [
     name: 'ares_traversal',
     description:
       'A full run through the opening Ares Basin room: walking, sprinting, ' +
-      'jumping gaps, dashing, and landing. Exercises the whole locomotion set ' +
-      'and its transitions in one continuous take.',
+      'jumping gaps, dashing, landing, and fighting four sentry drones. ' +
+      'Exercises the whole locomotion set, its transitions, and the melee ' +
+      'combo with hitstop and impact VFX, in one continuous take.',
     seed: 1001,
     quality: Quality.High,
-    durationSeconds: 16,
+    durationSeconds: 28,
     warmupFrames: 30,
     heroFrames: [0],
     autopilotTargetX: 72,

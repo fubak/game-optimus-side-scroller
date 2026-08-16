@@ -95,6 +95,34 @@ export const MOVEMENT = {
   wallJumpVelocityY: 11.6,
   /** How long horizontal control is suppressed after a wall jump. */
   wallJumpLockout: 0.16,
+
+  // --- Melee -------------------------------------------------------------
+  /** Duration of each combo step, matching the animation clips exactly. */
+  attackDurations: [0.36, 0.34, 0.52] as const,
+  /**
+   * When in each step the hitbox is live, as [start, end] fractions.
+   *
+   * Deliberately short. A hitbox live for the whole animation makes spacing
+   * meaningless and lets a mistimed swing connect anyway.
+   */
+  attackWindows: [
+    [0.26, 0.62],
+    [0.24, 0.62],
+    [0.38, 0.74],
+  ] as const,
+  /**
+   * When the next combo step may be buffered, as a fraction of the current one.
+   *
+   * Opening this well before the animation ends is what makes a combo feel
+   * responsive: the player presses during the recovery and the next swing
+   * begins the instant it is legal.
+   */
+  attackCancelFrom: 0.55,
+  /** Grace period after a combo ends during which it can still be continued. */
+  comboWindow: 0.28,
+  /** Forward lunge applied at the start of each step, in metres per second. */
+  attackLunge: [3.4, 3.0, 5.2] as const,
+  attackDamage: [9, 11, 20] as const,
 } as const;
 
 export const enum PlayerState {
@@ -102,6 +130,7 @@ export const enum PlayerState {
   Airborne,
   Dashing,
   WallSliding,
+  Attacking,
 }
 
 export class PlayerController {
@@ -138,6 +167,22 @@ export class PlayerController {
   dashedThisStep = false;
   /** Impact speed on the step the character landed, or zero. */
   landedThisStep = 0;
+  /** Combo step that began this step, or -1. */
+  attackStartedThisStep = -1;
+  /** Step at which the hitbox should open, or -1. */
+  hitboxOpenedThisStep = -1;
+  /** True on the step the hitbox should close. */
+  hitboxClosedThisStep = false;
+
+  /** Active combo step, or -1 when not attacking. */
+  attackStep = -1;
+  /** Seconds since the active attack began. */
+  attackTime = 0;
+  /** Seconds since the last combo step ended, for the continuation window. */
+  private sinceComboEnd = Infinity;
+  private hitboxOpen = false;
+  /** Set when the next step is buffered during the current one's recovery. */
+  private queuedNextStep = false;
 
   constructor(
     private readonly world: PhysicsWorld,
@@ -173,11 +218,16 @@ export class PlayerController {
     this.jumpedThisStep = false;
     this.dashedThisStep = false;
     this.landedThisStep = 0;
+    this.attackStartedThisStep = -1;
+    this.hitboxOpenedThisStep = -1;
+    this.hitboxClosedThisStep = false;
 
     const wasGrounded = this.grounded;
     const previousVelocityY = this.velocityY;
 
     this.tickTimers(dt);
+
+    this.updateAttack(input, dt);
 
     if (this.state === PlayerState.Dashing) {
       this.updateDash(dt);
@@ -199,6 +249,98 @@ export class PlayerController {
     this.updateState();
   }
 
+  /**
+   * Advances the melee combo.
+   *
+   * The controller owns the timing and the animator follows it, rather than
+   * each keeping its own clock. That guarantees the hitbox window and the
+   * visible swing can never drift apart, which is the classic source of
+   * attacks that look like they should have connected and did not.
+   */
+  private updateAttack(input: Input, dt: number): void {
+    this.sinceComboEnd += dt;
+
+    if (this.attackStep >= 0) {
+      const duration = MOVEMENT.attackDurations[this.attackStep]!;
+      const previousTime = this.attackTime;
+      this.attackTime += dt;
+
+      const window = MOVEMENT.attackWindows[this.attackStep]!;
+      const openAt = duration * window[0];
+      const closeAt = duration * window[1];
+
+      if (!this.hitboxOpen && previousTime < openAt && this.attackTime >= openAt) {
+        this.hitboxOpen = true;
+        this.hitboxOpenedThisStep = this.attackStep;
+      }
+      if (this.hitboxOpen && this.attackTime >= closeAt) {
+        this.hitboxOpen = false;
+        this.hitboxClosedThisStep = true;
+      }
+
+      // Buffer the next step during recovery.
+      if (
+        this.attackTime >= duration * MOVEMENT.attackCancelFrom &&
+        input.wasPressedBuffered(Action.Attack, 0.2)
+      ) {
+        input.consumePress(Action.Attack);
+        this.queuedNextStep = true;
+      }
+
+      if (this.attackTime >= duration) {
+        if (this.queuedNextStep && this.attackStep < 2) {
+          this.beginAttack(this.attackStep + 1);
+        } else {
+          this.endCombo();
+        }
+      }
+      return;
+    }
+
+    // Not attacking: a press starts, or continues, a combo.
+    if (input.wasPressedBuffered(Action.Attack, MOVEMENT.jumpBuffer)) {
+      input.consumePress(Action.Attack);
+      const continuing = this.sinceComboEnd <= MOVEMENT.comboWindow && this.lastComboStep < 2;
+      this.beginAttack(continuing ? this.lastComboStep + 1 : 0);
+    }
+  }
+
+  private lastComboStep = -1;
+
+  private beginAttack(step: number): void {
+    this.attackStep = step;
+    this.attackTime = 0;
+    this.lastComboStep = step;
+    this.queuedNextStep = false;
+    this.hitboxOpen = false;
+    this.attackStartedThisStep = step;
+    this.state = PlayerState.Attacking;
+
+    // A forward lunge, so an attack closes distance and reads as committed.
+    // Only on the ground: an air attack that lunges makes platforming
+    // unpredictable.
+    if (this.grounded) {
+      this.velocityX = this.facing * MOVEMENT.attackLunge[step]!;
+    }
+  }
+
+  private endCombo(): void {
+    if (this.hitboxOpen) {
+      this.hitboxOpen = false;
+      this.hitboxClosedThisStep = true;
+    }
+    this.attackStep = -1;
+    this.attackTime = 0;
+    this.queuedNextStep = false;
+    this.sinceComboEnd = 0;
+  }
+
+  /** Cancels any attack in progress, e.g. on taking a hit. */
+  interruptAttack(): void {
+    if (this.attackStep >= 0) this.endCombo();
+    this.lastComboStep = -1;
+  }
+
   private tickTimers(dt: number): void {
     if (this.grounded) {
       this.coyoteRemaining = MOVEMENT.coyoteTime;
@@ -218,7 +360,10 @@ export class PlayerController {
   private updateHorizontal(input: Input, dt: number): void {
     // A wall jump briefly overrides input, or holding toward the wall would
     // immediately cancel the push-off and the jump would go nowhere.
-    const moveX = this.wallJumpLockRemaining > 0 ? 0 : input.moveX;
+    // Attacking commits: the lunge carries the character, and steering is
+    // suppressed so a swing cannot be used as free extra air control.
+    const moveX =
+      this.wallJumpLockRemaining > 0 || this.attackStep >= 0 ? 0 : input.moveX;
 
     const running = input.isHeld(Action.Dash) || Math.abs(moveX) > 0.85;
     const targetSpeed = moveX * (running ? MOVEMENT.runSpeed : MOVEMENT.walkSpeed);
@@ -405,6 +550,10 @@ export class PlayerController {
 
   private updateState(): void {
     if (this.state === PlayerState.Dashing && this.dashRemaining > 0) return;
+    if (this.attackStep >= 0) {
+      this.state = PlayerState.Attacking;
+      return;
+    }
 
     if (this.grounded) {
       this.state = PlayerState.Grounded;

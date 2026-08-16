@@ -330,6 +330,80 @@ export function makeCrate(size: number, seed: number): Surface {
   return surface;
 }
 
+/**
+ * A hovering sentry drone.
+ *
+ * Deliberately built from a different vocabulary to Optimus: an angular
+ * chassis, an amber optic, and no white shell plating. Enemies must be
+ * distinguishable from the player at a glance and at speed, and colour is the
+ * fastest channel for that — amber against the player's cyan, on opposite sides
+ * of the wheel.
+ */
+export function makeDrone(size: number, seed: number): Surface {
+  const surface = createSurface(size, size);
+  const noise = new NoiseField(seed);
+  const cx = size / 2;
+  const cy = size / 2;
+
+  // Angular chassis: a wide hexagonal body.
+  for (let y = 0; y < size; y++) {
+    for (let x = 0; x < size; x++) {
+      const nx = (x - cx) / (size * 0.46);
+      const ny = (y - cy) / (size * 0.34);
+      // A superellipse gives hard shoulders without literal corners.
+      const d = Math.pow(Math.abs(nx), 2.6) + Math.pow(Math.abs(ny), 2.6);
+      if (d > 1) continue;
+
+      const index = y * size + x;
+      const relief = clamp01(1 - d) ;
+      const grain = noise.fbm2(x * 0.16, y * 0.16, 3) * 0.5 + 0.5;
+      const shade = (0.55 + relief * 0.55) * (0.82 + grain * 0.3);
+
+      setPixel(surface, x, y, 0.24 * shade, 0.225 * shade, 0.235 * shade, 1);
+      surface.heightField[index] = 0.35 + relief * 0.55;
+      surface.roughness[index] = 0.42 + grain * 0.16;
+      surface.metallic[index] = 0.9;
+    }
+  }
+
+  // Armour ridge along the top.
+  bevelledRect(
+    surface,
+    size * 0.18,
+    size * 0.30,
+    size * 0.82,
+    size * 0.44,
+    size * 0.05,
+    Math.max(2, size * 0.03),
+    0.95,
+  );
+  for (let y = Math.floor(size * 0.30); y < Math.floor(size * 0.44); y++) {
+    for (let x = Math.floor(size * 0.18); x < Math.floor(size * 0.82); x++) {
+      const index = y * size + x;
+      if (surface.albedo[index * 4 + 3]! < 128) continue;
+      setPixel(surface, x, y, 0.40, 0.38, 0.39, 1);
+      surface.roughness[index] = 0.3;
+    }
+  }
+
+  // The amber optic: a single bright horizontal slit.
+  const eyeY = Math.round(size * 0.54);
+  const eyeH = Math.max(1, Math.round(size * 0.055));
+  for (let y = eyeY; y < eyeY + eyeH; y++) {
+    for (let x = Math.round(size * 0.30); x < Math.round(size * 0.70); x++) {
+      const index = y * size + x;
+      if (index < 0 || index >= surface.emissive.length) continue;
+      setPixel(surface, x, y, PALETTE.amber[0], PALETTE.amber[1], PALETTE.amber[2], 1);
+      surface.emissive[index] = 1;
+      surface.roughness[index] = 0.2;
+      surface.metallic[index] = 0;
+    }
+  }
+
+  addEdgeWear(surface, noise, 0.4, 0.09);
+  return surface;
+}
+
 /** Builds the initial atlas source list. */
 export function buildCoreAtlasSources(): AtlasSource[] {
   const sources: AtlasSource[] = [];
@@ -374,6 +448,12 @@ export function buildCoreAtlasSources(): AtlasSource[] {
   sources.push({
     // Written additively into the contact-occlusion buffer, so this is a
     // *density* map: white with a soft radial alpha, not a dark sprite.
+    name: 'drone',
+    surface: makeDrone(metresToTexels(0.85, 3), 0xd40e),
+    widthMetres: 0.85,
+  });
+
+  sources.push({
     name: 'aoBlob',
     surface: radialFalloff(128, 1.5, 0.35),
     widthMetres: 2,

@@ -58,6 +58,9 @@ async function main(): Promise<void> {
               vx: stats.playerVX!,
               vy: stats.playerVY!,
               grounded: stats.grounded!,
+              enemies: stats.enemies!,
+              health: stats.playerHealth!,
+              particles: stats.particles!,
             });
           }
         }
@@ -70,27 +73,42 @@ async function main(): Promise<void> {
     let minY = Infinity;
     let maxY = -Infinity;
     let airborneFrames = 0;
+    let peakParticles = 0;
 
-    console.log('   t      x       y      vx      vy   grounded');
+    if (process.env.VERBOSE) {
+      console.log('   t      x       y      vx      vy   grounded');
+    }
     for (const sample of samples) {
       maxX = Math.max(maxX, sample.x!);
       minY = Math.min(minY, sample.y!);
       maxY = Math.max(maxY, sample.y!);
       if (!sample.grounded) airborneFrames++;
-      console.log(
-        `${sample.t!.toFixed(2).padStart(5)} ` +
-          `${sample.x!.toFixed(2).padStart(7)} ` +
-          `${sample.y!.toFixed(2).padStart(7)} ` +
-          `${sample.vx!.toFixed(2).padStart(7)} ` +
-          `${sample.vy!.toFixed(2).padStart(7)} ` +
-          `${sample.grounded ? '   yes' : '    no'}`,
-      );
+      peakParticles = Math.max(peakParticles, sample.particles!);
+      if (process.env.VERBOSE) {
+        console.log(
+          `${sample.t!.toFixed(2).padStart(5)} ` +
+            `${sample.x!.toFixed(2).padStart(7)} ` +
+            `${sample.y!.toFixed(2).padStart(7)} ` +
+            `${sample.vx!.toFixed(2).padStart(7)} ` +
+            `${sample.vy!.toFixed(2).padStart(7)} ` +
+            `${sample.grounded ? '   yes' : '    no'} ` +
+            `enemies=${sample.enemies} hp=${sample.health}`,
+        );
+      }
     }
 
     console.log('\n--- summary ---');
     console.log(`furthest X reached : ${maxX.toFixed(2)} (target ${TARGET_X})`);
     console.log(`Y range            : ${minY.toFixed(2)} .. ${maxY.toFixed(2)}`);
     console.log(`airborne samples   : ${airborneFrames}/${samples.length}`);
+
+    const first = samples[0] as Record<string, number> | undefined;
+    const last = samples[samples.length - 1] as Record<string, number> | undefined;
+    const startEnemies = first?.enemies ?? 0;
+    const endEnemies = last?.enemies ?? 0;
+    console.log(`enemies            : ${startEnemies} -> ${endEnemies} (${startEnemies - endEnemies} defeated)`);
+    console.log(`player health      : ${first?.health ?? 0} -> ${last?.health ?? 0}`);
+    console.log(`peak particles     : ${peakParticles}`);
 
     const fellOut = maxY > FALL_LIMIT;
     const reached = maxX >= TARGET_X;
@@ -105,7 +123,13 @@ async function main(): Promise<void> {
       );
       process.exitCode = 1;
     } else {
-      console.log('\nPASS: the room is traversable with the scripted input.');
+      const defeated = startEnemies - endEnemies;
+      if (defeated === 0) {
+        console.error('\nFAIL: the run reached the exit but defeated no enemies. Combat is not connecting.');
+        process.exitCode = 1;
+      } else {
+        console.log(`\nPASS: room traversed and ${defeated} enemies defeated.`);
+      }
     }
   } finally {
     await close();

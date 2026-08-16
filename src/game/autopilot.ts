@@ -28,6 +28,13 @@ export interface AutopilotOptions {
   direction: number;
   /** Whether to sprint. */
   sprint: boolean;
+  /**
+   * Positions of nearby hostiles, so the navigator can stop and fight.
+   *
+   * Passed in rather than queried, so the autopilot stays a pure input source
+   * with no knowledge of the combat system.
+   */
+  threats?: { x: number; y: number }[];
 }
 
 export class Autopilot {
@@ -36,6 +43,10 @@ export class Autopilot {
   /** Time spent making no horizontal progress, used to detect being stuck. */
   private stalledFor = 0;
   private lastX = 0;
+  /** Throttle between attack presses. */
+  private attackCooldown = 0;
+  /** Seconds remaining during which jumps stay suppressed after a fight. */
+  private engagedRecently = 0;
   /** Time remaining during which to steer away from a wall just kicked off. */
   private wallKickRemaining = 0;
   /** Direction to steer during that window, captured at the moment of the kick. */
@@ -68,6 +79,46 @@ export class Autopilot {
     }
 
     let moveX = direction;
+
+    // --- Engage hostiles ---------------------------------------------------
+    // Stop and attack rather than running past. Attacks are thrown at melee
+    // range with a brief pause between them, which also exercises the combo
+    // buffering rather than mashing a single step.
+    this.attackCooldown = Math.max(0, this.attackCooldown - dt);
+    const threat = this.nearestThreat(options, player.feetX, player.feetY);
+    this.engagedRecently = threat ? 0.5 : Math.max(0, this.engagedRecently - dt);
+    if (threat) {
+      const gap = threat.x - player.feetX;
+      const range = Math.abs(gap);
+
+      if (range < 2.3) {
+        // In range: hold position and swing. Never drift while attacking; the
+        // lunge already closes distance.
+        moveX = 0;
+        if (this.attackCooldown <= 0) {
+          held[Action.Attack] = true;
+          this.attackCooldown = 0.22;
+        }
+        held[Action.Right] = false;
+        held[Action.Left] = false;
+        if (options.sprint) held[Action.Dash] = true;
+        return { moveX: Math.sign(gap) * 0.01, moveY: 0, held };
+      }
+
+      if (range < 6.5) {
+        // Close the distance deliberately, rather than sprinting past — but
+        // never off a ledge. Fighting on a narrow platform and walking
+        // backwards into a pit is otherwise the most common way a run ends.
+        const step = Math.sign(gap);
+        const footing = this.world.surfaceHeightAt(
+          player.feetX + step * 0.8,
+          player.feetY - 0.3,
+          2.5,
+        );
+        if (footing.found || !player.grounded) moveX = step;
+        else moveX = 0;
+      }
+    }
 
     // --- Look ahead --------------------------------------------------------
     // Sample the ground height at several distances rather than merely asking
@@ -107,8 +158,13 @@ export class Autopilot {
     this.lastX = player.feetX;
 
     // --- Jump decision -----------------------------------------------------
+    // Suppress jumps for a moment after disengaging. Leaving a fight and
+    // immediately launching into the air was reliably overshooting the next
+    // platform, because the jump fired from wherever the fight happened to end
+    // rather than from the edge of the gap.
     const wantsJump =
       player.grounded &&
+      this.engagedRecently <= 0 &&
       (blocked || gapNear || gapMid || stepUpNear || this.stalledFor > 0.2);
 
     if (wantsJump && this.jumpHoldRemaining <= 0) {
@@ -161,8 +217,33 @@ export class Autopilot {
     return { moveX, moveY: 0, held };
   }
 
+  /** Nearest hostile within engagement range, or null. */
+  private nearestThreat(
+    options: AutopilotOptions,
+    x: number,
+    y: number,
+  ): { x: number; y: number } | null {
+    const threats = options.threats;
+    if (!threats || threats.length === 0) return null;
+
+    let best: { x: number; y: number } | null = null;
+    let bestDistance = Infinity;
+    for (const threat of threats) {
+      const distance = Math.hypot(threat.x - x, threat.y - (y - 0.9));
+      // Only engage what is roughly in front and roughly level; chasing a
+      // drone that has drifted overhead just stalls the run.
+      if (Math.abs(threat.y - (y - 0.9)) > 2.6) continue;
+      if (distance < bestDistance && distance < 7) {
+        bestDistance = distance;
+        best = threat;
+      }
+    }
+    return best;
+  }
+
   reset(): void {
     this.jumpHoldRemaining = 0;
+    this.attackCooldown = 0;
     this.dashCooldown = 0;
     this.stalledFor = 0;
     this.lastX = 0;

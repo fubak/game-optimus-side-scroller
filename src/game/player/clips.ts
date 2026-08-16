@@ -769,4 +769,346 @@ export const LAND: ClipDefinition = {
   },
 };
 
-export const OPTIMUS_CLIPS = { IDLE, WALK, RUN, JUMP_RISE, FALL, LAND } as const;
+
+
+/**
+ * Melee combo, first hit.
+ *
+ * A short wind-up followed by a fast forward swing. The wind-up is only ~90 ms
+ * — long enough to read as anticipation, short enough that the attack still
+ * feels immediate. Anticipation is what makes a strike look powered rather than
+ * teleported, but it is also the part players feel as input lag, so it has to
+ * be paid for sparingly.
+ */
+export const ATTACK_1: ClipDefinition = {
+  name: 'attack1',
+  duration: 0.36,
+  loop: false,
+  clamped: true,
+  bones: {
+    upperArmNear: {
+      rot: [
+        [0, 4],
+        [0.09, 52],
+        [0.17, -74],
+        [0.26, -46],
+        [0.36, -8],
+      ],
+    },
+    forearmNear: {
+      rot: [
+        [0, -12],
+        [0.09, -62],
+        [0.17, -18],
+        [0.26, -34],
+        [0.36, -14],
+      ],
+    },
+    upperArmFar: {
+      rot: [
+        [0, 4],
+        [0.09, -18],
+        [0.17, 34],
+        [0.36, 6],
+      ],
+    },
+    forearmFar: {
+      rot: [
+        [0, -12],
+        [0.09, -30],
+        [0.17, -46],
+        [0.36, -14],
+      ],
+    },
+    // The torso drives the swing. An arm swinging alone reads as flailing;
+    // rotating the whole body through the strike is what transfers weight.
+    chest: {
+      rot: [
+        [0, 0],
+        [0.09, 9],
+        [0.17, -13],
+        [0.26, -6],
+        [0.36, 0],
+      ],
+    },
+    abdomen: {
+      rot: [
+        [0, 0],
+        [0.09, 5],
+        [0.17, -8],
+        [0.36, 0],
+      ],
+    },
+    hips: {
+      rot: [
+        [0, 0],
+        [0.09, 4],
+        [0.17, -6],
+        [0.36, 0],
+      ],
+    },
+    head: {
+      rot: [
+        [0, 0],
+        [0.09, -4],
+        [0.17, 7],
+        [0.36, 0],
+      ],
+    },
+    // A brace: the legs plant against the swing.
+    thighNear: {
+      rot: [
+        [0, -2],
+        [0.17, -14],
+        [0.36, -3],
+      ],
+    },
+    thighFar: {
+      rot: [
+        [0, 2],
+        [0.17, 12],
+        [0.36, 3],
+      ],
+    },
+  },
+};
+
+/** Melee combo, second hit: a reverse swing from the opposite side. */
+export const ATTACK_2: ClipDefinition = {
+  name: 'attack2',
+  duration: 0.34,
+  loop: false,
+  clamped: true,
+  bones: {
+    upperArmNear: {
+      rot: [
+        [0, -46],
+        [0.08, -76],
+        [0.16, 46],
+        [0.25, 18],
+        [0.34, -6],
+      ],
+    },
+    forearmNear: {
+      rot: [
+        [0, -30],
+        [0.08, -16],
+        [0.16, -58],
+        [0.34, -14],
+      ],
+    },
+    upperArmFar: {
+      rot: [
+        [0, 30],
+        [0.08, 44],
+        [0.16, -30],
+        [0.34, 6],
+      ],
+    },
+    forearmFar: {
+      rot: [
+        [0, -40],
+        [0.16, -22],
+        [0.34, -14],
+      ],
+    },
+    chest: {
+      rot: [
+        [0, -10],
+        [0.08, -15],
+        [0.16, 12],
+        [0.34, 0],
+      ],
+    },
+    abdomen: {
+      rot: [
+        [0, -6],
+        [0.16, 8],
+        [0.34, 0],
+      ],
+    },
+    hips: {
+      rot: [
+        [0, -4],
+        [0.16, 6],
+        [0.34, 0],
+      ],
+    },
+    head: {
+      rot: [
+        [0, 5],
+        [0.16, -6],
+        [0.34, 0],
+      ],
+    },
+  },
+};
+
+/**
+ * Melee combo, finisher.
+ *
+ * Slower, with a pronounced overhead wind-up and a hard stop at the bottom.
+ * The longer recovery is deliberate: a finisher that can be cancelled
+ * instantly removes any reason to think about spacing.
+ */
+export const ATTACK_3: ClipDefinition = {
+  name: 'attack3',
+  duration: 0.52,
+  loop: false,
+  clamped: true,
+  bones: {
+    upperArmNear: {
+      rot: [
+        [0, -8],
+        [0.16, 96],
+        [0.26, -96],
+        [0.36, -66],
+        [0.52, -10],
+      ],
+    },
+    forearmNear: {
+      rot: [
+        [0, -14],
+        [0.16, -74],
+        [0.26, -8],
+        [0.36, -30],
+        [0.52, -16],
+      ],
+    },
+    upperArmFar: {
+      rot: [
+        [0, 6],
+        [0.16, 78],
+        [0.26, -60],
+        [0.52, 8],
+      ],
+    },
+    forearmFar: {
+      rot: [
+        [0, -14],
+        [0.16, -70],
+        [0.26, -12],
+        [0.52, -16],
+      ],
+    },
+    chest: {
+      rot: [
+        [0, 0],
+        [0.16, 16],
+        [0.26, -19],
+        [0.36, -10],
+        [0.52, 0],
+      ],
+    },
+    abdomen: {
+      rot: [
+        [0, 0],
+        [0.16, 9],
+        [0.26, -12],
+        [0.52, 0],
+      ],
+    },
+    hips: {
+      rot: [
+        [0, 0],
+        [0.16, 5],
+        [0.26, -8],
+        [0.52, 0],
+      ],
+      // The whole body drops into the blow.
+      y: [
+        [0, 0],
+        [0.16, -0.05],
+        [0.26, 0.07],
+        [0.52, 0],
+      ],
+    },
+    head: {
+      rot: [
+        [0, 0],
+        [0.16, -8],
+        [0.26, 11],
+        [0.52, 0],
+      ],
+    },
+    thighNear: {
+      rot: [
+        [0, -2],
+        [0.26, -22],
+        [0.52, -3],
+      ],
+    },
+    shinNear: {
+      rot: [
+        [0, 3],
+        [0.26, 26],
+        [0.52, 4],
+      ],
+    },
+    thighFar: {
+      rot: [
+        [0, 2],
+        [0.26, 18],
+        [0.52, 3],
+      ],
+    },
+  },
+};
+
+/** A flinch, layered additively on top of whatever else is playing. */
+export const HIT_REACT: ClipDefinition = {
+  name: 'hitReact',
+  duration: 0.30,
+  loop: false,
+  clamped: true,
+  bones: {
+    chest: {
+      rot: [
+        [0, 0],
+        [0.06, 15],
+        [0.30, 0],
+      ],
+    },
+    abdomen: {
+      rot: [
+        [0, 0],
+        [0.06, 10],
+        [0.30, 0],
+      ],
+    },
+    head: {
+      rot: [
+        [0, 0],
+        [0.06, -16],
+        [0.30, 0],
+      ],
+    },
+    upperArmNear: {
+      rot: [
+        [0, 0],
+        [0.06, 26],
+        [0.30, 0],
+      ],
+    },
+    upperArmFar: {
+      rot: [
+        [0, 0],
+        [0.06, 22],
+        [0.30, 0],
+      ],
+    },
+  },
+};
+
+export const OPTIMUS_CLIPS = {
+  IDLE,
+  WALK,
+  RUN,
+  JUMP_RISE,
+  FALL,
+  LAND,
+  ATTACK_1,
+  ATTACK_2,
+  ATTACK_3,
+  HIT_REACT,
+} as const;

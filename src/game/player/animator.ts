@@ -35,6 +35,9 @@ export const enum LocomotionState {
   JumpRise,
   Fall,
   Land,
+  Attack1,
+  Attack2,
+  Attack3,
 }
 
 /** What the animator needs to know about the character each frame. */
@@ -46,6 +49,10 @@ export interface AnimationInput {
   /** Signed vertical velocity; positive is downward. */
   velocityY: number;
   grounded: boolean;
+  /** Index of the active combo step, or -1 when not attacking. */
+  attackStep: number;
+  /** Seconds since the current attack began. */
+  attackTime: number;
   /** +1 faces right, -1 faces left. */
   facing: number;
   /** Ground surface angle in radians, for foot alignment. */
@@ -90,12 +97,24 @@ export class OptimusAnimator {
   /** Set when the character lands, so the game can spawn dust and shake. */
   landingImpact = 0;
 
+  /** Seconds remaining on the additive flinch layer. */
+  private hitReactRemaining = 0;
+
+  /** Plays a flinch on top of the current pose. */
+  triggerHitReact(): void {
+    this.hitReactRemaining = OPTIMUS_CLIPS.HIT_REACT.duration;
+  }
+
   constructor() {
     this.skeleton = createOptimusSkeleton();
     this.bones = resolveBoneIndices(this.skeleton);
 
     this.clips = {
       idle: new Clip(this.skeleton, OPTIMUS_CLIPS.IDLE),
+      attack1: new Clip(this.skeleton, OPTIMUS_CLIPS.ATTACK_1),
+      attack2: new Clip(this.skeleton, OPTIMUS_CLIPS.ATTACK_2),
+      attack3: new Clip(this.skeleton, OPTIMUS_CLIPS.ATTACK_3),
+      hitReact: new Clip(this.skeleton, OPTIMUS_CLIPS.HIT_REACT),
       walk: new Clip(this.skeleton, OPTIMUS_CLIPS.WALK),
       run: new Clip(this.skeleton, OPTIMUS_CLIPS.RUN),
       jumpRise: new Clip(this.skeleton, OPTIMUS_CLIPS.JUMP_RISE),
@@ -112,6 +131,13 @@ export class OptimusAnimator {
 
   /** Chooses the locomotion state from the character's actual motion. */
   private resolveState(input: AnimationInput): LocomotionState {
+    // Attacks take priority over locomotion: the controller owns the combo
+    // state machine, and the animator simply reflects it.
+    if (input.attackStep >= 0) {
+      return [LocomotionState.Attack1, LocomotionState.Attack2, LocomotionState.Attack3][
+        Math.min(input.attackStep, 2)
+      ]!;
+    }
     if (!input.grounded) {
       // A small downward threshold rather than zero, so the animation does not
       // flicker between rise and fall at the apex.
@@ -178,6 +204,16 @@ export class OptimusAnimator {
     // --- Inertialized output ---------------------------------------------
     this.inertializer.apply(this.basePose, this.outputPose, dt);
 
+    // --- Additive flinch --------------------------------------------------
+    // Layered rather than a state, so being hit while running does not
+    // interrupt the run — the body reacts and carries on.
+    if (this.hitReactRemaining > 0) {
+      const duration = OPTIMUS_CLIPS.HIT_REACT.duration;
+      const elapsed = duration - this.hitReactRemaining;
+      this.clips.hitReact!.sampleAdditive(this.outputPose, elapsed, 1);
+      this.hitReactRemaining -= dt;
+    }
+
     // --- Procedural layers ------------------------------------------------
     this.applyProcedural(input, dt);
 
@@ -195,6 +231,14 @@ export class OptimusAnimator {
 
   private transitionDuration(from: LocomotionState, to: LocomotionState): number {
     // Leaving the ground: snappy, so the jump feels immediate.
+    // Attacks must start instantly; anything slower is felt as input lag.
+    if (
+      to === LocomotionState.Attack1 ||
+      to === LocomotionState.Attack2 ||
+      to === LocomotionState.Attack3
+    ) {
+      return 0.04;
+    }
     if (to === LocomotionState.JumpRise) return 0.055;
     if (to === LocomotionState.Land) return 0.06;
     // Walk and run share a structure, so they can cross quickly.
@@ -245,6 +289,17 @@ export class OptimusAnimator {
       return;
     }
 
+    if (
+      this.state === LocomotionState.Attack1 ||
+      this.state === LocomotionState.Attack2 ||
+      this.state === LocomotionState.Attack3
+    ) {
+      // Driven by the controller's timer, not a second clock here, so the
+      // hitbox window and the pose can never drift apart.
+      this.samplePoseForState(out, this.state, input.attackTime);
+      return;
+    }
+
     this.samplePoseForState(out, this.state, this.stateTime);
   }
 
@@ -269,6 +324,15 @@ export class OptimusAnimator {
         break;
       case LocomotionState.Land:
         this.clips.land!.sample(out, time, this.skeleton.restPose);
+        break;
+      case LocomotionState.Attack1:
+        this.clips.attack1!.sample(out, time, this.skeleton.restPose);
+        break;
+      case LocomotionState.Attack2:
+        this.clips.attack2!.sample(out, time, this.skeleton.restPose);
+        break;
+      case LocomotionState.Attack3:
+        this.clips.attack3!.sample(out, time, this.skeleton.restPose);
         break;
       default: {
         const never: never = state;

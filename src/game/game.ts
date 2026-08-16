@@ -33,6 +33,12 @@ import { NoiseField } from '../core/math/noise.ts';
 import { ParticleSystem, ParticleKind } from '../fx/particles.ts';
 import type { InstancedQuads } from '../gfx/instanced.ts';
 import { BUDGETS } from '../core/config.ts';
+import { CombatSystem, Faction, type Hurtbox } from './combat.ts';
+import { Drone, DRONE, DroneState } from './enemies/drone.ts';
+import { Trail, TRAIL_STYLES } from '../fx/trails.ts';
+import { Rng } from '../core/rng.ts';
+import { aabb } from '../core/math/aabb.ts';
+import { MOVEMENT } from './player/controller.ts';
 import { clamp01 } from '../core/math/scalar.ts';
 
 const driftNoise = new NoiseField(0x4d51);
@@ -80,6 +86,21 @@ export class Game {
   /** Throttles the running dust trail so it does not flood the pool. */
   private runDustCooldown = 0;
 
+  // --- Combat -------------------------------------------------------------
+  readonly combat = new CombatSystem();
+  readonly enemies: Drone[] = [];
+  private playerHurtbox!: Hurtbox;
+  /** Live melee hitbox activation, or -1. */
+  private activeHitbox = -1;
+  /** Trail on the attacking hand. */
+  private readonly slashTrail = new Trail(TRAIL_STYLES.slash, 20);
+  private readonly heavyTrail = new Trail(TRAIL_STYLES.heavySlash, 24);
+  private readonly dashTrail = new Trail(TRAIL_STYLES.dash, 18);
+  /** Seconds of player invulnerability remaining after taking a hit. */
+  private playerIFrames = 0;
+  playerHealth = 100;
+  private readonly enemyRng = new Rng(0xd40e);
+
   /** Harness-only overrides. */
   private cameraOverride: { x: number; y: number; viewHeight: number } | null = null;
   private autopilot: Autopilot | null = null;
@@ -120,6 +141,37 @@ export class Game {
     this.optimusRenderer = new OptimusRenderer(this.atlas, this.animator.skeleton);
     this.player = new PlayerController(this.physics, this.room.spawn.x, this.room.spawn.y);
     this.autopilot = new Autopilot(this.physics, this.player);
+
+    // --- Combat setup -----------------------------------------------------
+    this.playerHurtbox = {
+      id: 0,
+      faction: Faction.Player,
+      box: aabb(this.player.box.x, this.player.box.y, this.player.box.hw, this.player.box.hh),
+      invulnerable: false,
+      alive: true,
+    };
+    this.combat.registerHurtbox(this.playerHurtbox);
+
+    // Drones posted along the route, spaced so each is met individually.
+    //
+    // Hover height is set relative to the floor each one patrols, not to world
+    // zero. The first pass put them 2.5 m above the player's strike zone, where
+    // they could attack but could not be attacked back.
+    const posts: [number, number, number][] = [
+      // [x, floor surface Y, patrol range]
+      [-4.5, -1.1, 2.6],
+      [14.0, -1.4, 3.0],
+      [27.5, -2.6, 2.2],
+      [68.0, -8.2, 3.4],
+    ];
+    /** Hover height above the floor, in metres. Keeps drones inside the melee box. */
+    const hoverHeight = 1.15;
+    for (let i = 0; i < posts.length; i++) {
+      const [x, floorY, range] = posts[i]!;
+      const drone = new Drone(i + 1, x, floorY - hoverHeight, range, this.enemyRng);
+      this.enemies.push(drone);
+      this.combat.registerHurtbox(drone.hurtbox);
+    }
 
     this.camera.setBounds(this.room.bounds);
     this.camera.viewHeightMetres = 9.6;
@@ -234,6 +286,11 @@ export class Game {
     // The autopilot drives input rather than replacing the controller, so a
     // recorded run exercises exactly the same movement code a player would.
     if (this.autopilot && this.autopilotOptions) {
+      // Feed live hostile positions in, so the navigator fights rather than
+      // running past everything.
+      this.autopilotOptions.threats = this.enemies
+        .filter((drone) => drone.state !== DroneState.Dying)
+        .map((drone) => ({ x: drone.x, y: drone.y }));
       const frame = this.autopilot.compute(this.autopilotOptions, dt);
       this.autopilotFrame.moveX = frame.moveX ?? 0;
       this.autopilotFrame.moveY = frame.moveY ?? 0;
@@ -245,6 +302,30 @@ export class Game {
 
     input.beginStep(simTime);
     this.player.update(input, dt);
+
+    // --- Combat ------------------------------------------------------------
+    this.playerIFrames = Math.max(0, this.playerIFrames - dt);
+    this.playerHurtbox.invulnerable = this.playerIFrames > 0 || this.player.invulnerable;
+    this.playerHurtbox.box.x = this.player.box.x;
+    this.playerHurtbox.box.y = this.player.box.y;
+
+    this.updateMeleeHitbox();
+
+    for (const drone of this.enemies) {
+      drone.update(dt, this.player.feetX, this.player.feetY);
+    }
+
+    this.combat.resolve(dt);
+    this.applyHitEvents();
+    this.applyContactDamage();
+
+    // Retire fully dissolved drones.
+    for (let i = this.enemies.length - 1; i >= 0; i--) {
+      if (!this.enemies[i]!.alive) {
+        this.combat.removeHurtbox(this.enemies[i]!.id);
+        this.enemies.splice(i, 1);
+      }
+    }
 
     this.particles.update(
       dt,
@@ -292,6 +373,137 @@ export class Game {
     this.runDustCooldown -= dt;
   }
 
+  /**
+   * Opens, moves, and closes the melee hitbox in step with the animation.
+   *
+   * The box is placed ahead of the character rather than tracked to the hand
+   * bone. A hitbox welded to the hand follows the animation so literally that
+   * it becomes unpredictable to aim; a stable box in front of the character is
+   * what players actually expect from a swing.
+   */
+  private updateMeleeHitbox(): void {
+    const player = this.player;
+
+    if (player.hitboxOpenedThisStep >= 0) {
+      const step = player.hitboxOpenedThisStep;
+      const heavy = step === 2;
+      const reach = heavy ? 1.55 : 1.25;
+
+      this.activeHitbox = this.combat.spawnHitbox({
+        faction: Faction.Player,
+        x: player.feetX + player.facing * reach * 0.55,
+        y: player.feetY - 0.95,
+        halfWidth: reach * 0.5,
+        halfHeight: heavy ? 0.72 : 0.58,
+        damage: MOVEMENT.attackDamage[step]!,
+        knockbackX: player.facing * (heavy ? 9.5 : 5.5),
+        knockbackY: heavy ? -3.4 : -1.8,
+        // A heavier blow freezes the world for longer, which is most of what
+        // makes it feel heavier.
+        hitstop: heavy ? 0.135 : 0.055,
+        trauma: heavy ? 0.42 : 0.18,
+        duration: 0.28,
+        multiHit: heavy,
+      });
+
+      (heavy ? this.heavyTrail : this.slashTrail).start();
+    }
+
+    if (this.activeHitbox >= 0 && player.attackStep >= 0) {
+      this.combat.moveHitbox(
+        this.activeHitbox,
+        player.feetX + player.facing * (player.attackStep === 2 ? 0.85 : 0.7),
+        player.feetY - 0.95,
+      );
+    }
+
+    if (player.hitboxClosedThisStep) {
+      if (this.activeHitbox >= 0) this.combat.cancelHitbox(this.activeHitbox);
+      this.activeHitbox = -1;
+      this.slashTrail.stop();
+      this.heavyTrail.stop();
+    }
+  }
+
+  /**
+   * Turns hit events into damage, hitstop, shake, and particles.
+   *
+   * All of it is driven from one place so the effects cannot drift out of sync
+   * with each other, and hitstop is applied once for the frame rather than once
+   * per simultaneous hit.
+   */
+  private applyHitEvents(): void {
+    for (const event of this.combat.events) {
+      if (event.attacker === Faction.Player) {
+        const drone = this.enemies.find((d) => d.id === event.targetId);
+        if (!drone) continue;
+
+        const killed = drone.takeHit(event.damage, event.knockbackX, event.knockbackY);
+
+        // Sparks fly along the direction force was transferred.
+        this.particles.burstSparks(
+          event.x,
+          event.y,
+          event.normalX,
+          event.normalY - 0.3,
+          killed ? 1.3 : 0.75,
+          [1.0, 0.86, 0.55],
+        );
+        this.particles.burstDebris(event.x, event.y, killed ? 1.0 : 0.4, [0.42, 0.40, 0.42]);
+
+        if (killed) {
+          // A death is a bigger event than a hit, and should read that way.
+          this.particles.burstSparks(event.x, event.y, 0, -1, 1.6, [0.30, 0.95, 1.0]);
+          this.particles.burstDust(event.x, event.y, 0.9, [0.7, 0.65, 0.7]);
+          this.camera.addTrauma(0.4);
+        }
+      } else {
+        // The player was hit.
+        if (this.playerIFrames > 0) continue;
+        this.playerHealth = Math.max(0, this.playerHealth - event.damage);
+        this.playerIFrames = 0.85;
+        this.player.interruptAttack();
+        this.animator.triggerHitReact();
+        this.particles.burstSparks(event.x, event.y, event.normalX, -0.5, 0.9, [1.0, 0.5, 0.35]);
+      }
+    }
+
+    const hitstop = this.combat.peakHitstop;
+    if (hitstop > 0) this.loop?.hitstop(hitstop);
+
+    const trauma = this.combat.peakTrauma;
+    if (trauma > 0) this.camera.addTrauma(trauma);
+  }
+
+  /** A lunging drone damages the player on contact with its body. */
+  private applyContactDamage(): void {
+    if (this.playerHurtbox.invulnerable) return;
+
+    for (const drone of this.enemies) {
+      if (!drone.isDangerous) continue;
+      const dx = Math.abs(drone.x - this.player.box.x);
+      const dy = Math.abs(drone.y - this.player.box.y);
+      if (dx > drone.box.hw + this.player.box.hw) continue;
+      if (dy > drone.box.hh + this.player.box.hh) continue;
+
+      this.playerHealth = Math.max(0, this.playerHealth - DRONE.contactDamage);
+      this.playerIFrames = 0.85;
+      this.player.interruptAttack();
+      this.animator.triggerHitReact();
+      this.camera.addTrauma(0.3);
+      this.loop?.hitstop(0.06);
+      this.particles.burstSparks(
+        this.player.feetX,
+        this.player.feetY - 0.9,
+        Math.sign(this.player.box.x - drone.x),
+        -0.4,
+        0.9,
+        [1.0, 0.5, 0.35],
+      );
+      break;
+    }
+  }
+
   render(_alpha: number, _dt: number, unscaledDt: number): void {
     const player = this.player;
 
@@ -303,6 +515,8 @@ export class Game {
       facing: player.facing,
       groundAngle: player.groundAngle,
       groundY: player.groundY,
+      attackStep: player.attackStep,
+      attackTime: player.attackTime,
     };
     this.animator.update(animationInput, unscaledDt, player.feetX, player.feetY);
 
@@ -325,6 +539,22 @@ export class Game {
       );
     }
     this.camera.update(unscaledDt);
+
+    // Trails sample at render rate, so they stay smooth at any refresh.
+    const hand = this.animator.bones.handNear;
+    const world = this.animator.skeleton.world;
+    this.slashTrail.sample(world.worldX[hand]!, world.worldY[hand]!);
+    this.heavyTrail.sample(world.worldX[hand]!, world.worldY[hand]!);
+    this.slashTrail.update(unscaledDt);
+    this.heavyTrail.update(unscaledDt);
+
+    if (player.state === 2 /* Dashing */) {
+      this.dashTrail.start();
+      this.dashTrail.sample(player.feetX, player.feetY - 0.85);
+    } else {
+      this.dashTrail.stop();
+    }
+    this.dashTrail.update(unscaledDt);
 
     this.updateLights();
     this.updateGodRaySource();
@@ -400,7 +630,11 @@ export class Game {
     this.drawPlatforms(batch);
     this.drawProps(batch);
 
+    this.drawEnemies(batch);
+
     this.optimusRenderer.draw(batch, this.animator.skeleton, this.player.facing);
+
+    this.drawTrails(batch);
 
     batch.setBlend(BlendMode.Premultiplied);
     this.parallax.drawForeground(batch, this.layers, this.time);
@@ -593,6 +827,51 @@ export class Game {
     submit([glow.u0, glow.v0, glow.u1, glow.v1], this.atlas.textures.albedo.handle, 3.2);
   }
 
+  private drawEnemies(batch: SpriteBatch): void {
+    const entry = this.atlas.get('drone');
+    const visible = this.camera.getVisibleBounds(3);
+    batch.setBlend(BlendMode.Premultiplied);
+
+    for (const drone of this.enemies) {
+      if (drone.x < visible.minX || drone.x > visible.maxX) continue;
+
+      // Dying drones shrink and fade. A proper noise-threshold dissolve is
+      // still to come; this at least reads as destruction rather than a sprite
+      // being deleted.
+      const scale = 1 - drone.dissolve * 0.45;
+      const alpha = 1 - drone.dissolve;
+      if (alpha <= 0.01) continue;
+
+      // The white flash marks the instant of contact.
+      const flash = drone.flash;
+      const r = (1 - flash) * 1 + flash * 4;
+      const tint = packColor(r * alpha, r * alpha, r * alpha, alpha);
+
+      batch.draw(
+        drone.x,
+        drone.y,
+        DRONE.size * scale,
+        DRONE.size * scale,
+        drone.facing > 0 ? entry.u0 : entry.u1,
+        entry.v0,
+        drone.facing > 0 ? entry.u1 : entry.u0,
+        entry.v1,
+        Depth.Playfield,
+        tint,
+        // Charge drives the optic's emissive, so the telegraph is visible.
+        packMaterial(drone.charge * 0.8 + flash, 0.5, 0.6, 0),
+        drone.state === DroneState.Dying ? drone.dissolve * 1.6 : 0,
+      );
+    }
+  }
+
+  private drawTrails(batch: SpriteBatch): void {
+    const glow = this.atlas.get('glow');
+    this.dashTrail.draw(batch, glow);
+    this.slashTrail.draw(batch, glow);
+    this.heavyTrail.draw(batch, glow);
+  }
+
   /** Silhouettes for the shadow and god-ray passes. */
   private drawOccluders(batch: SpriteBatch): void {
     batch.setTextures(this.atlas.textures);
@@ -700,6 +979,8 @@ export class Game {
       platforms: this.room.platforms.length,
       props: this.room.props.length,
       particles: this.particles.count,
+      enemies: this.enemies.length,
+      playerHealth: this.playerHealth,
       layers: this.layers.length,
       renderWidth: width,
       renderHeight: height,

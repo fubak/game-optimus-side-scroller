@@ -154,10 +154,14 @@ export function buildAresApproach(): RoomDefinition {
   // 8.3 m/s a 3.6 m ledge is crossed in 0.43 s, so a jump that arrives even
   // slightly long sails straight over it and into the next gap. Landing zones
   // have to be sized against the speed the player actually arrives at.
-  ledge(36.5, 42.5, -4.0);
-  ledge(45.0, 51.0, -5.4);
-  ledge(53.5, 59.5, -6.8);
-  floor(62.0, 78, -8.2);
+  // Gaps of 1.0 m then 2.0 m, well inside the 10 m range. The first is
+  // deliberately tiny: it follows a combat encounter on the floor's edge, and a
+  // player still recovering from a fight should not immediately face a
+  // demanding jump.
+  ledge(35.0, 42.5, -4.0);
+  ledge(44.5, 51.0, -5.4);
+  ledge(53.0, 59.5, -6.8);
+  floor(61.5, 92, -8.2);
 
   // --- Props ---------------------------------------------------------------
   // Sparse and deliberate: clutter fights the silhouette reading the
@@ -219,7 +223,7 @@ export function buildAresApproach(): RoomDefinition {
 
   return {
     name: 'ares.approach',
-    bounds: { minX: -40, minY: -20, maxX: 80, maxY: 8 },
+    bounds: { minX: -40, minY: -20, maxX: 92, maxY: 8 },
     spawn: { x: -30, y: 0 },
     exitX: 74,
     platforms,
