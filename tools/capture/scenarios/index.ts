@@ -37,6 +37,8 @@ export interface Scenario {
   spawn?: { x: number; y: number };
   /** Optional fixed camera framing: [offsetX, offsetY, viewHeightMetres]. */
   camera?: [number, number, number];
+  /** Biome to switch to before recording. 0 = Ares Basin, 1 = The Foundry. */
+  biome?: number;
 }
 
 export const SCENARIOS: Scenario[] = [
@@ -79,5 +81,34 @@ export const SCENARIOS: Scenario[] = [
     warmupFrames: 45,
     heroFrames: [0],
     camera: [0.4, -1.0, 3.4],
+  },
+  {
+    name: 'foundry_traversal',
+    description:
+      'A descent through the Foundry: the enclosed assembly complex that built ' +
+      'Optimus, lit by molten channels and magenta signage. Judges the second ' +
+      'biome against the first on structure, light direction, and palette.',
+    seed: 2002,
+    quality: Quality.High,
+    durationSeconds: 24,
+    warmupFrames: 30,
+    heroFrames: [0],
+    autopilotTargetX: 86,
+    autopilotSprint: true,
+    biome: 1,
+  },
+  {
+    name: 'foundry_vista',
+    description:
+      'Static framing of the Foundry assembly hall, with molten channels and ' +
+      'hanging chassis. Judges the interior lighting and its value ramp.',
+    seed: 2002,
+    quality: Quality.Ultra,
+    durationSeconds: 4,
+    warmupFrames: 45,
+    heroFrames: [0],
+    biome: 1,
+    spawn: { x: 50, y: -8.4 },
+    camera: [2, -2.5, 13],
   },
 ];

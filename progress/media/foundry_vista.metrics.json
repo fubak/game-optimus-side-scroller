@@ -1,0 +1,77 @@
+{
+  "scenario": "foundry_vista",
+  "image": {
+    "meanLuminance": 0.15562232323284772,
+    "luminanceP1": 0,
+    "luminanceP99": 0.948024332523346,
+    "dynamicRange": 0.948024332523346,
+    "clippedBlack": 0.08897376543209877,
+    "clippedWhite": 0,
+    "meanSaturation": 0.5121504454060186,
+    "highlightSaturation": 0.18109990092233091,
+    "localContrast": 0.05380973967376484,
+    "edgeDensity": 0.04346468494348342,
+    "bloomEnergy": 0.03375,
+    "bandContrast": [
+      0.0573251441632869,
+      0.05960590807916434,
+      0.04289570573633674
+    ],
+    "bandSaturation": [
+      0.7669026257631286,
+      0.5256304827303466,
+      0.24348012616168818
+    ],
+    "cyanPresence": 0.008410493827160494,
+    "hueEntropy": 0.6553526203698011,
+    "dominantHues": [
+      {
+        "hue": 5,
+        "share": 0.33671859354301215
+      },
+      {
+        "hue": 355,
+        "share": 0.10336638090132116
+      },
+      {
+        "hue": 325,
+        "share": 0.10118856491862223
+      },
+      {
+        "hue": 15,
+        "share": 0.07998769099345542
+      },
+      {
+        "hue": 335,
+        "share": 0.06890016751003027
+      }
+    ],
+    "width": 480,
+    "height": 270
+  },
+  "stats": {
+    "drawCalls": 26,
+    "triangles": 1388.6666666666665,
+    "textureBinds": 31,
+    "fullscreenPasses": 16,
+    "lights": 4,
+    "lightsCulled": 0,
+    "platforms": 10,
+    "props": 16,
+    "particles": 3200,
+    "enemies": 4,
+    "playerHealth": 92,
+    "respawns": 0,
+    "layers": 7,
+    "renderWidth": 800,
+    "renderHeight": 450,
+    "playerX": 50,
+    "playerY": -8.401,
+    "playerVX": 0,
+    "playerVY": 0,
+    "grounded": 1,
+    "simMs": 0.6999999992549419,
+    "renderMs": 0.2000000011175871,
+    "frameMs": 16.666666666666607
+  }
+}

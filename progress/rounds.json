@@ -138,5 +138,34 @@
       "audio": 6.0,
       "uiPolish": 5.0
     }
+  },
+  {
+    "round": 5,
+    "date": "2026-08-16",
+    "title": "Second biome \u2014 The Foundry",
+    "notes": [
+      "The Foundry: enclosed, cold, lit entirely from inside the frame by molten channels below and magenta signage in the middle distance.",
+      "Structure changed as well as palette. Manufactured silhouettes generated from stacked structural bays rather than noise, since noise produces organic profiles however it is tuned. Light comes from below so the value ramp inverts. The room is a descent rather than a traverse.",
+      "Biome switching costs no texture work: every biome's art is baked into one atlas at load, so a switch is a change of layer list, atmosphere, room, and light rig.",
+      "Enemy placement derived from the room's own platforms rather than a hardcoded table.",
+      "Rim light is now modulated by albedo. It was being added independently, lifting every dark surface by the full rim colour.",
+      "Fill light is per-biome. The broad warm fill belongs to an open exterior; carried into an interior it erased the pools of practical light the space is built around.",
+      "The gate now runs both biomes end to end."
+    ],
+    "biggestGap": "Bosses and progression. There is now a second biome and combat that reads correctly, but no boss encounter, no ranged attack or parry, no room-to-room progression, no save, and no menus - the game is two disconnected demo rooms rather than a structure. Biomes 3 and 4 are also still unbuilt. Next: the first boss, then the room graph and title/pause shell.",
+    "scores": {
+      "animationFluidity": 6.5,
+      "frameConsistency": 7.5,
+      "scaleCoherence": 8.0,
+      "atmosphere": 8.0,
+      "lighting": 7.5,
+      "particles": 7.0,
+      "presence": 7.0,
+      "composition": 6.5,
+      "thematicCoherence": 8.0,
+      "combatImpact": 6.0,
+      "audio": 6.0,
+      "uiPolish": 5.0
+    }
   }
 ]

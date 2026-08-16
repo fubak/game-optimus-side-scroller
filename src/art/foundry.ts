@@ -323,16 +323,16 @@ export function makeMoltenChannel(width: number, height: number, seed: number): 
       // reading as a flat orange stripe.
       const crust = clamp01(noise.fbm2(x * 0.06 + 90, y * 0.2, 3) * 0.5 + 0.5 - 0.42) * (1 - heat);
 
-      let r = lerp(0.16, 1.0, heat);
-      let g = lerp(0.06, 0.62, Math.pow(heat, 1.5));
-      let b = lerp(0.05, 0.22, Math.pow(heat, 3));
+      let r = lerp(0.14, 0.94, heat);
+      let g = lerp(0.05, 0.44, Math.pow(heat, 1.8));
+      let b = lerp(0.04, 0.11, Math.pow(heat, 3.4));
 
       r = lerp(r, 0.11, crust * 2.2);
       g = lerp(g, 0.07, crust * 2.2);
       b = lerp(b, 0.07, crust * 2.2);
 
       setPixel(surface, x, y, clamp01(r), clamp01(g), clamp01(b), 1);
-      surface.emissive[index] = clamp01(heat * 1.2 - crust * 1.5);
+      surface.emissive[index] = clamp01(heat * 0.95 - crust * 1.5);
       surface.roughness[index] = 0.7;
       surface.metallic[index] = 0;
       surface.heightField[index] = 0.2 + crust * 0.5;

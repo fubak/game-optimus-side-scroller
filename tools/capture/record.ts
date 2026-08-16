@@ -100,11 +100,15 @@ async function runScenario(page: Page, scenario: Scenario, options: Options): Pr
         setCamera(x: number, y: number, h: number): void;
         clearCamera(): void;
         autopilot(targetX: number | null, direction?: number, sprint?: boolean): void;
+        setBiome(id: number): void;
       };
       harness.seed(config!.seed);
       harness.setQuality(config!.quality);
       harness.setResolution(config!.width, config!.height);
       harness.setDebugView(config!.debugView);
+      // Biome first: switching rebuilds the room and respawns the player, so a
+      // teleport must come after it or it is immediately overwritten.
+      if (config!.biome > 0) harness.setBiome(config!.biome);
       if (config!.spawn) harness.teleport(config!.spawn.x, config!.spawn.y);
       if (config!.camera) {
         harness.setCamera(config!.camera[0], config!.camera[1], config!.camera[2]);
@@ -136,6 +140,7 @@ async function runScenario(page: Page, scenario: Scenario, options: Options): Pr
         autopilotTargetX: scenario.autopilotTargetX ?? null,
         autopilotDirection: scenario.autopilotDirection ?? 1,
         autopilotSprint: scenario.autopilotSprint ?? false,
+        biome: scenario.biome ?? 0,
       },
     ],
   );
