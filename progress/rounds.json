@@ -82,5 +82,31 @@
       "audio": 0,
       "uiPolish": 0
     }
+  },
+  {
+    "round": 3,
+    "date": "2026-08-16",
+    "title": "Atmosphere \u2014 god rays that are actually in frame",
+    "notes": [
+      "God rays were anchored to a fixed world position, which is off-screen at every camera position in the level. A radial effect fades to nothing once its source leaves the frame, so the shafts were never visible anywhere. The source now follows the camera along the sun's direction, as an infinitely distant light should.",
+      "Terrain now occludes the sky, so shafts have something to break over. Previously only props, the player, and the foreground band wrote to the occluder mask, leaving the largest silhouette in the scene absent from it.",
+      "Added a fully-composited debug view, turning a tuning iteration from a ~60 second clip recording into an ~8 second preview.",
+      "Shaft energy tuned down after an overcorrection washed the entire frame into a milky haze: the radial accumulation brightens all open sky, not only the shafted regions, so its exposure has to stay modest."
+    ],
+    "biggestGap": "Particle density and bloom energy. Bloom measures 0.001-0.010 against a 0.015-0.06 target, and the dust field is a few hundred motes drawn as individual quads where the reference bar carries thousands. There are no wind gusts, no ground-level drift, no debris on landing, and no impact effects at all. The near/far contrast ratio also regressed to 1.08 on the traversal framing, below the 1.8 floor, because the foreground band and the shafts both lift the near band. Next round: a GPU-instanced particle system, then combat VFX.",
+    "scores": {
+      "animationFluidity": 7.0,
+      "frameConsistency": 7.5,
+      "scaleCoherence": 8.0,
+      "atmosphere": 7.5,
+      "lighting": 7.0,
+      "particles": 4.5,
+      "presence": 6.5,
+      "composition": 6.0,
+      "thematicCoherence": 7.5,
+      "combatImpact": 0,
+      "audio": 0,
+      "uiPolish": 0
+    }
   }
 ]

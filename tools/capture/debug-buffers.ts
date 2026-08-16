@@ -15,6 +15,9 @@ import { launchBrowser, waitForHarness } from './browser.ts';
 const ROOT = resolve(import.meta.dirname, '../..');
 
 const VIEWS: { id: number; name: string; note: string }[] = [
+  // View 0 is the fully composited image. Having it here makes this tool a
+  // ~8 second preview of a tuning change, against ~60 seconds to record a clip.
+  { id: 0, name: 'final', note: 'fully composited frame' },
   { id: 1, name: 'albedo', note: 'base colour, no lighting' },
   { id: 2, name: 'normal', note: 'RG = normal xy, B = height, A = AO' },
   { id: 3, name: 'material', note: 'R = roughness, G = metallic, B = emissive' },

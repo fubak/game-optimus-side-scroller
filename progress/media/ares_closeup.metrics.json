@@ -1,57 +1,57 @@
 {
   "scenario": "ares_closeup",
   "image": {
-    "meanLuminance": 0.38589349534613726,
-    "luminanceP1": 0.1327952891588211,
-    "luminanceP99": 0.8425866961479187,
-    "dynamicRange": 0.7097914069890976,
+    "meanLuminance": 0.4257619212781599,
+    "luminanceP1": 0.15013332664966583,
+    "luminanceP99": 0.8221607804298401,
+    "dynamicRange": 0.6720274537801743,
     "clippedBlack": 0,
     "clippedWhite": 0,
-    "meanSaturation": 0.3860354864105786,
-    "highlightSaturation": 0.31141567950379884,
-    "localContrast": 0.03590469950811197,
-    "edgeDensity": 0.017399925060888027,
-    "bloomEnergy": 0.011612654320987655,
+    "meanSaturation": 0.3568414349544263,
+    "highlightSaturation": 0.28193009200591085,
+    "localContrast": 0.03133888205023071,
+    "edgeDensity": 0.014613126834447012,
+    "bloomEnergy": 0.010138888888888888,
     "bandContrast": [
-      0.019502789590453096,
-      0.04531566709787681,
-      0.037748980306997255
+      0.018629574498909125,
+      0.03786460639901946,
+      0.03406630198511275
     ],
     "bandSaturation": [
-      0.37174082338022035,
-      0.3666865271105254,
-      0.4157241532628058
+      0.29343947060442765,
+      0.35819346802283175,
+      0.41540425143182824
     ],
-    "cyanPresence": 0.0005169753086419753,
-    "hueEntropy": 0.6492908365977073,
+    "cyanPresence": 0.00028549382716049385,
+    "hueEntropy": 0.5955685874778341,
     "dominantHues": [
       {
-        "hue": 15,
-        "share": 0.2055914571292964
-      },
-      {
         "hue": 25,
-        "share": 0.18852752591250277
+        "share": 0.3174016579206934
       },
       {
-        "hue": 355,
-        "share": 0.16589241628030454
-      },
-      {
-        "hue": 265,
-        "share": 0.09347777132408985
+        "hue": 15,
+        "share": 0.17520293637167533
       },
       {
         "hue": 5,
-        "share": 0.07503938302314632
+        "share": 0.13999462921024292
+      },
+      {
+        "hue": 355,
+        "share": 0.09778330398631337
+      },
+      {
+        "hue": 35,
+        "share": 0.06053715542985903
       }
     ],
     "width": 480,
     "height": 270
   },
   "stats": {
-    "drawCalls": 24,
-    "triangles": 240,
+    "drawCalls": 25,
+    "triangles": 248,
     "textureBinds": 31,
     "fullscreenPasses": 16,
     "lights": 3,
@@ -60,15 +60,15 @@
     "props": 13,
     "motes": 420,
     "layers": 7,
-    "renderWidth": 640,
-    "renderHeight": 360,
+    "renderWidth": 512,
+    "renderHeight": 288,
     "playerX": 72.62441666666523,
     "playerY": -8.200999999999999,
     "playerVX": 0,
     "playerVY": 0,
     "grounded": 1,
     "simMs": 0,
-    "renderMs": 0.20000000018626451,
+    "renderMs": 0.19999999925494194,
     "frameMs": 16.66666666666572
   }
 }

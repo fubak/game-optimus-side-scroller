@@ -238,11 +238,11 @@ export function buildAresAtmosphere(): Atmosphere {
 
     godRayX: ARES_SUN_WORLD.x,
     godRayY: ARES_SUN_WORLD.y,
-    godRayColor: [1.0, 0.70, 0.42],
-    godRayDensity: 0.85,
-    godRayDecay: 0.955,
-    godRayWeight: 0.55,
-    godRayExposure: 0.62,
+    godRayColor: [1.0, 0.66, 0.38],
+    godRayDensity: 0.62,
+    godRayDecay: 0.965,
+    godRayWeight: 0.52,
+    godRayExposure: 0.32,
 
     // A lower threshold and a much stronger emissive scale, so lit surfaces
     // genuinely cross into the bloom chain instead of sitting just below it.

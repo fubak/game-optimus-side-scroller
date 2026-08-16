@@ -154,7 +154,7 @@ export class Game {
     this.dynamicLights.push(
       createLight({
         type: LightType.Directional,
-        angle: -(Math.PI - 0.38),
+        angle: this.sunAngle,
         r: 1.0,
         g: 0.72,
         b: 0.46,
@@ -299,6 +299,7 @@ export class Game {
     this.camera.update(unscaledDt);
 
     this.updateLights();
+    this.updateGodRaySource();
 
     this.pipeline.render({
       camera: this.camera,
@@ -314,6 +315,27 @@ export class Game {
       this.pipeline.updateDynamicResolution(this.loop.timings.frameMs, 1000 / 60);
     }
   }
+
+  /**
+   * Places the god-ray source in the sun's direction relative to the camera.
+   *
+   * The sun is effectively at infinity, so pinning its shafts to a fixed world
+   * position is wrong: the radial effect fades to nothing the moment its source
+   * leaves the frame, and a fixed point is off-screen for all but a sliver of
+   * the level. Anchoring it to the camera keeps the shafts radiating from the
+   * correct direction wherever the player is.
+   */
+  private updateGodRaySource(): void {
+    const angle = this.sunAngle;
+    // Just inside the frame edge: far enough out that the shafts read as
+    // parallel, close enough that the radial falloff still covers the screen.
+    const reach = 0.46;
+    this.atmosphere.godRayX = this.camera.x + Math.cos(angle) * this.camera.viewWidthMetres * reach;
+    this.atmosphere.godRayY = this.camera.y + Math.sin(angle) * this.camera.viewHeightMetres * reach;
+  }
+
+  /** Direction of the key light, shared by the sun light and its god rays. */
+  private readonly sunAngle = -(Math.PI - 0.38);
 
   private updateLights(): void {
     // Track the chest, which is where the power core sits.
@@ -553,8 +575,12 @@ export class Game {
     const material = packMaterial(0, 1, 0, 0);
     const visible = this.camera.getVisibleBounds(4);
 
+    // Every platform occludes the sky, including the ground slabs. Shafts need
+    // something to break over, and terrain is the largest such silhouette in
+    // the scene. Self-shadowing is avoided by the ray's start bias plus the
+    // soft-maximum accumulation, which only darkens a surface when a *nearer*
+    // occluder sits between it and the light.
     for (const platform of this.room.platforms) {
-      if (!platform.castsShadow) continue;
       if (
         platform.x + platform.width / 2 < visible.minX ||
         platform.x - platform.width / 2 > visible.maxX
