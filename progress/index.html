@@ -74,23 +74,23 @@
 <body>
 <header class="top">
   <h1>Optimus<b>:</b> Red Protocol</h1>
-  <div class="sub">build progress &middot; generated 2026-08-16 02:43:26 UTC &middot; page refreshes every 30 s</div>
+  <div class="sub">build progress &middot; generated 2026-08-16 03:48:40 UTC &middot; page refreshes every 30 s</div>
 </header>
 <main>
-  <div class="banner"><strong>Round 3: Atmosphere — god rays that are actually in frame</strong><br />
-         Currently working on: Particle density and bloom energy. Bloom measures 0.001-0.010 against a 0.015-0.06 target, and the dust field is a few hundred motes drawn as individual quads where the reference bar carries thousands. There are no wind gusts, no ground-level drift, no debris on landing, and no impact effects at all. The near/far contrast ratio also regressed to 1.08 on the traversal framing, below the 1.8 floor, because the foreground band and the shafts both lift the near band. Next round: a GPU-instanced particle system, then combat VFX.</div>
+  <div class="banner"><strong>Round 4: Playable game — particles, combat, enemies, audio, HUD, respawn</strong><br />
+         Currently working on: Content breadth and character animation detail. Blind review now confirms hitstop, hit flash, knockback, foot planting, and jump arcs all read correctly, and rates combat impact 4/10 and animation fluidity 3/10 - the weakness is no longer that effects are missing but that the animation set is thin. There is one biome, one enemy type, no boss, no ranged attack, no parry, no progression, and no menus. Next: a second enemy, the first boss, and richer transition animations (turnarounds, landing rolls, attack recovery blends).</div>
 
   <section>
     <h2>Latest clips (recorded at a locked 60 fps)</h2>
     <div class="videos"><figure class="video">
             <video src="media/ares_closeup.mp4" controls loop muted playsinline preload="metadata"></video>
-            <figcaption>ares_closeup <span>51 KB · 60 fps</span></figcaption>
+            <figcaption>ares_closeup <span>314 KB · 60 fps</span></figcaption>
           </figure><figure class="video">
             <video src="media/ares_vista.mp4" controls loop muted playsinline preload="metadata"></video>
-            <figcaption>ares_vista <span>62 KB · 60 fps</span></figcaption>
+            <figcaption>ares_vista <span>306 KB · 60 fps</span></figcaption>
           </figure><figure class="video">
             <video src="media/ares_traversal.mp4" controls loop muted playsinline preload="metadata"></video>
-            <figcaption>ares_traversal <span>720 KB · 60 fps</span></figcaption>
+            <figcaption>ares_traversal <span>4355 KB · 60 fps</span></figcaption>
           </figure></div>
   </section>
 
@@ -104,17 +104,17 @@
                 <a href="media/ares_closeup_hero0.png" target="_blank" rel="noopener">
                   <img src="media/ares_closeup_hero0.png" alt="ares_closeup_hero0" loading="lazy" />
                 </a>
-                <figcaption>ares_closeup_hero0 <span>1927 KB</span></figcaption>
+                <figcaption>ares_closeup_hero0 <span>1966 KB</span></figcaption>
               </figure><figure>
                 <a href="media/ares_vista_hero0.png" target="_blank" rel="noopener">
                   <img src="media/ares_vista_hero0.png" alt="ares_vista_hero0" loading="lazy" />
                 </a>
-                <figcaption>ares_vista_hero0 <span>1859 KB</span></figcaption>
+                <figcaption>ares_vista_hero0 <span>1889 KB</span></figcaption>
               </figure><figure>
                 <a href="media/ares_traversal_hero0.png" target="_blank" rel="noopener">
                   <img src="media/ares_traversal_hero0.png" alt="ares_traversal_hero0" loading="lazy" />
                 </a>
-                <figcaption>ares_traversal_hero0 <span>1897 KB</span></figcaption>
+                <figcaption>ares_traversal_hero0 <span>1917 KB</span></figcaption>
               </figure>
         </div>
       </section>
@@ -125,57 +125,57 @@
                 <a href="media/debug/11_contactAO.png" target="_blank" rel="noopener">
                   <img src="media/debug/11_contactAO.png" alt="11_contactAO" loading="lazy" />
                 </a>
-                <figcaption>11_contactAO <span>16 KB</span></figcaption>
+                <figcaption>11_contactAO <span>21 KB</span></figcaption>
               </figure><figure>
                 <a href="media/debug/10_scene.png" target="_blank" rel="noopener">
                   <img src="media/debug/10_scene.png" alt="10_scene" loading="lazy" />
                 </a>
-                <figcaption>10_scene <span>193 KB</span></figcaption>
+                <figcaption>10_scene <span>264 KB</span></figcaption>
               </figure><figure>
                 <a href="media/debug/08_bloom.png" target="_blank" rel="noopener">
                   <img src="media/debug/08_bloom.png" alt="08_bloom" loading="lazy" />
                 </a>
-                <figcaption>08_bloom <span>38 KB</span></figcaption>
+                <figcaption>08_bloom <span>57 KB</span></figcaption>
               </figure><figure>
                 <a href="media/debug/07_godrays.png" target="_blank" rel="noopener">
                   <img src="media/debug/07_godrays.png" alt="07_godrays" loading="lazy" />
                 </a>
-                <figcaption>07_godrays <span>72 KB</span></figcaption>
+                <figcaption>07_godrays <span>88 KB</span></figcaption>
               </figure><figure>
                 <a href="media/debug/06_light.png" target="_blank" rel="noopener">
                   <img src="media/debug/06_light.png" alt="06_light" loading="lazy" />
                 </a>
-                <figcaption>06_light <span>193 KB</span></figcaption>
+                <figcaption>06_light <span>264 KB</span></figcaption>
               </figure><figure>
                 <a href="media/debug/05_occluder.png" target="_blank" rel="noopener">
                   <img src="media/debug/05_occluder.png" alt="05_occluder" loading="lazy" />
                 </a>
-                <figcaption>05_occluder <span>19 KB</span></figcaption>
+                <figcaption>05_occluder <span>24 KB</span></figcaption>
               </figure><figure>
                 <a href="media/debug/04_depth.png" target="_blank" rel="noopener">
                   <img src="media/debug/04_depth.png" alt="04_depth" loading="lazy" />
                 </a>
-                <figcaption>04_depth <span>11 KB</span></figcaption>
+                <figcaption>04_depth <span>19 KB</span></figcaption>
               </figure><figure>
                 <a href="media/debug/03_material.png" target="_blank" rel="noopener">
                   <img src="media/debug/03_material.png" alt="03_material" loading="lazy" />
                 </a>
-                <figcaption>03_material <span>26 KB</span></figcaption>
+                <figcaption>03_material <span>37 KB</span></figcaption>
               </figure><figure>
                 <a href="media/debug/02_normal.png" target="_blank" rel="noopener">
                   <img src="media/debug/02_normal.png" alt="02_normal" loading="lazy" />
                 </a>
-                <figcaption>02_normal <span>334 KB</span></figcaption>
+                <figcaption>02_normal <span>420 KB</span></figcaption>
               </figure><figure>
                 <a href="media/debug/01_albedo.png" target="_blank" rel="noopener">
                   <img src="media/debug/01_albedo.png" alt="01_albedo" loading="lazy" />
                 </a>
-                <figcaption>01_albedo <span>153 KB</span></figcaption>
+                <figcaption>01_albedo <span>216 KB</span></figcaption>
               </figure><figure>
                 <a href="media/debug/00_final.png" target="_blank" rel="noopener">
                   <img src="media/debug/00_final.png" alt="00_final" loading="lazy" />
                 </a>
-                <figcaption>00_final <span>489 KB</span></figcaption>
+                <figcaption>00_final <span>627 KB</span></figcaption>
               </figure>
         </div>
       </section>
@@ -225,8 +225,8 @@
   <section>
     <h2>Blind critique scores</h2>
     <div class="score"><span class="label">Animation fluidity</span>
-    <span class="track ok"><i style="width:70%"></i></span>
-    <span class="val">7.0</span></div><div class="score"><span class="label">Frame consistency</span>
+    <span class="track ok"><i style="width:60%"></i></span>
+    <span class="val">6.0</span></div><div class="score"><span class="label">Frame consistency</span>
     <span class="track ok"><i style="width:75%"></i></span>
     <span class="val">7.5</span></div><div class="score"><span class="label">Scale coherence</span>
     <span class="track good"><i style="width:80%"></i></span>
@@ -235,20 +235,20 @@
     <span class="val">7.5</span></div><div class="score"><span class="label">Lighting</span>
     <span class="track ok"><i style="width:70%"></i></span>
     <span class="val">7.0</span></div><div class="score"><span class="label">Particle quality</span>
-    <span class="track poor"><i style="width:45%"></i></span>
-    <span class="val">4.5</span></div><div class="score"><span class="label">Presence</span>
+    <span class="track ok"><i style="width:70%"></i></span>
+    <span class="val">7.0</span></div><div class="score"><span class="label">Presence</span>
     <span class="track ok"><i style="width:65%"></i></span>
     <span class="val">6.5</span></div><div class="score"><span class="label">Composition &amp; readability</span>
     <span class="track ok"><i style="width:60%"></i></span>
     <span class="val">6.0</span></div><div class="score"><span class="label">Thematic coherence</span>
     <span class="track ok"><i style="width:75%"></i></span>
     <span class="val">7.5</span></div><div class="score"><span class="label">Combat impact</span>
-    <span class="track poor"><i style="width:0%"></i></span>
-    <span class="val">0.0</span></div><div class="score"><span class="label">Audio</span>
-    <span class="track poor"><i style="width:0%"></i></span>
-    <span class="val">0.0</span></div><div class="score"><span class="label">UI polish</span>
-    <span class="track poor"><i style="width:0%"></i></span>
-    <span class="val">0.0</span></div>
+    <span class="track poor"><i style="width:55%"></i></span>
+    <span class="val">5.5</span></div><div class="score"><span class="label">Audio</span>
+    <span class="track ok"><i style="width:60%"></i></span>
+    <span class="val">6.0</span></div><div class="score"><span class="label">UI polish</span>
+    <span class="track poor"><i style="width:50%"></i></span>
+    <span class="val">5.0</span></div>
   </section>
 
   <section>
@@ -259,27 +259,27 @@
         <table>
           <thead><tr><th>metric</th><th class="num">value</th><th class="target">target</th></tr></thead>
           <tbody>
-            <tr><td>dynamic range (p99-p1)</td><td class="num">0.672</td>
+            <tr><td>dynamic range (p99-p1)</td><td class="num">0.761</td>
     <td class="target">&amp;ge; 0.72</td></tr>
-            <tr><td>mean luminance</td><td class="num">0.426</td>
+            <tr><td>mean luminance</td><td class="num">0.428</td>
     <td class="target">0.18 - 0.45</td></tr>
-            <tr><td>clipped white</td><td class="num">0.000</td>
+            <tr><td>clipped white</td><td class="num">7.72e-6</td>
     <td class="target">&amp;lt; 0.005</td></tr>
             <tr><td>clipped black</td><td class="num">0.000</td>
     <td class="target">&amp;lt; 0.05</td></tr>
-            <tr><td>near/far contrast ratio</td><td class="num">1.83</td>
+            <tr><td>near/far contrast ratio</td><td class="num">0.90</td>
     <td class="target">1.8 - 3.5</td></tr>
-            <tr><td>far/near saturation</td><td class="num">0.71</td>
+            <tr><td>far/near saturation</td><td class="num">0.73</td>
     <td class="target">0.35 - 0.70</td></tr>
-            <tr><td>bloom energy</td><td class="num">0.010</td>
+            <tr><td>bloom energy</td><td class="num">0.013</td>
     <td class="target">0.015 - 0.06</td></tr>
-            <tr><td>local contrast</td><td class="num">0.031</td>
+            <tr><td>local contrast</td><td class="num">0.048</td>
     <td class="target">&amp;ge; 0.03</td></tr>
-            <tr><td>cyan accent presence</td><td class="num">2.85e-4</td>
+            <tr><td>cyan accent presence</td><td class="num">3.43e-3</td>
     <td class="target">0.002 - 0.05</td></tr>
-            <tr><td>hue entropy</td><td class="num">0.596</td>
+            <tr><td>hue entropy</td><td class="num">0.611</td>
     <td class="target">&amp;le; 0.75</td></tr>
-            <tr><td>draw calls</td><td class="num">25.000</td>
+            <tr><td>draw calls</td><td class="num">26.000</td>
     <td class="target">&amp;le; 120</td></tr>
             <tr><td>fullscreen passes</td><td class="num">16.000</td>
     <td class="target">&amp;le; 18</td></tr>
@@ -291,27 +291,27 @@
         <table>
           <thead><tr><th>metric</th><th class="num">value</th><th class="target">target</th></tr></thead>
           <tbody>
-            <tr><td>dynamic range (p99-p1)</td><td class="num">0.661</td>
+            <tr><td>dynamic range (p99-p1)</td><td class="num">0.674</td>
     <td class="target">&amp;ge; 0.72</td></tr>
-            <tr><td>mean luminance</td><td class="num">0.350</td>
+            <tr><td>mean luminance</td><td class="num">0.348</td>
     <td class="target">0.18 - 0.45</td></tr>
             <tr><td>clipped white</td><td class="num">0.000</td>
     <td class="target">&amp;lt; 0.005</td></tr>
-            <tr><td>clipped black</td><td class="num">4.44e-3</td>
+            <tr><td>clipped black</td><td class="num">1.55e-3</td>
     <td class="target">&amp;lt; 0.05</td></tr>
-            <tr><td>near/far contrast ratio</td><td class="num">1.08</td>
+            <tr><td>near/far contrast ratio</td><td class="num">0.59</td>
     <td class="target">1.8 - 3.5</td></tr>
-            <tr><td>far/near saturation</td><td class="num">0.37</td>
+            <tr><td>far/near saturation</td><td class="num">0.34</td>
     <td class="target">0.35 - 0.70</td></tr>
-            <tr><td>bloom energy</td><td class="num">1.06e-3</td>
+            <tr><td>bloom energy</td><td class="num">2.32e-3</td>
     <td class="target">0.015 - 0.06</td></tr>
-            <tr><td>local contrast</td><td class="num">0.031</td>
+            <tr><td>local contrast</td><td class="num">0.045</td>
     <td class="target">&amp;ge; 0.03</td></tr>
-            <tr><td>cyan accent presence</td><td class="num">9.26e-5</td>
+            <tr><td>cyan accent presence</td><td class="num">6.41e-3</td>
     <td class="target">0.002 - 0.05</td></tr>
-            <tr><td>hue entropy</td><td class="num">0.511</td>
+            <tr><td>hue entropy</td><td class="num">0.503</td>
     <td class="target">&amp;le; 0.75</td></tr>
-            <tr><td>draw calls</td><td class="num">23.000</td>
+            <tr><td>draw calls</td><td class="num">24.000</td>
     <td class="target">&amp;le; 120</td></tr>
             <tr><td>fullscreen passes</td><td class="num">14.000</td>
     <td class="target">&amp;le; 18</td></tr>
@@ -323,27 +323,27 @@
         <table>
           <thead><tr><th>metric</th><th class="num">value</th><th class="target">target</th></tr></thead>
           <tbody>
-            <tr><td>dynamic range (p99-p1)</td><td class="num">0.650</td>
+            <tr><td>dynamic range (p99-p1)</td><td class="num">0.657</td>
     <td class="target">&amp;ge; 0.72</td></tr>
-            <tr><td>mean luminance</td><td class="num">0.351</td>
+            <tr><td>mean luminance</td><td class="num">0.341</td>
     <td class="target">0.18 - 0.45</td></tr>
-            <tr><td>clipped white</td><td class="num">0.000</td>
+            <tr><td>clipped white</td><td class="num">1.23e-4</td>
     <td class="target">&amp;lt; 0.005</td></tr>
-            <tr><td>clipped black</td><td class="num">0.041</td>
+            <tr><td>clipped black</td><td class="num">0.000</td>
     <td class="target">&amp;lt; 0.05</td></tr>
-            <tr><td>near/far contrast ratio</td><td class="num">1.51</td>
+            <tr><td>near/far contrast ratio</td><td class="num">0.72</td>
     <td class="target">1.8 - 3.5</td></tr>
-            <tr><td>far/near saturation</td><td class="num">0.44</td>
+            <tr><td>far/near saturation</td><td class="num">0.34</td>
     <td class="target">0.35 - 0.70</td></tr>
-            <tr><td>bloom energy</td><td class="num">1.45e-3</td>
+            <tr><td>bloom energy</td><td class="num">1.58e-3</td>
     <td class="target">0.015 - 0.06</td></tr>
-            <tr><td>local contrast</td><td class="num">0.029</td>
+            <tr><td>local contrast</td><td class="num">0.043</td>
     <td class="target">&amp;ge; 0.03</td></tr>
-            <tr><td>cyan accent presence</td><td class="num">9.26e-5</td>
+            <tr><td>cyan accent presence</td><td class="num">1.54e-4</td>
     <td class="target">0.002 - 0.05</td></tr>
-            <tr><td>hue entropy</td><td class="num">0.548</td>
+            <tr><td>hue entropy</td><td class="num">0.528</td>
     <td class="target">&amp;le; 0.75</td></tr>
-            <tr><td>draw calls</td><td class="num">25.000</td>
+            <tr><td>draw calls</td><td class="num">27.000</td>
     <td class="target">&amp;le; 120</td></tr>
             <tr><td>fullscreen passes</td><td class="num">16.000</td>
     <td class="target">&amp;le; 18</td></tr>
@@ -355,6 +355,14 @@
   <section>
     <h2>Round history</h2>
     
+      <article class="round">
+        <header>
+          <h3>Round 4 — Playable game — particles, combat, enemies, audio, HUD, respawn</h3>
+          <time>2026-08-16</time>
+        </header>
+        <ul><li>GPU-instanced particle system: several thousand motes in two draw calls, with ambient dust on curl noise, ballistic debris, buoyant smoke, and velocity-oriented sparks. Emitters wired to landings, dashes, running, and every impact.</li><li>Combat: three-hit melee combo with buffered cancels, hitboxes as timed activations de-duplicated per target, and centralised resolution of hitstop, knockback, contact flash, screen shake, and sparks so they cannot drift apart.</li><li>Sentry drone enemy built from a deliberately different visual vocabulary - angular chassis, amber optic - so it is distinguishable from the player at a glance. Every state change telegraphs before it matters.</li><li>Ribbon trails generated from the hand's real path rather than a canned crescent, so arcs match whatever the animation is doing.</li><li>Fully procedural audio: synthesised SFX from a three-ingredient house palette, a generative wind bed, and layered adaptive music where combat brings in pad and pulse layers rather than swapping tracks.</li><li>Holographic HUD with a spring-driven integrity gauge and a slow ghost bar showing damage just taken.</li><li>Death and respawn with ground-verified checkpoints and a full-screen wipe.</li><li>Terrain now tiles instead of stretching, which restores surface detail across long platforms.</li></ul>
+        <p class="gap"><strong>Biggest remaining gap:</strong> Content breadth and character animation detail. Blind review now confirms hitstop, hit flash, knockback, foot planting, and jump arcs all read correctly, and rates combat impact 4/10 and animation fluidity 3/10 - the weakness is no longer that effects are missing but that the animation set is thin. There is one biome, one enemy type, no boss, no ranged attack, no parry, no progression, and no menus. Next: a second enemy, the first boss, and richer transition animations (turnarounds, landing rolls, attack recovery blends).</p>
+      </article>
       <article class="round">
         <header>
           <h3>Round 3 — Atmosphere — god rays that are actually in frame</h3>

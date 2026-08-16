@@ -1,76 +1,77 @@
 {
   "scenario": "ares_vista",
   "image": {
-    "meanLuminance": 0.3427662041334031,
-    "luminanceP1": 0.009757647290825844,
-    "luminanceP99": 0.6738870739936829,
-    "dynamicRange": 0.664129426702857,
+    "meanLuminance": 0.3406629991709233,
+    "luminanceP1": 0.010004705749452114,
+    "luminanceP99": 0.6668172478675842,
+    "dynamicRange": 0.6568125421181321,
     "clippedBlack": 0,
-    "clippedWhite": 0,
-    "meanSaturation": 0.516441311487753,
-    "highlightSaturation": 0.36285506243772114,
-    "localContrast": 0.03907932375593146,
-    "edgeDensity": 0.021662087054268406,
-    "bloomEnergy": 0.0016820987654320987,
+    "clippedWhite": 0.0001234567901234568,
+    "meanSaturation": 0.5160642347749637,
+    "highlightSaturation": 0.3524561767476427,
+    "localContrast": 0.042591821345933235,
+    "edgeDensity": 0.024175669768313247,
+    "bloomEnergy": 0.0015817901234567902,
     "bandContrast": [
-      0.05139802238490887,
-      0.035999518054668805,
-      0.02542551278902632
+      0.04645316373452855,
+      0.04641688359793772,
+      0.033555041296743145
     ],
     "bandSaturation": [
-      0.30119318452048865,
-      0.37001307663480265,
-      0.8762880653334877
+      0.29652620371336363,
+      0.36970208147066586,
+      0.8799794593894327
     ],
-    "cyanPresence": 0.006527777777777778,
-    "hueEntropy": 0.5326579218212503,
+    "cyanPresence": 0.00015432098765432098,
+    "hueEntropy": 0.5283300428060729,
     "dominantHues": [
       {
         "hue": 25,
-        "share": 0.34224281832050807
+        "share": 0.3435492044841069
       },
       {
         "hue": 15,
-        "share": 0.29774258295157696
+        "share": 0.29839893751330543
       },
       {
         "hue": 5,
-        "share": 0.121820161089353
+        "share": 0.12152099274173034
       },
       {
         "hue": 355,
-        "share": 0.03617832546595405
+        "share": 0.03587453225321517
       },
       {
         "hue": 275,
-        "share": 0.024609471443486373
+        "share": 0.02587138384583612
       }
     ],
     "width": 480,
     "height": 270
   },
   "stats": {
-    "drawCalls": 26,
-    "triangles": 1245.3333333333333,
+    "drawCalls": 27,
+    "triangles": 1318.6666666666665,
     "textureBinds": 31,
     "fullscreenPasses": 16,
     "lights": 3,
     "lightsCulled": 0,
     "platforms": 10,
     "props": 13,
-    "particles": 3200,
+    "particles": 3214,
     "enemies": 2,
-    "playerHealth": 84,
+    "playerHealth": 44,
+    "respawns": 1,
     "layers": 7,
-    "renderWidth": 512,
-    "renderHeight": 288,
-    "playerX": 72.58497222222115,
+    "renderWidth": 800,
+    "renderHeight": 450,
+    "playerX": 72.33830555555433,
     "playerY": -8.200999999999999,
     "playerVX": 0,
     "playerVY": 0,
     "grounded": 1,
-    "simMs": 1.199999999254942,
-    "renderMs": 0.40000000037252903,
+    "simMs": 0.599999999627471,
+    "renderMs": 0.30000000074505806,
     "frameMs": 16.66666666666572
   }
 }

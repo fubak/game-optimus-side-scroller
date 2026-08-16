@@ -108,5 +108,35 @@
       "audio": 0,
       "uiPolish": 0
     }
+  },
+  {
+    "round": 4,
+    "date": "2026-08-16",
+    "title": "Playable game \u2014 particles, combat, enemies, audio, HUD, respawn",
+    "notes": [
+      "GPU-instanced particle system: several thousand motes in two draw calls, with ambient dust on curl noise, ballistic debris, buoyant smoke, and velocity-oriented sparks. Emitters wired to landings, dashes, running, and every impact.",
+      "Combat: three-hit melee combo with buffered cancels, hitboxes as timed activations de-duplicated per target, and centralised resolution of hitstop, knockback, contact flash, screen shake, and sparks so they cannot drift apart.",
+      "Sentry drone enemy built from a deliberately different visual vocabulary - angular chassis, amber optic - so it is distinguishable from the player at a glance. Every state change telegraphs before it matters.",
+      "Ribbon trails generated from the hand's real path rather than a canned crescent, so arcs match whatever the animation is doing.",
+      "Fully procedural audio: synthesised SFX from a three-ingredient house palette, a generative wind bed, and layered adaptive music where combat brings in pad and pulse layers rather than swapping tracks.",
+      "Holographic HUD with a spring-driven integrity gauge and a slow ghost bar showing damage just taken.",
+      "Death and respawn with ground-verified checkpoints and a full-screen wipe.",
+      "Terrain now tiles instead of stretching, which restores surface detail across long platforms."
+    ],
+    "biggestGap": "Content breadth and character animation detail. Blind review now confirms hitstop, hit flash, knockback, foot planting, and jump arcs all read correctly, and rates combat impact 4/10 and animation fluidity 3/10 - the weakness is no longer that effects are missing but that the animation set is thin. There is one biome, one enemy type, no boss, no ranged attack, no parry, no progression, and no menus. Next: a second enemy, the first boss, and richer transition animations (turnarounds, landing rolls, attack recovery blends).",
+    "scores": {
+      "animationFluidity": 6.0,
+      "frameConsistency": 7.5,
+      "scaleCoherence": 8.0,
+      "atmosphere": 7.5,
+      "lighting": 7.0,
+      "particles": 7.0,
+      "presence": 6.5,
+      "composition": 6.0,
+      "thematicCoherence": 7.5,
+      "combatImpact": 5.5,
+      "audio": 6.0,
+      "uiPolish": 5.0
+    }
   }
 ]
