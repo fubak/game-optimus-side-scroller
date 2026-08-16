@@ -115,8 +115,19 @@ export class PlatformerBot implements Input {
     const stepAhead = standable(leadTx + 1, footTy - 1) || standable(leadTx + 1, footTy - 2);
     const tallStep = standable(leadTx + 1, footTy - 2);
 
+    // Enemies: jump when one is close ahead. Landing on it is a stomp; missing is still a dodge.
+    const enemyAhead = this.world.enemies.some((enemy) => {
+      if (enemy.state !== 'active') return false;
+      const gap = enemy.body.x + enemy.body.width / 2 - (body.x + body.width / 2);
+      const sameLevel = Math.abs(enemy.body.y + enemy.body.height - (body.y + PLAYER_HEIGHT)) < 30;
+      return sameLevel && gap > 0 && gap < 34;
+    });
+
     if (player.isOnGround && this.jumpCooldown === 0 && this.backUpFrames === 0) {
-      if (pitAt1 || spikesAhead || stepAhead) {
+      if (enemyAhead) {
+        this.jumpHoldFrames = 14;
+        this.jumpCooldown = 10;
+      } else if (pitAt1 || spikesAhead || stepAhead) {
         // Hold longer for the harder obstacles; the player only gains height while jump is held.
         this.jumpHoldFrames = pitWidth >= 2 || tallStep || spikesAhead ? 20 : 12;
         this.jumpCooldown = 8;

@@ -286,6 +286,127 @@ function drawThrustFlame(ctx: CanvasRenderingContext2D, animTime: number, energy
   fill(ctx, -1, 0, 2, length * 1.2, palette.spark);
 }
 
+/**
+ * Enemies.
+ *
+ * Each silhouette is deliberately distinct so intent reads at a glance: the walker is a wide,
+ * low tracked chassis; the drone is a hovering eye with rotor blur; the turret is a squat bunker
+ * with a barrel; the crusher is a heavy press on a piston. Colour is secondary to shape, which
+ * keeps them readable for colour-blind players and at small sizes.
+ */
+export interface EnemyRenderOptions {
+  readonly x: number;
+  readonly y: number;
+  readonly width: number;
+  readonly height: number;
+  readonly facing: 1 | -1;
+  readonly animTime: number;
+  /** 0..1 death animation progress (1 = just died). */
+  readonly dying?: number;
+  /** Crusher/turret telegraph flash. */
+  readonly telegraph?: boolean;
+}
+
+export function drawWalker(ctx: CanvasRenderingContext2D, options: EnemyRenderOptions): void {
+  const { x, y, width, height, facing, animTime } = options;
+  ctx.save();
+  applyDying(ctx, options);
+  const wobble = Math.sin(animTime * 10) * 0.5;
+  // Tracks.
+  fill(ctx, x, y + height - 4, width, 4, palette.joint);
+  for (let i = 0; i < 4; i += 1) {
+    const offset = (animTime * 40 * facing + i * 4) % width;
+    fill(ctx, x + ((offset + width) % width), y + height - 3, 2, 2, palette.plateLight);
+  }
+  // Chassis.
+  fill(ctx, x + 1, y + 3 + wobble, width - 2, height - 6, palette.rust);
+  fill(ctx, x + 1, y + 3 + wobble, width - 2, 1, palette.uiWarn);
+  fill(ctx, x + 2, y + 5 + wobble, width - 4, 2, palette.plateDark);
+  // Sensor eye on the facing side.
+  const eyeX = facing === 1 ? x + width - 5 : x + 2;
+  fill(ctx, eyeX, y + 5 + wobble, 3, 2, palette.hazard);
+  ctx.restore();
+}
+
+export function drawDrone(ctx: CanvasRenderingContext2D, options: EnemyRenderOptions): void {
+  const { x, y, width, height, facing, animTime } = options;
+  ctx.save();
+  applyDying(ctx, options);
+  const rotor = Math.sin(animTime * 30) * 2;
+  // Rotor blur above the body.
+  fill(ctx, x + 1 + rotor, y, width - 2, 1, palette.plateLight);
+  fill(ctx, x + width / 2 - 1, y + 1, 2, 2, palette.joint);
+  // Shell.
+  fill(ctx, x + 1, y + 3, width - 2, height - 4, palette.plateFace);
+  fill(ctx, x + 1, y + 3, width - 2, 1, palette.plateLight);
+  fill(ctx, x + 2, y + height - 2, width - 4, 1, palette.plateShadow);
+  // Single tracking eye.
+  const eyeX = facing === 1 ? x + width - 6 : x + 3;
+  fill(ctx, eyeX, y + 5, 3, 3, palette.hazardDark);
+  fill(ctx, eyeX + (facing === 1 ? 1 : 0), y + 6, 2, 1, palette.hazard);
+  ctx.restore();
+}
+
+export function drawTurret(ctx: CanvasRenderingContext2D, options: EnemyRenderOptions): void {
+  const { x, y, width, height, facing, animTime, telegraph } = options;
+  ctx.save();
+  applyDying(ctx, options);
+  // Base.
+  fill(ctx, x, y + height - 5, width, 5, palette.plateDark);
+  fill(ctx, x + 1, y + height - 5, width - 2, 1, palette.plateFace);
+  // Dome.
+  fill(ctx, x + 2, y + 3, width - 4, height - 7, palette.grate);
+  fill(ctx, x + 3, y + 3, width - 6, 1, palette.plateLight);
+  // Barrel pointing at the player.
+  const barrelX = facing === 1 ? x + width - 3 : x - 3;
+  fill(ctx, barrelX, y + 6, 6, 3, palette.plateDark);
+  // Charge light.
+  const charge = telegraph === true ? 1 : 0.35 + 0.35 * Math.sin(animTime * 6);
+  fill(ctx, x + width / 2 - 1, y + 5, 2, 2, charge > 0.8 ? palette.hazard : palette.hazardDark);
+  ctx.restore();
+}
+
+export function drawCrusher(ctx: CanvasRenderingContext2D, options: EnemyRenderOptions): void {
+  const { x, y, width, height, animTime, telegraph } = options;
+  ctx.save();
+  const shake = telegraph === true ? Math.sin(animTime * 60) * 1 : 0;
+  // Piston up to the ceiling.
+  fill(ctx, x + width / 2 - 3, -1, 6, y + 2, palette.plateDark);
+  fill(ctx, x + width / 2 - 1, -1, 2, y + 2, palette.plateFace);
+  // Press block.
+  fill(ctx, x + shake, y, width, height, palette.plateFace);
+  fill(ctx, x + shake, y, width, 2, palette.plateLight);
+  fill(ctx, x + shake, y + height - 4, width, 4, palette.joint);
+  // Warning stripes on the business end.
+  for (let i = 0; i < width; i += 6) {
+    fill(ctx, x + i + shake, y + height - 4, 3, 4, telegraph === true ? palette.hazard : palette.uiWarn);
+  }
+  ctx.restore();
+}
+
+export function drawProjectile(
+  ctx: CanvasRenderingContext2D,
+  x: number,
+  y: number,
+  size: number,
+  animTime: number,
+): void {
+  const pulse = 0.6 + 0.4 * Math.sin(animTime * 30);
+  fill(ctx, x - size / 2, y - size / 2, size, size, palette.hazardDark);
+  fill(ctx, x - size / 2 + 1, y - size / 2 + 1, size - 2, size - 2, palette.hazard);
+  if (pulse > 0.8) {
+    fill(ctx, x - 1, y - 1, 2, 2, palette.spark);
+  }
+}
+
+/** Dying enemies fade and squash as they fall away. */
+function applyDying(ctx: CanvasRenderingContext2D, options: EnemyRenderOptions): void {
+  const dying = options.dying ?? 0;
+  if (dying <= 0) return;
+  ctx.globalAlpha = Math.max(0, 1 - dying);
+  ctx.translate(0, dying * 4);
+}
+
 /** Ghost trail drawn behind a dashing Optimus. */
 export function drawDashGhost(
   ctx: CanvasRenderingContext2D,

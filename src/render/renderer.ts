@@ -1,11 +1,21 @@
 import { INTERNAL_HEIGHT, INTERNAL_WIDTH } from '../core/canvas';
 import { PLAYER_HEIGHT, PLAYER_WIDTH, RUN_MAX_SPEED, INVULNERABLE_BLINK_HZ } from '../game/constants';
+import { ENEMY_DEATH_TIME, PROJECTILE_SIZE } from '../game/enemies';
+import type { Enemy } from '../game/enemies';
 import type { Pickup } from '../game/pickups';
 import type { World } from '../game/world';
 import { palette } from './palette';
 import { createParallaxLayers, drawParallax } from './parallax';
 import type { ParallaxLayer } from './parallax';
-import { drawOptimus, drawDashGhost } from './sprites';
+import {
+  drawCrusher,
+  drawDashGhost,
+  drawDrone,
+  drawOptimus,
+  drawProjectile,
+  drawTurret,
+  drawWalker,
+} from './sprites';
 import { drawTiles } from './tiles';
 
 /**
@@ -95,6 +105,22 @@ export class WorldRenderer {
       drawPickup(ctx, pickup, world.pickupOffset(pickup), cameraX, cameraY);
     }
 
+    for (const enemy of world.enemies) {
+      if (enemy.state === 'dead') continue;
+      drawEnemy(ctx, enemy, cameraX, cameraY, world.isCrusherTelegraphing(enemy));
+    }
+
+    for (const projectile of world.projectiles.all) {
+      if (!projectile.active) continue;
+      drawProjectile(
+        ctx,
+        Math.round(projectile.x - cameraX),
+        Math.round(projectile.y - cameraY),
+        PROJECTILE_SIZE,
+        world.elapsedSec,
+      );
+    }
+
     for (const ghost of this.ghosts) {
       drawDashGhost(
         ctx,
@@ -158,6 +184,43 @@ export class WorldRenderer {
       PLAYER_WIDTH - 1,
       PLAYER_HEIGHT - 1,
     );
+  }
+}
+
+function drawEnemy(
+  ctx: CanvasRenderingContext2D,
+  enemy: Enemy,
+  cameraX: number,
+  cameraY: number,
+  telegraphing: boolean,
+): void {
+  const options = {
+    x: Math.round(enemy.body.x - cameraX),
+    y: Math.round(enemy.body.y - cameraY),
+    width: enemy.body.width,
+    height: enemy.body.height,
+    facing: enemy.direction,
+    animTime: enemy.animTime,
+    dying: enemy.state === 'dying' ? 1 - enemy.deathTimer / ENEMY_DEATH_TIME : 0,
+    telegraph: telegraphing || enemy.lethal,
+  };
+  switch (enemy.kind) {
+    case 'walker':
+      drawWalker(ctx, options);
+      break;
+    case 'drone':
+      drawDrone(ctx, options);
+      break;
+    case 'turret':
+      drawTurret(ctx, options);
+      break;
+    case 'crusher':
+      drawCrusher(ctx, options);
+      break;
+    default: {
+      const exhaustive: never = enemy.kind;
+      throw new Error(`Unhandled enemy kind in renderer: ${String(exhaustive)}`);
+    }
   }
 }
 

@@ -5,12 +5,27 @@ import type { Rng } from '../core/rng';
 import { ParticleSystem } from '../render/particles';
 import { Camera } from './camera';
 import {
+  ProjectilePool,
+  createEnemy,
+  damageEnemy,
+  isCrusherWindingUp,
+  isEnemyKind,
+  isStompContact,
+  overlapsEnemy,
+  updateEnemy,
+} from './enemies';
+import type { Enemy, EnemyEvent, EnemyKind } from './enemies';
+import {
   LANDING_SHAKE_SPEED,
   PLAYER_HEIGHT,
+  SCORE_ENEMY,
   SCORE_TIME_BONUS_PER_SEC,
   SHAKE_DEATH,
   SHAKE_HURT,
   SHAKE_LANDING,
+  SHAKE_STOMP,
+  STOMP_BOUNCE_HELD_BONUS,
+  STOMP_BOUNCE_SPEED,
 } from './constants';
 import type { Level } from './levelParser';
 import { spawnPositionFor } from './levelParser';
@@ -34,6 +49,15 @@ export type DeathCause = 'pit' | 'hazard' | 'damage' | 'crushed';
 
 export type WorldEvent =
   | { readonly type: 'player'; readonly event: PlayerEvent }
+  | {
+      readonly type: 'enemyKilled';
+      readonly kind: EnemyKind;
+      readonly x: number;
+      readonly y: number;
+      readonly score: number;
+    }
+  | { readonly type: 'enemyShot'; readonly x: number; readonly y: number }
+  | { readonly type: 'crusherSlam'; readonly x: number; readonly y: number }
   | {
       readonly type: 'pickup';
       readonly kind: PickupKind;
@@ -76,6 +100,8 @@ export class World {
   readonly particles = new ParticleSystem(512);
   readonly rng: Rng;
   readonly pickups: Pickup[] = [];
+  readonly enemies: Enemy[] = [];
+  readonly projectiles = new ProjectilePool(48);
 
   private state: WorldState = 'playing';
   private elapsed = 0;
@@ -89,6 +115,12 @@ export class World {
   private readonly events: WorldEvent[] = [];
   /** Cause attributed to the next fatal hit — set by whatever dealt the damage. */
   private pendingDeathCause: DeathCause = 'damage';
+  /**
+   * Frames of hit-stop left. A couple of frozen frames on a stomp or a hit make impacts feel like
+   * they connect; particles and the camera keep moving so it reads as impact, not as a stall.
+   */
+  private hitStopTimer = 0;
+  private readonly enemyEvents: EnemyEvent[] = [];
 
   constructor(level: Level, options: WorldOptions = {}) {
     this.level = level;
@@ -102,10 +134,17 @@ export class World {
     this.camera.snapTo(this.player.body, this.map);
 
     let pickupIndex = 0;
+    let enemyIndex = 0;
     for (const spawn of level.entities) {
-      if (!isPickupKind(spawn.kind)) continue;
-      this.pickups.push(createPickup(spawn, spawn.kind, pickupIndex));
-      pickupIndex += 1;
+      if (isPickupKind(spawn.kind)) {
+        this.pickups.push(createPickup(spawn, spawn.kind, pickupIndex));
+        pickupIndex += 1;
+        continue;
+      }
+      if (isEnemyKind(spawn.kind)) {
+        this.enemies.push(createEnemy(spawn, spawn.kind, enemyIndex));
+        enemyIndex += 1;
+      }
     }
   }
 
@@ -162,11 +201,23 @@ export class World {
       this.elapsed += dtSec;
     }
 
+    if (this.hitStopTimer > 0) {
+      // Frozen: keep the presentation alive (particles, shake) but do not advance the simulation.
+      this.hitStopTimer -= dtSec;
+      input.endFrame();
+      this.particles.update(dtSec);
+      this.camera.update(dtSec, this.player.body, this.player.body.vx, this.map, this.rng);
+      return this.events;
+    }
+
     // Order matters: move, then resolve what the move touched (which may add more player events),
     // and only then forward the whole batch so visuals and death handling see everything at once.
     this.player.update(dtSec, input, this.map, this.playerEvents);
+    this.updateEnemies(dtSec);
     if (this.state === 'playing') {
       this.checkTileTriggers();
+      this.resolveEnemyContacts(input);
+      this.checkProjectileHits();
       this.checkPickups();
       this.checkPitFall();
     }
@@ -192,6 +243,7 @@ export class World {
       lives: this.livesRemaining,
       deaths: this.deathCount,
       collected: this.collectedCount,
+      enemiesAlive: this.enemies.filter((enemy) => enemy.state === 'active').length,
       player: {
         x: Number(this.player.body.x.toFixed(3)),
         y: Number(this.player.body.y.toFixed(3)),
@@ -262,6 +314,109 @@ export class World {
         }
       }
     }
+  }
+
+  private updateEnemies(dtSec: number): void {
+    this.enemyEvents.length = 0;
+    for (const enemy of this.enemies) {
+      if (enemy.state === 'dead') continue;
+      updateEnemy(enemy, dtSec, {
+        map: this.map,
+        playerBody: this.player.body,
+        playerAlive: this.player.isAlive && this.state === 'playing',
+        rng: this.rng,
+        projectiles: this.projectiles,
+        events: this.enemyEvents,
+      });
+    }
+    this.projectiles.update(dtSec, this.map);
+    this.forwardEnemyEvents();
+  }
+
+  private forwardEnemyEvents(): void {
+    for (const event of this.enemyEvents) {
+      switch (event.type) {
+        case 'enemyKilled':
+          this.scoreValue += SCORE_ENEMY;
+          this.particles.burst('debris', event.x, event.y, 14, this.rng, { speed: 130, life: 0.5 });
+          this.particles.burst('spark', event.x, event.y, 8, this.rng, { speed: 90, life: 0.35 });
+          this.camera.addShake(SHAKE_STOMP);
+          this.events.push({
+            type: 'enemyKilled',
+            kind: event.kind,
+            x: event.x,
+            y: event.y,
+            score: SCORE_ENEMY,
+          });
+          break;
+        case 'enemyShot':
+          this.events.push({ type: 'enemyShot', x: event.x, y: event.y });
+          break;
+        case 'crusherSlam':
+          this.events.push({ type: 'crusherSlam', x: event.x, y: event.y });
+          break;
+        case 'crusherImpact':
+          this.camera.addShake(SHAKE_STOMP * 1.4);
+          this.particles.burst('dust', event.x, event.y, 12, this.rng, { speed: 120, life: 0.5 });
+          break;
+        default: {
+          const exhaustive: never = event.type;
+          throw new Error(`Unhandled enemy event: ${String(exhaustive)}`);
+        }
+      }
+    }
+    this.enemyEvents.length = 0;
+  }
+
+  /**
+   * Stomp or get hurt.
+   *
+   * A stomp needs downward motion and feet near the enemy's crown; every other contact damages the
+   * player. Crushers are never stompable and are instantly lethal while slamming.
+   */
+  private resolveEnemyContacts(input: Input): void {
+    if (!this.player.isAlive) return;
+    for (const enemy of this.enemies) {
+      if (!overlapsEnemy(this.player.body, enemy)) continue;
+
+      if (enemy.kind === 'crusher' && enemy.lethal) {
+        this.pendingDeathCause = 'crushed';
+        this.player.kill(this.playerEvents);
+        return;
+      }
+
+      if (isStompContact(this.player.body, this.player.body.vy, enemy)) {
+        if (damageEnemy(enemy, this.enemyEvents)) {
+          const bounce = STOMP_BOUNCE_SPEED + (input.isDown('jump') ? STOMP_BOUNCE_HELD_BONUS : 0);
+          this.player.bounce(bounce);
+          this.hitStopTimer = 0.05;
+          this.forwardEnemyEvents();
+          continue;
+        }
+      }
+
+      const enemyCenterX = enemy.body.x + enemy.body.width / 2;
+      if (this.damagePlayer(1, enemyCenterX, 'damage')) {
+        this.hitStopTimer = 0.06;
+        return;
+      }
+    }
+  }
+
+  private checkProjectileHits(): void {
+    if (!this.player.isAlive) return;
+    const hit = this.projectiles.findHit(this.player.body);
+    if (hit === null) return;
+    hit.active = false;
+    this.particles.burst('spark', hit.x, hit.y, 8, this.rng, { speed: 100, life: 0.3 });
+    if (this.damagePlayer(1, hit.x, 'damage')) {
+      this.hitStopTimer = 0.06;
+    }
+  }
+
+  /** Is this crusher telegraphing its slam? Used by the renderer to shake it. */
+  isCrusherTelegraphing(enemy: Enemy): boolean {
+    return isCrusherWindingUp(enemy);
   }
 
   private checkTileTriggers(): void {
@@ -335,6 +490,8 @@ export class World {
     this.player.respawn(this.checkpointX, this.checkpointY);
     this.camera.snapTo(this.player.body, this.map);
     this.particles.clear();
+    this.projectiles.clear();
+    this.hitStopTimer = 0;
     this.events.push({ type: 'respawn' });
   }
 

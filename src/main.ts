@@ -88,7 +88,12 @@ function handleEvents(events: readonly WorldEvent[]): void {
       case 'failed':
         hud.push('OUT OF CHASSIS', palette.hazard, 6);
         break;
+      case 'enemyKilled':
+        hud.push(`SCRAPPED +${String(event.score)}`, palette.uiWarn, 1.1);
+        break;
       case 'player':
+      case 'enemyShot':
+      case 'crusherSlam':
         break;
       default: {
         const exhaustive: never = event;
