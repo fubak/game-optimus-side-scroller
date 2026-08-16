@@ -24,10 +24,12 @@ export default tseslint.config(
       },
     },
     rules: {
-      // Newly added variants of a union/enum must break the build until they are handled.
+      // Newly added variants of a union/enum must break the build until they are handled. The
+      // `default: { const exhaustive: never = value; ... }` guard stays allowed on purpose: it also
+      // catches bad values that sneak in at runtime (e.g. a corrupt save or hand-written level).
       '@typescript-eslint/switch-exhaustiveness-check': [
         'error',
-        { allowDefaultCaseForExhaustiveSwitch: false, requireDefaultForNonUnion: true },
+        { allowDefaultCaseForExhaustiveSwitch: true, requireDefaultForNonUnion: true },
       ],
       '@typescript-eslint/consistent-type-imports': ['error', { fixStyle: 'separate-type-imports' }],
       '@typescript-eslint/no-unnecessary-condition': 'error',
