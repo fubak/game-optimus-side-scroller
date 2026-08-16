@@ -62,8 +62,12 @@ export interface HarnessApi {
   setDebugView(view: number): void;
   /** Frame the character at a given visible world height, in metres. */
   setCamera(x: number, y: number, viewHeightMetres: number): void;
-  /** Freeze the placeholder locomotion at a fixed velocity. */
-  setPlayerVelocity(velocity: number | null): void;
+  /** Move the player to a world position, in metres. */
+  teleport(x: number, y: number): void;
+  /** Release a camera override and resume normal following. */
+  clearCamera(): void;
+  /** Drive the player toward a target X, or pass null to stop. */
+  autopilot(targetX: number | null, direction?: number, sprint?: boolean): void;
   playTape(tape: TapeEntry[]): void;
   clearTape(): void;
   /** Advance exactly one frame of `dtSeconds` and render it. */
@@ -132,8 +136,16 @@ export function installHarness(context: HarnessContext): void {
       game.setCameraOverride(x, y, viewHeightMetres);
     },
 
-    setPlayerVelocity(velocity: number | null): void {
-      game.setVelocityOverride(velocity);
+    teleport(x: number, y: number): void {
+      game.teleportPlayer(x, y);
+    },
+
+    clearCamera(): void {
+      game.clearCameraOverride();
+    },
+
+    autopilot(targetX: number | null, direction = 1, sprint = false): void {
+      game.setAutopilot(targetX === null ? null : { targetX, direction, sprint });
     },
 
     playTape(entries: TapeEntry[]): void {

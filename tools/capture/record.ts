@@ -96,13 +96,32 @@ async function runScenario(page: Page, scenario: Scenario, options: Options): Pr
         setDebugView(v: number): void;
         playTape(t: unknown[]): void;
         clearTape(): void;
+        teleport(x: number, y: number): void;
+        setCamera(x: number, y: number, h: number): void;
+        clearCamera(): void;
+        autopilot(targetX: number | null, direction?: number, sprint?: boolean): void;
       };
       harness.seed(config!.seed);
       harness.setQuality(config!.quality);
       harness.setResolution(config!.width, config!.height);
       harness.setDebugView(config!.debugView);
+      if (config!.spawn) harness.teleport(config!.spawn.x, config!.spawn.y);
+      if (config!.camera) {
+        harness.setCamera(config!.camera[0], config!.camera[1], config!.camera[2]);
+      } else {
+        harness.clearCamera();
+      }
+      if (config!.autopilotTargetX !== null) {
+        harness.autopilot(
+          config!.autopilotTargetX,
+          config!.autopilotDirection,
+          config!.autopilotSprint,
+        );
+      } else {
+        harness.autopilot(null);
+      }
       if (config!.tape.length > 0) harness.playTape(config!.tape);
-      else harness.clearTape();
+      else if (config!.autopilotTargetX === null) harness.clearTape();
     },
     [
       {
@@ -112,6 +131,11 @@ async function runScenario(page: Page, scenario: Scenario, options: Options): Pr
         height: options.height,
         debugView: scenario.debugView ?? 0,
         tape: scenario.tape ?? [],
+        spawn: scenario.spawn ?? null,
+        camera: scenario.camera ?? null,
+        autopilotTargetX: scenario.autopilotTargetX ?? null,
+        autopilotDirection: scenario.autopilotDirection ?? 1,
+        autopilotSprint: scenario.autopilotSprint ?? false,
       },
     ],
   );

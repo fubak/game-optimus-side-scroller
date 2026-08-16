@@ -19,8 +19,10 @@ const ROOT = resolve(import.meta.dirname, '../..');
 
 interface Shot {
   name: string;
-  /** Fixed locomotion velocity in m/s; null follows the scripted patrol. */
-  velocity: number | null;
+  /** Held horizontal input in [-1, 1]. */
+  moveX: number;
+  /** Whether to hold the sprint button. */
+  sprint: boolean;
   /** Frames to settle before capturing, so a cycle reaches a stable phase. */
   settle: number;
   viewHeight: number;
@@ -28,15 +30,15 @@ interface Shot {
 }
 
 const SHOTS: Shot[] = [
-  { name: 'idle', velocity: 0, settle: 45, viewHeight: 2.6 },
-  { name: 'walk', velocity: 2.4, settle: 55, viewHeight: 2.6 },
-  { name: 'run', velocity: 7.0, settle: 55, viewHeight: 2.6 },
-  { name: 'idle_wide', velocity: 0, settle: 45, viewHeight: 5.0 },
-  { name: 'run_wide', velocity: 7.0, settle: 55, viewHeight: 5.0 },
+  { name: 'idle', moveX: 0, sprint: false, settle: 45, viewHeight: 2.6 },
+  { name: 'walk', moveX: 0.55, sprint: false, settle: 70, viewHeight: 2.6 },
+  { name: 'run', moveX: 1, sprint: true, settle: 70, viewHeight: 2.6 },
+  { name: 'idle_wide', moveX: 0, sprint: false, settle: 45, viewHeight: 5.0 },
+  { name: 'run_wide', moveX: 1, sprint: true, settle: 70, viewHeight: 5.0 },
   // The albedo view isolates the artwork from the lighting, which is the only
   // way to tell a modelling problem from a lighting problem.
-  { name: 'idle_albedo', velocity: 0, settle: 45, viewHeight: 2.6, debugView: 1 },
-  { name: 'idle_normal', velocity: 0, settle: 45, viewHeight: 2.6, debugView: 2 },
+  { name: 'idle_albedo', moveX: 0, sprint: false, settle: 45, viewHeight: 2.6, debugView: 1 },
+  { name: 'idle_normal', moveX: 0, sprint: false, settle: 45, viewHeight: 2.6, debugView: 2 },
 ];
 
 async function main(): Promise<void> {
@@ -75,13 +77,19 @@ async function main(): Promise<void> {
     for (const shot of SHOTS) {
       const png: string = await page.evaluate(async (config) => {
         const harness = (window as unknown as Record<string, unknown>).__H as {
-          setPlayerVelocity(v: number | null): void;
+          playTape(t: unknown[]): void;
+          teleport(x: number, y: number): void;
           setCamera(x: number, y: number, viewHeight: number): void;
           setDebugView(v: number): void;
           step(dt?: number): void;
           capturePNG(): Promise<string>;
         };
-        harness.setPlayerVelocity(config!.velocity);
+        // Action.Dash is 5; holding it makes the controller sprint.
+        harness.playTape([
+          { time: 0, moveX: config!.moveX, held: config!.sprint ? [5] : [] },
+        ]);
+        // Reset to flat open ground so a shot cannot be spoiled by terrain.
+        harness.teleport(-20, 0);
         // Frame on the character's centre of mass rather than its feet.
         harness.setCamera(0, -config!.viewHeight * 0.34, config!.viewHeight);
         harness.setDebugView(config!.debugView ?? 0);
@@ -100,10 +108,10 @@ async function main(): Promise<void> {
     await page.evaluate(() => {
       const harness = (window as unknown as Record<string, unknown>).__H as {
         setDebugView(v: number): void;
-        setPlayerVelocity(v: number | null): void;
+        clearTape(): void;
       };
       harness.setDebugView(0);
-      harness.setPlayerVelocity(null);
+      harness.clearTape();
     });
   } finally {
     await close();

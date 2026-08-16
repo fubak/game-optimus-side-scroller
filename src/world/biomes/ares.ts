@@ -92,6 +92,19 @@ export function buildAresAtlasSources(): AtlasSource[] {
       widthMetres: 16,
     },
     {
+      // Ledges are the surfaces the player actually lands on, so they get a
+      // pronounced lit top edge. Atmospheric lighting very easily swallows the
+      // one piece of information a platformer player most needs.
+      name: 'ares.ledge',
+      surface: makeGroundSlab(256, 48, 0x9102),
+      widthMetres: 4,
+    },
+    {
+      name: 'ares.pillar',
+      surface: makeGroundSlab(64, 320, 0x9103),
+      widthMetres: 1,
+    },
+    {
       name: 'ares.foreground',
       surface: makeForegroundRock(768, 256, 0x9201),
       widthMetres: 34,

@@ -122,10 +122,20 @@ export function sweepAABB(
   const exit = Math.min(exitX, exitY);
 
   if (entry > exit || entry > 1 || exit < 0) return false;
-  // A negative entry time means contact began behind the start of the motion.
-  if (entry < 0) return false;
 
-  hit.time = entry;
+  // A meaningfully negative entry time means contact began behind the start of
+  // the motion, so this sweep did not cause it.
+  //
+  // The tolerance matters more than it looks. A body resting exactly on a
+  // surface computes its entry time from an expression like
+  // `3 - 3.83 + 0.83`, which in floating point is -1.1e-16 rather than 0.
+  // Rejecting that as "behind the motion" made a character standing precisely
+  // on the floor fail to collide with it, sink in by a fraction of a
+  // millimetre, and then fall through the world for ever, because the
+  // interpenetration guard above suppressed every subsequent sweep.
+  if (entry < -1e-6) return false;
+
+  hit.time = entry < 0 ? 0 : entry;
   // The axis with the later entry time is the one actually responsible for the
   // contact, and therefore determines the normal.
   if (entryX > entryY) {
