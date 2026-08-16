@@ -1,0 +1,31 @@
+[
+  {
+    "round": 0,
+    "date": "2026-08-16",
+    "title": "Foundation — engine, renderer, capture harness",
+    "notes": [
+      "Hand-written WebGL2 deferred renderer: 4-attachment MRT G-buffer, normal-mapped lighting with raymarched soft shadows, god rays, height fog, dual-Kawase bloom, ACES tonemap, LUT grade, grain.",
+      "Fixed 120 Hz simulation with interpolated variable-rate rendering; hitstop and time-dilation stacks; split sim/fx RNG streams.",
+      "Analytically-solved damped springs and cubic Hermite curves, both verified frame-rate independent from 30 to 240 Hz.",
+      "Deterministic capture harness on a virtual clock: records true 60 fps footage from a GPU-less machine, and is byte-reproducible for a given seed.",
+      "Procedural art pipeline: surfaces authored as height fields, so normal maps, ambient occlusion, and material channels are derived rather than hand-painted.",
+      "Ares Basin biome: procedural sky with baked sun, three depths of Martian mesa ridge, ground slabs, foreground silhouette framing, drifting dust sheets.",
+      "Optimus rig: 25 bones, proportions solved as a chain to exactly 1.73 m, inertialized transitions, spring-driven cable sway, impact compression, foot IK."
+    ],
+    "biggestGap": "Scene composition and the player controller. The environment is a backdrop with no gameplay geometry, the character is driven by a scripted patrol rather than input, and there is no combat, audio, or UI yet.",
+    "scores": {
+      "animationFluidity": 6.5,
+      "frameConsistency": 7.0,
+      "scaleCoherence": 7.5,
+      "atmosphere": 5.5,
+      "lighting": 6.5,
+      "particles": 4.0,
+      "presence": 5.0,
+      "composition": 3.5,
+      "thematicCoherence": 6.0,
+      "combatImpact": 0,
+      "audio": 0,
+      "uiPolish": 0
+    }
+  }
+]

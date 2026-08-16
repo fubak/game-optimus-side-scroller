@@ -14,7 +14,13 @@
  * - **negative** rotation swings the limb **forward** (the facing direction)
  * - **positive** rotation swings it **backward**
  *
- * Knees and elbows bend backward, so their flexion values are positive.
+ * Joint flexion follows from that, and the two limbs differ:
+ *
+ * - **Knees** flex by drawing the heel backward, so knee values are
+ *   **positive**.
+ * - **Elbows** flex by drawing the hand forward toward the chest, so elbow
+ *   values are **negative**. Getting this backwards hyperextends the arm and
+ *   is instantly, comically wrong.
  *
  * ## Authoring notes
  *
@@ -94,9 +100,9 @@ export const IDLE: ClipDefinition = {
     },
     forearmNear: {
       rot: [
-        [0, 12],
-        [2.2, 15],
-        [4.4, 12],
+        [0, -9],
+        [2.2, -12],
+        [4.4, -9],
       ],
     },
     upperArmFar: {
@@ -108,9 +114,9 @@ export const IDLE: ClipDefinition = {
     },
     forearmFar: {
       rot: [
-        [0, 14],
-        [2.0, 17],
-        [4.4, 14],
+        [0, -11],
+        [2.0, -14],
+        [4.4, -11],
       ],
     },
     thighNear: { rot: [[0, -1.5]] },
@@ -255,11 +261,11 @@ export const WALK: ClipDefinition = {
     },
     forearmNear: {
       rot: [
-        [0, 14],
-        [0.26, 22],
-        [0.525, 30],
-        [0.79, 20],
-        [1.05, 14],
+        [0, -12],
+        [0.26, -22],
+        [0.525, -34],
+        [0.79, -20],
+        [1.05, -12],
       ],
     },
     upperArmFar: {
@@ -273,11 +279,11 @@ export const WALK: ClipDefinition = {
     },
     forearmFar: {
       rot: [
-        [0, 30],
-        [0.26, 20],
-        [0.525, 14],
-        [0.79, 22],
-        [1.05, 30],
+        [0, -34],
+        [0.26, -20],
+        [0.525, -12],
+        [0.79, -22],
+        [1.05, -34],
       ],
     },
   },
@@ -408,38 +414,38 @@ export const RUN: ClipDefinition = {
 
     upperArmNear: {
       rot: [
-        [0, 44],
+        [0, 42],
         [0.155, 12],
-        [0.31, -38],
+        [0.31, -20],
         [0.465, 6],
-        [0.62, 44],
+        [0.62, 42],
       ],
     },
     forearmNear: {
       rot: [
-        [0, 62],
-        [0.155, 78],
-        [0.31, 86],
-        [0.465, 70],
-        [0.62, 62],
+        [0, -62],
+        [0.155, -76],
+        [0.31, -84],
+        [0.465, -68],
+        [0.62, -62],
       ],
     },
     upperArmFar: {
       rot: [
-        [0, -38],
+        [0, -20],
         [0.155, 6],
-        [0.31, 44],
+        [0.31, 42],
         [0.465, 12],
-        [0.62, -38],
+        [0.62, -20],
       ],
     },
     forearmFar: {
       rot: [
-        [0, 86],
-        [0.155, 70],
-        [0.31, 62],
-        [0.465, 78],
-        [0.62, 86],
+        [0, -84],
+        [0.155, -68],
+        [0.31, -62],
+        [0.465, -76],
+        [0.62, -84],
       ],
     },
   },
@@ -530,9 +536,9 @@ export const JUMP_RISE: ClipDefinition = {
     },
     forearmNear: {
       rot: [
-        [0, 40],
-        [0.14, 18],
-        [0.42, 26],
+        [0, -46],
+        [0.14, -24],
+        [0.42, -32],
       ],
     },
     upperArmFar: {
@@ -544,9 +550,9 @@ export const JUMP_RISE: ClipDefinition = {
     },
     forearmFar: {
       rot: [
-        [0, 44],
-        [0.14, 24],
-        [0.42, 30],
+        [0, -50],
+        [0.14, -28],
+        [0.42, -36],
       ],
     },
   },
@@ -624,9 +630,9 @@ export const FALL: ClipDefinition = {
     },
     forearmNear: {
       rot: [
-        [0, 44],
-        [0.8, 52],
-        [1.6, 44],
+        [0, -42],
+        [0.8, -50],
+        [1.6, -42],
       ],
     },
     upperArmFar: {
@@ -638,9 +644,9 @@ export const FALL: ClipDefinition = {
     },
     forearmFar: {
       rot: [
-        [0, 50],
-        [0.8, 44],
-        [1.6, 50],
+        [0, -48],
+        [0.8, -42],
+        [1.6, -48],
       ],
     },
   },
@@ -741,9 +747,9 @@ export const LAND: ClipDefinition = {
     },
     forearmNear: {
       rot: [
-        [0, 46],
-        [0.09, 34],
-        [0.38, 14],
+        [0, -44],
+        [0.09, -56],
+        [0.38, -16],
       ],
     },
     upperArmFar: {
@@ -755,9 +761,9 @@ export const LAND: ClipDefinition = {
     },
     forearmFar: {
       rot: [
-        [0, 50],
-        [0.09, 38],
-        [0.38, 16],
+        [0, -48],
+        [0.09, -60],
+        [0.38, -18],
       ],
     },
   },

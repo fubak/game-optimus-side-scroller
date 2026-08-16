@@ -235,10 +235,10 @@ function makeLimbSegment(
   if (options.accent) {
     paintEmissive(
       surface,
-      sdCircle(cx, topY + radius * 0.15, radius * 0.72),
-      Math.max(1.5, px(0.009)),
+      sdCircle(cx, topY + radius * 0.15, radius * 0.70),
+      Math.max(1.2, px(0.006)),
       PALETTE.cyan,
-      dark ? 0.45 : 1,
+      dark ? 0.25 : 0.55,
     );
   }
 
