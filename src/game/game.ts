@@ -69,6 +69,16 @@ export class Game {
   private readonly lightFlicker: number[] = [];
   private readonly baseIntensity: number[] = [];
 
+  /**
+   * The cyan light Optimus casts on his surroundings.
+   *
+   * This does three jobs at once: it puts the character's signature colour into
+   * the frame (measured at 20x below target without it), it separates him from
+   * a warm environment by lighting it cool where he stands, and it makes him
+   * read as a powered machine rather than a lit sprite.
+   */
+  private playerLight!: Light;
+
   private time = 0;
 
   /** Harness-only overrides. */
@@ -173,6 +183,20 @@ export class Game {
     );
     this.lightFlicker.push(0);
     this.baseIntensity.push(0.8);
+
+    this.playerLight = createLight({
+      type: LightType.Point,
+      radius: 3.0,
+      r: 0.247,
+      g: 0.914,
+      b: 1.0,
+      intensity: 0.62,
+      shadowStrength: 0,
+      falloffExponent: 2.8,
+    });
+    this.dynamicLights.push(this.playerLight);
+    this.lightFlicker.push(0);
+    this.baseIntensity.push(0.62);
 
     for (const definition of this.room.lights) {
       this.dynamicLights.push(
@@ -291,6 +315,13 @@ export class Game {
   }
 
   private updateLights(): void {
+    // Track the chest, which is where the power core sits.
+    this.playerLight.x = this.player.feetX;
+    this.playerLight.y = this.player.feetY - 1.15;
+    // Brighten with speed, so movement visibly energises the character.
+    const exertion = Math.min(this.player.speed / 8.4, 1);
+    this.playerLight.intensity = 0.58 + exertion * 0.34;
+
     this.lights.clear();
     for (let i = 0; i < this.dynamicLights.length; i++) {
       const light = this.dynamicLights[i]!;

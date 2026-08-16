@@ -146,8 +146,12 @@ export const OPTIMUS_ATTACHMENTS: Attachment[] = [
     bone: 'footFar',
     sprite: 'optimus.footFar',
     // Offsets are in the bone's frame, which points forward along the foot.
+    // The Y value is solved rather than eyeballed: the generated sole sits
+    // 0.042 m above the sprite's bottom edge and the foot bone rests at
+    // -0.055, so -0.013 puts the sole exactly on the ground plane. The
+    // previous value left the character hovering 4.3 cm in the air.
     x: D.footLength * 0.34,
-    y: -D.footHeight * 0.62,
+    y: -0.013,
     rotation: 0,
     width: D.footLength + PAD.foot * 2,
     height: D.footHeight * 2.0 + PAD.foot * 2,
@@ -249,7 +253,7 @@ export const OPTIMUS_ATTACHMENTS: Attachment[] = [
     bone: 'footNear',
     sprite: 'optimus.foot',
     x: D.footLength * 0.34,
-    y: -D.footHeight * 0.62,
+    y: -0.013,
     rotation: 0,
     width: D.footLength + PAD.foot * 2,
     height: D.footHeight * 2.0 + PAD.foot * 2,

@@ -39,17 +39,21 @@ import { createSurface, setPixel, type Surface } from './texgen.ts';
  * in the frame.
  */
 export const ARES = {
-  skyHigh: [0.36, 0.30, 0.42] as const,
-  skyMid: [0.72, 0.47, 0.36] as const,
-  skyHorizon: [0.96, 0.68, 0.42] as const,
-  sunCore: [1.0, 0.93, 0.78] as const,
+  // Sky values are deliberately held below the bloom threshold. The sky is the
+  // largest area in any frame, so if it blooms, the entire image blooms — and
+  // a golden-hour sky away from the sun is not, in fact, blindingly bright.
+  // Only the sun disc and emissive props are authored above the threshold.
+  skyHigh: [0.20, 0.17, 0.28] as const,
+  skyMid: [0.44, 0.27, 0.22] as const,
+  skyHorizon: [0.63, 0.42, 0.26] as const,
+  sunCore: [1.0, 0.94, 0.80] as const,
 
-  hazeFar: [0.62, 0.47, 0.48] as const,
-  mesaFar: [0.50, 0.38, 0.42] as const,
-  mesaMid: [0.40, 0.26, 0.25] as const,
-  cliffNear: [0.27, 0.16, 0.14] as const,
-  playfield: [0.34, 0.20, 0.15] as const,
-  foreground: [0.055, 0.035, 0.04] as const,
+  hazeFar: [0.44, 0.32, 0.34] as const,
+  mesaFar: [0.36, 0.26, 0.30] as const,
+  mesaMid: [0.30, 0.19, 0.19] as const,
+  cliffNear: [0.22, 0.13, 0.11] as const,
+  playfield: [0.30, 0.18, 0.13] as const,
+  foreground: [0.04, 0.026, 0.03] as const,
 } as const;
 
 /**

@@ -282,9 +282,14 @@ export class Camera {
    * multi-layer backgrounds depend on.
    */
   parallaxFactor(depth: number): number {
-    // A reciprocal falloff matches how real perspective behaves far better than
-    // a linear ramp, which makes distant layers slide unnaturally fast.
-    return 1 / (1 + Math.max(depth, 0) * 0.55);
+    // Foreground layers sit at negative depth and must scroll *faster* than the
+    // playfield, which is what makes them read as being in front of it.
+    // Clamping negative depths to 1 made them track the playfield exactly, so
+    // they looked pasted onto it rather than nearer the viewer.
+    if (depth < 0) return 1 + -depth * 0.28;
+    // A reciprocal falloff matches real perspective far better than a linear
+    // ramp, which makes distant layers slide unnaturally fast.
+    return 1 / (1 + depth * 0.55);
   }
 
   /** Blend toward another camera state, for cinematic hand-offs. */

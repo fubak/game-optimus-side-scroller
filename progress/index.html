@@ -74,23 +74,50 @@
 <body>
 <header class="top">
   <h1>Optimus<b>:</b> Red Protocol</h1>
-  <div class="sub">build progress &middot; generated 2026-08-16 01:45:02 UTC &middot; page refreshes every 30 s</div>
+  <div class="sub">build progress &middot; generated 2026-08-16 02:21:43 UTC &middot; page refreshes every 30 s</div>
 </header>
 <main>
-  <div class="banner"><strong>Round 0: Foundation — engine, renderer, capture harness</strong><br />
-         Currently working on: Scene composition and the player controller. The environment is a backdrop with no gameplay geometry, the character is driven by a scripted patrol rather than input, and there is no combat, audio, or UI yet.</div>
+  <div class="banner"><strong>Round 1: Playable — physics, controller, level, and a lighting rebalance</strong><br />
+         Currently working on: Cast shadows and bloom energy. Shadow casters are wired up and the occluder mask renders correctly, but no shadow is actually visible in any frame — the character does not appear anchored to the ground. Bloom energy measures 0.001 against a 0.015-0.06 target on both gameplay scenarios, so there is no god-ray or glow presence, and cyan presence is 10x below target. These three together are why the image still reads flat next to the reference bar.</div>
 
   <section>
     <h2>Latest clips (recorded at a locked 60 fps)</h2>
     <div class="videos"><figure class="video">
-            <video src="media/ares_vista_high.mp4" controls loop muted playsinline preload="metadata"></video>
-            <figcaption>ares_vista_high <span>27 KB · 60 fps</span></figcaption>
+            <video src="media/ares_closeup.mp4" controls loop muted playsinline preload="metadata"></video>
+            <figcaption>ares_closeup <span>75 KB · 60 fps</span></figcaption>
+          </figure><figure class="video">
+            <video src="media/ares_vista.mp4" controls loop muted playsinline preload="metadata"></video>
+            <figcaption>ares_vista <span>101 KB · 60 fps</span></figcaption>
+          </figure><figure class="video">
+            <video src="media/ares_traversal.mp4" controls loop muted playsinline preload="metadata"></video>
+            <figcaption>ares_traversal <span>1107 KB · 60 fps</span></figcaption>
           </figure></div>
   </section>
 
   <section>
     <h2>Stills</h2>
     
+      <section class="gallery-group">
+        <h3>scenes</h3>
+        <div class="grid">
+          <figure>
+                <a href="media/ares_closeup_hero0.png" target="_blank" rel="noopener">
+                  <img src="media/ares_closeup_hero0.png" alt="ares_closeup_hero0" loading="lazy" />
+                </a>
+                <figcaption>ares_closeup_hero0 <span>1883 KB</span></figcaption>
+              </figure><figure>
+                <a href="media/ares_vista_hero0.png" target="_blank" rel="noopener">
+                  <img src="media/ares_vista_hero0.png" alt="ares_vista_hero0" loading="lazy" />
+                </a>
+                <figcaption>ares_vista_hero0 <span>1790 KB</span></figcaption>
+              </figure><figure>
+                <a href="media/ares_traversal_hero0.png" target="_blank" rel="noopener">
+                  <img src="media/ares_traversal_hero0.png" alt="ares_traversal_hero0" loading="lazy" />
+                </a>
+                <figcaption>ares_traversal_hero0 <span>1848 KB</span></figcaption>
+              </figure>
+        </div>
+      </section>
       <section class="gallery-group">
         <h3>character</h3>
         <div class="grid">
@@ -129,17 +156,6 @@
                   <img src="media/character/idle.png" alt="idle" loading="lazy" />
                 </a>
                 <figcaption>idle <span>426 KB</span></figcaption>
-              </figure>
-        </div>
-      </section>
-      <section class="gallery-group">
-        <h3>scenes</h3>
-        <div class="grid">
-          <figure>
-                <a href="media/ares_vista_high_hero0.png" target="_blank" rel="noopener">
-                  <img src="media/ares_vista_high_hero0.png" alt="ares_vista_high_hero0" loading="lazy" />
-                </a>
-                <figcaption>ares_vista_high_hero0 <span>1877 KB</span></figcaption>
               </figure>
         </div>
       </section>
@@ -199,24 +215,24 @@
   <section>
     <h2>Blind critique scores</h2>
     <div class="score"><span class="label">Animation fluidity</span>
-    <span class="track ok"><i style="width:65%"></i></span>
-    <span class="val">6.5</span></div><div class="score"><span class="label">Frame consistency</span>
     <span class="track ok"><i style="width:70%"></i></span>
-    <span class="val">7.0</span></div><div class="score"><span class="label">Scale coherence</span>
+    <span class="val">7.0</span></div><div class="score"><span class="label">Frame consistency</span>
     <span class="track ok"><i style="width:75%"></i></span>
-    <span class="val">7.5</span></div><div class="score"><span class="label">Atmospheric relevance</span>
-    <span class="track poor"><i style="width:55%"></i></span>
-    <span class="val">5.5</span></div><div class="score"><span class="label">Lighting</span>
+    <span class="val">7.5</span></div><div class="score"><span class="label">Scale coherence</span>
+    <span class="track good"><i style="width:80%"></i></span>
+    <span class="val">8.0</span></div><div class="score"><span class="label">Atmospheric relevance</span>
     <span class="track ok"><i style="width:65%"></i></span>
-    <span class="val">6.5</span></div><div class="score"><span class="label">Particle quality</span>
-    <span class="track poor"><i style="width:40%"></i></span>
-    <span class="val">4.0</span></div><div class="score"><span class="label">Presence</span>
+    <span class="val">6.5</span></div><div class="score"><span class="label">Lighting</span>
+    <span class="track poor"><i style="width:55%"></i></span>
+    <span class="val">5.5</span></div><div class="score"><span class="label">Particle quality</span>
+    <span class="track poor"><i style="width:45%"></i></span>
+    <span class="val">4.5</span></div><div class="score"><span class="label">Presence</span>
     <span class="track poor"><i style="width:50%"></i></span>
     <span class="val">5.0</span></div><div class="score"><span class="label">Composition &amp; readability</span>
-    <span class="track poor"><i style="width:35%"></i></span>
-    <span class="val">3.5</span></div><div class="score"><span class="label">Thematic coherence</span>
-    <span class="track ok"><i style="width:60%"></i></span>
-    <span class="val">6.0</span></div><div class="score"><span class="label">Combat impact</span>
+    <span class="track poor"><i style="width:55%"></i></span>
+    <span class="val">5.5</span></div><div class="score"><span class="label">Thematic coherence</span>
+    <span class="track ok"><i style="width:70%"></i></span>
+    <span class="val">7.0</span></div><div class="score"><span class="label">Combat impact</span>
     <span class="track poor"><i style="width:0%"></i></span>
     <span class="val">0.0</span></div><div class="score"><span class="label">Audio</span>
     <span class="track poor"><i style="width:0%"></i></span>
@@ -229,33 +245,97 @@
     <h2>Objective metrics</h2>
     <div class="metrics">
       <div class="metrics-card">
-        <h4>ares_vista_high</h4>
+        <h4>ares_closeup</h4>
         <table>
           <thead><tr><th>metric</th><th class="num">value</th><th class="target">target</th></tr></thead>
           <tbody>
-            <tr><td>dynamic range (p99-p1)</td><td class="num">0.834</td>
+            <tr><td>dynamic range (p99-p1)</td><td class="num">0.710</td>
     <td class="target">&amp;ge; 0.72</td></tr>
-            <tr><td>mean luminance</td><td class="num">0.436</td>
+            <tr><td>mean luminance</td><td class="num">0.386</td>
     <td class="target">0.18 - 0.45</td></tr>
             <tr><td>clipped white</td><td class="num">0.000</td>
     <td class="target">&amp;lt; 0.005</td></tr>
-            <tr><td>clipped black</td><td class="num">0.045</td>
+            <tr><td>clipped black</td><td class="num">0.000</td>
     <td class="target">&amp;lt; 0.05</td></tr>
-            <tr><td>near/far contrast ratio</td><td class="num">2.77</td>
+            <tr><td>near/far contrast ratio</td><td class="num">1.94</td>
     <td class="target">1.8 - 3.5</td></tr>
-            <tr><td>far/near saturation</td><td class="num">0.29</td>
+            <tr><td>far/near saturation</td><td class="num">0.89</td>
     <td class="target">0.35 - 0.70</td></tr>
-            <tr><td>bloom energy</td><td class="num">0.013</td>
+            <tr><td>bloom energy</td><td class="num">0.012</td>
     <td class="target">0.015 - 0.06</td></tr>
-            <tr><td>local contrast</td><td class="num">0.047</td>
+            <tr><td>local contrast</td><td class="num">0.036</td>
     <td class="target">&amp;ge; 0.03</td></tr>
-            <tr><td>cyan accent presence</td><td class="num">8.49e-5</td>
+            <tr><td>cyan accent presence</td><td class="num">5.17e-4</td>
     <td class="target">0.002 - 0.05</td></tr>
-            <tr><td>hue entropy</td><td class="num">0.574</td>
+            <tr><td>hue entropy</td><td class="num">0.649</td>
+    <td class="target">&amp;le; 0.75</td></tr>
+            <tr><td>draw calls</td><td class="num">24.000</td>
+    <td class="target">&amp;le; 120</td></tr>
+            <tr><td>fullscreen passes</td><td class="num">16.000</td>
+    <td class="target">&amp;le; 18</td></tr>
+          </tbody>
+        </table>
+      </div>
+      <div class="metrics-card">
+        <h4>ares_traversal</h4>
+        <table>
+          <thead><tr><th>metric</th><th class="num">value</th><th class="target">target</th></tr></thead>
+          <tbody>
+            <tr><td>dynamic range (p99-p1)</td><td class="num">0.596</td>
+    <td class="target">&amp;ge; 0.72</td></tr>
+            <tr><td>mean luminance</td><td class="num">0.311</td>
+    <td class="target">0.18 - 0.45</td></tr>
+            <tr><td>clipped white</td><td class="num">0.000</td>
+    <td class="target">&amp;lt; 0.005</td></tr>
+            <tr><td>clipped black</td><td class="num">4.13e-3</td>
+    <td class="target">&amp;lt; 0.05</td></tr>
+            <tr><td>near/far contrast ratio</td><td class="num">1.62</td>
+    <td class="target">1.8 - 3.5</td></tr>
+            <tr><td>far/near saturation</td><td class="num">0.47</td>
+    <td class="target">0.35 - 0.70</td></tr>
+            <tr><td>bloom energy</td><td class="num">9.57e-4</td>
+    <td class="target">0.015 - 0.06</td></tr>
+            <tr><td>local contrast</td><td class="num">0.038</td>
+    <td class="target">&amp;ge; 0.03</td></tr>
+            <tr><td>cyan accent presence</td><td class="num">1.85e-4</td>
+    <td class="target">0.002 - 0.05</td></tr>
+            <tr><td>hue entropy</td><td class="num">0.557</td>
     <td class="target">&amp;le; 0.75</td></tr>
             <tr><td>draw calls</td><td class="num">22.000</td>
     <td class="target">&amp;le; 120</td></tr>
             <tr><td>fullscreen passes</td><td class="num">14.000</td>
+    <td class="target">&amp;le; 18</td></tr>
+          </tbody>
+        </table>
+      </div>
+      <div class="metrics-card">
+        <h4>ares_vista</h4>
+        <table>
+          <thead><tr><th>metric</th><th class="num">value</th><th class="target">target</th></tr></thead>
+          <tbody>
+            <tr><td>dynamic range (p99-p1)</td><td class="num">0.595</td>
+    <td class="target">&amp;ge; 0.72</td></tr>
+            <tr><td>mean luminance</td><td class="num">0.307</td>
+    <td class="target">0.18 - 0.45</td></tr>
+            <tr><td>clipped white</td><td class="num">0.000</td>
+    <td class="target">&amp;lt; 0.005</td></tr>
+            <tr><td>clipped black</td><td class="num">0.056</td>
+    <td class="target">&amp;lt; 0.05</td></tr>
+            <tr><td>near/far contrast ratio</td><td class="num">2.20</td>
+    <td class="target">1.8 - 3.5</td></tr>
+            <tr><td>far/near saturation</td><td class="num">0.60</td>
+    <td class="target">0.35 - 0.70</td></tr>
+            <tr><td>bloom energy</td><td class="num">1.09e-3</td>
+    <td class="target">0.015 - 0.06</td></tr>
+            <tr><td>local contrast</td><td class="num">0.037</td>
+    <td class="target">&amp;ge; 0.03</td></tr>
+            <tr><td>cyan accent presence</td><td class="num">1.16e-4</td>
+    <td class="target">0.002 - 0.05</td></tr>
+            <tr><td>hue entropy</td><td class="num">0.601</td>
+    <td class="target">&amp;le; 0.75</td></tr>
+            <tr><td>draw calls</td><td class="num">24.000</td>
+    <td class="target">&amp;le; 120</td></tr>
+            <tr><td>fullscreen passes</td><td class="num">16.000</td>
     <td class="target">&amp;le; 18</td></tr>
           </tbody>
         </table>
@@ -267,11 +347,19 @@
     
       <article class="round">
         <header>
+          <h3>Round 1 — Playable — physics, controller, level, and a lighting rebalance</h3>
+          <time>2026-08-16</time>
+        </header>
+        <ul><li>Swept-AABB physics and a full player controller: coyote time, jump buffering, variable jump height, apex hang, corner correction, eight-way dash with i-frames, wall slide and wall jump.</li><li>First real room, sized against the measured jump envelope (3.83 m peak, 10.15 m range) so no jump needs frame-perfect input.</li><li>An autopilot that navigates by probing ground heights ahead, replacing brittle hand-timed input tapes. It also acts as a smoke test and now verifies the room end to end.</li><li>Fixed four simulation bugs invisible in stills: a floating-point sweep rejection that dropped the character through the world, grounded-state flicker from the collision skin gap, a phantom button press every frame from tape reinstallation, and lookahead that could not see step-ups.</li><li>Lighting rebalance driven by the metrics: ambient lowered so the key light does the work, sky authored below the bloom threshold so only the sun and emissives glow, shell albedo lowered from near-white which had been saturating into a featureless silhouette.</li><li>Foreground framing re-anchored as a fraction of view height, and foreground parallax fixed so it scrolls faster than the playfield.</li><li>New crate art: the props previously reused the bright shell panel and read unmistakably as wall-mounted TV screens.</li><li>Solved the foot attachment offset from the geometry, correcting a 4.3 cm hover.</li></ul>
+        <p class="gap"><strong>Biggest remaining gap:</strong> Cast shadows and bloom energy. Shadow casters are wired up and the occluder mask renders correctly, but no shadow is actually visible in any frame — the character does not appear anchored to the ground. Bloom energy measures 0.001 against a 0.015-0.06 target on both gameplay scenarios, so there is no god-ray or glow presence, and cyan presence is 10x below target. These three together are why the image still reads flat next to the reference bar.</p>
+      </article>
+      <article class="round">
+        <header>
           <h3>Round 0 — Foundation — engine, renderer, capture harness</h3>
           <time>2026-08-16</time>
         </header>
-        <ul><li>Hand-written WebGL2 deferred renderer: 4-attachment MRT G-buffer, normal-mapped lighting with raymarched soft shadows, god rays, height fog, dual-Kawase bloom, ACES tonemap, LUT grade, grain.</li><li>Fixed 120 Hz simulation with interpolated variable-rate rendering; hitstop and time-dilation stacks; split sim/fx RNG streams.</li><li>Analytically-solved damped springs and cubic Hermite curves, both verified frame-rate independent from 30 to 240 Hz.</li><li>Deterministic capture harness on a virtual clock: records true 60 fps footage from a GPU-less machine, and is byte-reproducible for a given seed.</li><li>Procedural art pipeline: surfaces authored as height fields, so normal maps, ambient occlusion, and material channels are derived rather than hand-painted.</li><li>Ares Basin biome: procedural sky with baked sun, three depths of Martian mesa ridge, ground slabs, foreground silhouette framing, drifting dust sheets.</li><li>Optimus rig: 25 bones, proportions solved as a chain to exactly 1.73 m, inertialized transitions, spring-driven cable sway, impact compression, foot IK.</li></ul>
-        <p class="gap"><strong>Biggest remaining gap:</strong> Scene composition and the player controller. The environment is a backdrop with no gameplay geometry, the character is driven by a scripted patrol rather than input, and there is no combat, audio, or UI yet.</p>
+        <ul><li>Hand-written WebGL2 deferred renderer: 4-attachment MRT G-buffer, normal-mapped lighting with raymarched soft shadows, god rays, height fog, dual-Kawase bloom, ACES tonemap, LUT grade, grain.</li><li>Fixed 120 Hz simulation with interpolated variable-rate rendering; hitstop and time-dilation stacks; split sim/fx RNG streams.</li><li>Analytically-solved damped springs and cubic Hermite curves, both verified frame-rate independent from 30 to 240 Hz.</li><li>Deterministic capture harness on a virtual clock: records true 60 fps footage from a GPU-less machine, and is byte-reproducible for a given seed.</li><li>Procedural art pipeline: surfaces authored as height fields, so normal maps, ambient occlusion, and material channels are derived rather than hand-painted.</li><li>Optimus rig: 25 bones, proportions solved as a chain to exactly 1.73 m, inertialized transitions, spring-driven cable sway, impact compression, foot IK.</li></ul>
+        <p class="gap"><strong>Biggest remaining gap:</strong> Not a game yet — no physics, no player input, no level.</p>
       </article>
   </section>
 </main>

@@ -9,10 +9,9 @@
       "Analytically-solved damped springs and cubic Hermite curves, both verified frame-rate independent from 30 to 240 Hz.",
       "Deterministic capture harness on a virtual clock: records true 60 fps footage from a GPU-less machine, and is byte-reproducible for a given seed.",
       "Procedural art pipeline: surfaces authored as height fields, so normal maps, ambient occlusion, and material channels are derived rather than hand-painted.",
-      "Ares Basin biome: procedural sky with baked sun, three depths of Martian mesa ridge, ground slabs, foreground silhouette framing, drifting dust sheets.",
       "Optimus rig: 25 bones, proportions solved as a chain to exactly 1.73 m, inertialized transitions, spring-driven cable sway, impact compression, foot IK."
     ],
-    "biggestGap": "Scene composition and the player controller. The environment is a backdrop with no gameplay geometry, the character is driven by a scripted patrol rather than input, and there is no combat, audio, or UI yet.",
+    "biggestGap": "Not a game yet — no physics, no player input, no level.",
     "scores": {
       "animationFluidity": 6.5,
       "frameConsistency": 7.0,
@@ -23,6 +22,36 @@
       "presence": 5.0,
       "composition": 3.5,
       "thematicCoherence": 6.0,
+      "combatImpact": 0,
+      "audio": 0,
+      "uiPolish": 0
+    }
+  },
+  {
+    "round": 1,
+    "date": "2026-08-16",
+    "title": "Playable — physics, controller, level, and a lighting rebalance",
+    "notes": [
+      "Swept-AABB physics and a full player controller: coyote time, jump buffering, variable jump height, apex hang, corner correction, eight-way dash with i-frames, wall slide and wall jump.",
+      "First real room, sized against the measured jump envelope (3.83 m peak, 10.15 m range) so no jump needs frame-perfect input.",
+      "An autopilot that navigates by probing ground heights ahead, replacing brittle hand-timed input tapes. It also acts as a smoke test and now verifies the room end to end.",
+      "Fixed four simulation bugs invisible in stills: a floating-point sweep rejection that dropped the character through the world, grounded-state flicker from the collision skin gap, a phantom button press every frame from tape reinstallation, and lookahead that could not see step-ups.",
+      "Lighting rebalance driven by the metrics: ambient lowered so the key light does the work, sky authored below the bloom threshold so only the sun and emissives glow, shell albedo lowered from near-white which had been saturating into a featureless silhouette.",
+      "Foreground framing re-anchored as a fraction of view height, and foreground parallax fixed so it scrolls faster than the playfield.",
+      "New crate art: the props previously reused the bright shell panel and read unmistakably as wall-mounted TV screens.",
+      "Solved the foot attachment offset from the geometry, correcting a 4.3 cm hover."
+    ],
+    "biggestGap": "Cast shadows and bloom energy. Shadow casters are wired up and the occluder mask renders correctly, but no shadow is actually visible in any frame — the character does not appear anchored to the ground. Bloom energy measures 0.001 against a 0.015-0.06 target on both gameplay scenarios, so there is no god-ray or glow presence, and cyan presence is 10x below target. These three together are why the image still reads flat next to the reference bar.",
+    "scores": {
+      "animationFluidity": 7.0,
+      "frameConsistency": 7.5,
+      "scaleCoherence": 8.0,
+      "atmosphere": 6.5,
+      "lighting": 5.5,
+      "particles": 4.5,
+      "presence": 5.0,
+      "composition": 5.5,
+      "thematicCoherence": 7.0,
       "combatImpact": 0,
       "audio": 0,
       "uiPolish": 0

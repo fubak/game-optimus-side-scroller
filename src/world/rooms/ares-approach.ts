@@ -172,13 +172,14 @@ export function buildAresApproach(): RoomDefinition {
     [69.0, -8.2, 1.15],
     [70.1, -8.2, 0.78],
   ];
-  for (const [x, surfaceY, size] of crates) {
+  for (let i = 0; i < crates.length; i++) {
+    const [x, surfaceY, size] = crates[i]!;
     props.push({
       x,
       y: surfaceY - size / 2,
       width: size,
       height: size,
-      sprite: 'panel',
+      sprite: `crate${i % 3}`,
       rotation: 0,
       emissive: 0,
       castsShadow: true,

@@ -50,7 +50,7 @@ export function buildAresAtlasSources(): AtlasSource[] {
         mesaFactor: 0.62,
         color: ARES.mesaFar,
         hazeColor: ARES.hazeFar,
-        hazeAmount: 0.80,
+        hazeAmount: 0.60,
         detail: 0.12,
         hazeGradient: 0.35,
       }),
@@ -65,7 +65,7 @@ export function buildAresAtlasSources(): AtlasSource[] {
         mesaFactor: 0.55,
         color: ARES.mesaMid,
         hazeColor: ARES.hazeFar,
-        hazeAmount: 0.52,
+        hazeAmount: 0.34,
         detail: 0.35,
         hazeGradient: 0.6,
       }),
@@ -80,7 +80,7 @@ export function buildAresAtlasSources(): AtlasSource[] {
         mesaFactor: 0.42,
         color: ARES.cliffNear,
         hazeColor: ARES.hazeFar,
-        hazeAmount: 0.24,
+        hazeAmount: 0.12,
         detail: 0.65,
         hazeGradient: 0.85,
       }),
@@ -191,10 +191,16 @@ export function buildAresLayers(): ParallaxLayer[] {
       opacity: 1,
     },
     {
+      // Near-black framing along the bottom of the frame. Anchored to the
+      // camera vertically so it stays put as the player climbs, while still
+      // scrolling faster than the playfield horizontally.
       sprite: 'ares.foreground',
       depth: Depth.Foreground,
-      y: 7.4,
-      heightMetres: 13,
+      y: 0,
+      heightMetres: 10,
+      // Top edge at 78% of the way to the bottom of the screen, so the band
+      // frames the lower edge without covering the playfield.
+      anchorTop: 0.52,
       tint: [1, 1, 1],
       opacity: 1,
     },
@@ -211,17 +217,20 @@ export function buildAresLayers(): ParallaxLayer[] {
  */
 export function buildAresAtmosphere(): Atmosphere {
   return {
-    // Cool violet skylight, so shadows read blue against the warm sun.
-    ambientSky: [0.42, 0.40, 0.62],
-    ambientSkyIntensity: 0.40,
+    // Cool violet skylight, so shadows read blue against the warm sun. Kept
+    // deliberately dim: ambient light that can carry the image on its own
+    // flattens everything into a mid-grey band and leaves no room for a key
+    // light to do any work.
+    ambientSky: [0.34, 0.33, 0.54],
+    ambientSkyIntensity: 0.22,
     // Warm bounce off the dusty ground.
-    ambientGround: [0.52, 0.28, 0.18],
-    ambientGroundIntensity: 0.26,
-    rimColor: [1.0, 0.74, 0.48],
-    rimStrength: 0.55,
+    ambientGround: [0.46, 0.24, 0.15],
+    ambientGroundIntensity: 0.13,
+    rimColor: [1.0, 0.76, 0.50],
+    rimStrength: 0.62,
 
-    fogColor: [0.72, 0.50, 0.42],
-    fogDensity: 0.30,
+    fogColor: [0.62, 0.42, 0.38],
+    fogDensity: 0.22,
     fogHeightFalloff: 0.75,
     fogNoiseStrength: 0.35,
     fogWindX: 0.85,
@@ -235,16 +244,22 @@ export function buildAresAtmosphere(): Atmosphere {
     godRayWeight: 0.55,
     godRayExposure: 0.62,
 
-    bloomThreshold: 0.80,
-    bloomKnee: 0.30,
-    bloomIntensity: 0.62,
+    // A lower threshold and a much stronger emissive scale, so lit surfaces
+    // genuinely cross into the bloom chain instead of sitting just below it.
+    // The threshold sits just above the brightest sky value, so the sky itself
+    // never blooms while the sun disc and the cyan emissives always do.
+    bloomThreshold: 0.62,
+    bloomKnee: 0.22,
+    bloomIntensity: 1.05,
+    // Passthrough: a fully-emissive surface renders at exactly its authored
+    // albedo. Scaling emissives globally blew the sky far past white.
     emissiveScale: 1.0,
 
-    exposure: 1.08,
-    contrast: 1.10,
-    saturation: 1.12,
-    lift: 0.004,
-    vignette: 0.46,
+    exposure: 1.24,
+    contrast: 1.20,
+    saturation: 1.16,
+    lift: -0.012,
+    vignette: 0.58,
     chromaticAberration: 0.0026,
     barrelDistortion: 0.010,
     grainAmount: 0.030,

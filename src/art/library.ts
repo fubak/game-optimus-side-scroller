@@ -35,9 +35,14 @@ export const PALETTE = {
   rockShadow: [0.11, 0.07, 0.06] as const,
   dust: [0.55, 0.36, 0.25] as const,
 
-  shellLight: [0.86, 0.87, 0.89] as const,
-  shellMid: [0.62, 0.64, 0.68] as const,
-  shellDark: [0.22, 0.23, 0.26] as const,
+  // Optimus is white, but a near-white albedo under a strong key light plus
+  // fill plus rim saturates to a featureless silhouette with a bloom halo and
+  // no material read at all. These values keep the character reading as the
+  // brightest thing on screen while leaving headroom for the lighting to
+  // actually describe its surfaces.
+  shellLight: [0.63, 0.645, 0.675] as const,
+  shellMid: [0.44, 0.455, 0.49] as const,
+  shellDark: [0.17, 0.18, 0.21] as const,
   frame: [0.13, 0.135, 0.15] as const,
   joint: [0.07, 0.072, 0.08] as const,
 
@@ -229,6 +234,102 @@ export function makeDustSheet(width: number, height: number, seed: number): Surf
   return surface;
 }
 
+/**
+ * A shipping crate.
+ *
+ * Deliberately dark and matte, with corner brackets and a single small
+ * indicator. The earlier prop reused the bright shell-plate panel, which at
+ * gameplay scale read unmistakably as a wall-mounted screen: large, white, and
+ * flat-fronted. Containers need to sit *below* the character in value, or they
+ * compete with him for attention in every frame.
+ */
+export function makeCrate(size: number, seed: number): Surface {
+  const surface = createSurface(size, size);
+  const noise = new NoiseField(seed);
+  const inset = size * 0.055;
+
+  // Dark body.
+  for (let y = 0; y < size; y++) {
+    for (let x = 0; x < size; x++) {
+      const index = y * size + x;
+      const grain = noise.fbm2(x * 0.14, y * 0.14, 3) * 0.5 + 0.5;
+      const vertical = 1 - (y / size) * 0.35;
+      const shade = (0.72 + grain * 0.28) * vertical;
+      setPixel(surface, x, y, 0.20 * shade, 0.185 * shade, 0.175 * shade, 1);
+      surface.heightField[index] = 0.35 + grain * 0.12;
+      surface.roughness[index] = 0.62 + grain * 0.14;
+      surface.metallic[index] = 0.75;
+    }
+  }
+
+  // Raised centre panel, so the face is not a flat rectangle.
+  bevelledRect(
+    surface,
+    inset * 2.4,
+    inset * 2.4,
+    size - inset * 2.4,
+    size - inset * 2.4,
+    size * 0.05,
+    Math.max(2, size * 0.035),
+    0.72,
+  );
+  for (let y = 0; y < size; y++) {
+    for (let x = 0; x < size; x++) {
+      const index = y * size + x;
+      if (surface.heightField[index]! <= 0.48) continue;
+      const grain = noise.fbm2(x * 0.2, y * 0.2, 2) * 0.5 + 0.5;
+      const shade = 0.85 + grain * 0.3;
+      setPixel(surface, x, y, 0.30 * shade, 0.28 * shade, 0.265 * shade, 1);
+      surface.roughness[index] = 0.5;
+    }
+  }
+
+  // Corner brackets in a lighter alloy: the detail that says "container".
+  const bracket = Math.round(size * 0.24);
+  for (const [cx, cy] of [
+    [0, 0],
+    [1, 0],
+    [0, 1],
+    [1, 1],
+  ] as const) {
+    const x0 = cx === 0 ? 0 : size - bracket;
+    const y0 = cy === 0 ? 0 : size - bracket;
+    for (let y = y0; y < y0 + bracket; y++) {
+      for (let x = x0; x < x0 + bracket; x++) {
+        // Only the outer L of the bracket, not a solid square.
+        const nearX = cx === 0 ? x < bracket * 0.34 : x > size - bracket * 0.34;
+        const nearY = cy === 0 ? y < bracket * 0.34 : y > size - bracket * 0.34;
+        if (!nearX && !nearY) continue;
+        const index = y * size + x;
+        const grain = noise.fbm2(x * 0.3, y * 0.3, 2) * 0.5 + 0.5;
+        const shade = 0.8 + grain * 0.35;
+        setPixel(surface, x, y, 0.46 * shade, 0.44 * shade, 0.43 * shade, 1);
+        surface.heightField[index] = 0.82;
+        surface.roughness[index] = 0.34;
+        surface.metallic[index] = 0.95;
+      }
+    }
+  }
+
+  // A single small cyan status light.
+  const lightX = Math.round(size * 0.5);
+  const lightY = Math.round(size * 0.30);
+  const lightR = Math.max(1, Math.round(size * 0.035));
+  for (let y = lightY - lightR; y <= lightY + lightR; y++) {
+    for (let x = lightX - lightR * 2; x <= lightX + lightR * 2; x++) {
+      if (x < 0 || y < 0 || x >= size || y >= size) continue;
+      const index = y * size + x;
+      setPixel(surface, x, y, PALETTE.cyan[0], PALETTE.cyan[1], PALETTE.cyan[2], 1);
+      surface.emissive[index] = 1;
+      surface.roughness[index] = 0.2;
+      surface.metallic[index] = 0;
+    }
+  }
+
+  addEdgeWear(surface, noise, 0.5, 0.09);
+  return surface;
+}
+
 /** Builds the initial atlas source list. */
 export function buildCoreAtlasSources(): AtlasSource[] {
   const sources: AtlasSource[] = [];
@@ -247,6 +348,14 @@ export function buildCoreAtlasSources(): AtlasSource[] {
     surface: makePanel(metresToTexels(1), metresToTexels(1), 0x811),
     widthMetres: 1,
   });
+
+  for (let i = 0; i < 3; i++) {
+    sources.push({
+      name: `crate${i}`,
+      surface: makeCrate(metresToTexels(1, 2), 0x8c0 + i * 613),
+      widthMetres: 1,
+    });
+  }
 
   sources.push({
     name: 'panelLit',

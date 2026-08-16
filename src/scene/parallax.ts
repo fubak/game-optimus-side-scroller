@@ -44,6 +44,18 @@ export interface ParallaxLayer {
    * which must never slide out of frame.
    */
   lockToCamera?: boolean;
+  /**
+   * Anchors the layer's *top edge* to a fraction of the half-view-height,
+   * measured from the camera centre, while still scrolling horizontally with
+   * parallax. `0` is the centre of the screen, `1` the bottom edge.
+   *
+   * Foreground framing needs this. Anchoring it at a fixed world Y meant it
+   * either drifted out of frame as the camera climbed, or — once anchored —
+   * covered a fixed number of metres, which at a wide vista framing swallowed
+   * the entire playfield. Expressing it as a fraction of the view keeps the
+   * framing band the same proportion of the screen at every zoom level.
+   */
+  anchorTop?: number;
 }
 
 export class ParallaxRenderer {
@@ -118,11 +130,19 @@ export class ParallaxRenderer {
     const firstTile = Math.floor((visible.minX - cameraOffsetX - effectiveX) / widthMetres) - 1;
     const lastTile = Math.ceil((visible.maxX - cameraOffsetX - effectiveX) / widthMetres) + 1;
 
+    let y: number;
+    if (layer.anchorTop !== undefined) {
+      const anchor = camera.y + (camera.viewHeightMetres / 2) * layer.anchorTop;
+      y = anchor + heightMetres / 2 + bob;
+    } else {
+      y = layer.y + bob + cameraOffsetY;
+    }
+
     for (let tile = firstTile; tile <= lastTile; tile++) {
       const x = tile * widthMetres + drift + cameraOffsetX;
       batch.draw(
         x,
-        layer.y + bob + cameraOffsetY,
+        y,
         widthMetres,
         heightMetres,
         entry.u0,
