@@ -78,6 +78,7 @@ export const DEFAULT_LIVES = 3;
 export interface WorldOptions {
   readonly seed?: number;
   readonly lives?: number;
+  readonly reducedMotion?: boolean;
 }
 
 export interface WorldStats {
@@ -122,11 +123,15 @@ export class World {
   private hitStopTimer = 0;
   private readonly enemyEvents: EnemyEvent[] = [];
 
+  /** When true, screen shake is suppressed (accessibility setting). */
+  private reducedMotion = false;
+
   constructor(level: Level, options: WorldOptions = {}) {
     this.level = level;
     this.map = level.map;
     this.rng = createRng(options.seed ?? level.seed);
     this.livesRemaining = options.lives ?? DEFAULT_LIVES;
+    this.reducedMotion = options.reducedMotion ?? false;
     this.checkpointX = level.spawnX;
     this.checkpointY = level.spawnY;
     this.player = new Player(level.spawnX, level.spawnY);
@@ -181,6 +186,16 @@ export class World {
     };
   }
 
+  setReducedMotion(reduced: boolean): void {
+    this.reducedMotion = reduced;
+  }
+
+  /** Screen shake request, ignored entirely in reduced-motion mode. */
+  private shake(amount: number): void {
+    if (this.reducedMotion) return;
+    this.camera.addShake(amount);
+  }
+
   /** Is this checkpoint tile the one the player will respawn at? */
   isCheckpointActive(tx: number, ty: number): boolean {
     const position = spawnPositionFor(tx, ty);
@@ -203,8 +218,8 @@ export class World {
 
     if (this.hitStopTimer > 0) {
       // Frozen: keep the presentation alive (particles, shake) but do not advance the simulation.
+      // (Input lifecycle is the caller's business — the world never consumes an input frame.)
       this.hitStopTimer -= dtSec;
-      input.endFrame();
       this.particles.update(dtSec);
       this.camera.update(dtSec, this.player.body, this.player.body.vx, this.map, this.rng);
       return this.events;
@@ -273,7 +288,7 @@ export class World {
             strength,
             this.rng,
           );
-          if (strength > 0.8) this.camera.addShake(SHAKE_LANDING);
+          if (strength > 0.8) this.shake(SHAKE_LANDING);
           break;
         }
         case 'jump':
@@ -295,7 +310,7 @@ export class World {
           });
           break;
         case 'hurt':
-          this.camera.addShake(SHAKE_HURT);
+          this.shake(SHAKE_HURT);
           this.particles.burst('spark', this.player.centerX, this.player.centerY, 14, this.rng, {
             speed: 130,
           });
@@ -340,7 +355,7 @@ export class World {
           this.scoreValue += SCORE_ENEMY;
           this.particles.burst('debris', event.x, event.y, 14, this.rng, { speed: 130, life: 0.5 });
           this.particles.burst('spark', event.x, event.y, 8, this.rng, { speed: 90, life: 0.35 });
-          this.camera.addShake(SHAKE_STOMP);
+          this.shake(SHAKE_STOMP);
           this.events.push({
             type: 'enemyKilled',
             kind: event.kind,
@@ -356,7 +371,7 @@ export class World {
           this.events.push({ type: 'crusherSlam', x: event.x, y: event.y });
           break;
         case 'crusherImpact':
-          this.camera.addShake(SHAKE_STOMP * 1.4);
+          this.shake(SHAKE_STOMP * 1.4);
           this.particles.burst('dust', event.x, event.y, 12, this.rng, { speed: 120, life: 0.5 });
           break;
         default: {
@@ -466,7 +481,7 @@ export class World {
     this.state = 'dying';
     this.deathCount += 1;
     this.livesRemaining = Math.max(0, this.livesRemaining - 1);
-    this.camera.addShake(SHAKE_DEATH);
+    this.shake(SHAKE_DEATH);
     this.particles.burst('debris', this.player.centerX, this.player.centerY, 20, this.rng, {
       speed: 150,
       life: 0.8,

@@ -40,10 +40,10 @@ export class WorldRenderer {
   private levelId: string;
   private ghosts: DashGhost[] = [];
 
-  constructor(world: World) {
-    this.levelId = world.level.id;
+  constructor(world: World | null) {
+    this.levelId = world?.level.id ?? '';
     this.layers = createParallaxLayers({
-      seed: world.level.seed,
+      seed: world?.level.seed ?? 1,
       viewWidth: INTERNAL_WIDTH,
       viewHeight: INTERNAL_HEIGHT,
     });

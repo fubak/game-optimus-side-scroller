@@ -36,6 +36,12 @@ export default tseslint.config(
       '@typescript-eslint/explicit-module-boundary-types': 'error',
       '@typescript-eslint/no-non-null-assertion': 'error',
       '@typescript-eslint/prefer-readonly': 'error',
+      // Interface stubs (e.g. the silent audio implementation) keep their parameter names for
+      // documentation; a leading underscore marks them as deliberately unused.
+      '@typescript-eslint/no-unused-vars': [
+        'error',
+        { argsIgnorePattern: '^_', varsIgnorePattern: '^_', caughtErrorsIgnorePattern: '^_' },
+      ],
       eqeqeq: ['error', 'always'],
       'no-console': ['error', { allow: ['warn', 'error'] }],
       // Keep imports at the top of the module: no dynamic `import()` inside function bodies and

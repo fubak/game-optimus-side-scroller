@@ -1,5 +1,6 @@
 import type { Action, Input } from '../core/input';
-import { PLAYER_HEIGHT } from './constants';
+import { PLAYER_HEIGHT, RUN_MAX_SPEED } from './constants';
+import { CRUSHER_WINDUP_TIME } from './enemies';
 import { isStandable } from './levelParser';
 import { TileKind } from './tiles';
 import type { World } from './world';
@@ -126,8 +127,47 @@ export class Autopilot implements Input {
       return sameLevel && gap > 0 && gap < 34;
     });
 
+    // Incoming fire: turret bolts fly horizontally at body height, so a hop clears them.
+    const boltIncoming = this.world.projectiles.all.some((projectile) => {
+      if (!projectile.active) return false;
+      const gap = projectile.x - (body.x + body.width / 2);
+      const closing = projectile.vx < 0 ? gap > 0 : gap < 0;
+      // Bolts are aimed, so they arrive at an angle; only dodge the ones heading for the torso.
+      const nearHeight = Math.abs(projectile.y - (body.y + PLAYER_HEIGHT * 0.5)) < 18;
+      return closing && nearHeight && Math.abs(gap) < 46;
+    });
+
+    /*
+     * Presses: "can I make it across before that comes down?"
+     *
+     * The press is safe to enter only while it is parked at the top with enough of its rest phase
+     * left to sprint the full width of its shadow. Otherwise the autopilot waits just outside.
+     */
+    const pressBlocking = this.world.enemies.some((enemy) => {
+      if (enemy.kind !== 'crusher' || enemy.state !== 'active') return false;
+      const shadowLeft = enemy.body.x - 8;
+      const shadowRight = enemy.body.x + enemy.body.width + 4;
+      const approaching = body.x + body.width > shadowLeft - 30 && body.x < shadowLeft;
+      if (!approaching) return false;
+      const parked = !enemy.lethal && enemy.body.y <= enemy.homeY + 1;
+      if (!parked) return true;
+      const timeToSlam = enemy.timer + CRUSHER_WINDUP_TIME;
+      const crossingTime = (shadowRight - body.x) / RUN_MAX_SPEED;
+      return timeToSlam < crossingTime + 0.2;
+    });
+    // Never jump into the underside of a press that is coming down.
+    const crusherOverhead = this.world.enemies.some((enemy) => {
+      if (enemy.kind !== 'crusher' || enemy.state !== 'active') return false;
+      const overlapsColumn =
+        body.x + body.width > enemy.body.x - 4 && body.x < enemy.body.x + enemy.body.width + 4;
+      return overlapsColumn && enemy.body.y < body.y && (enemy.lethal || enemy.body.y > enemy.homeY + 2);
+    });
+
     if (player.isOnGround && this.jumpCooldown === 0 && this.backUpFrames === 0) {
-      if (enemyAhead) {
+      if (boltIncoming) {
+        this.jumpHoldFrames = 16;
+        this.jumpCooldown = 6;
+      } else if (enemyAhead) {
         this.jumpHoldFrames = 14;
         this.jumpCooldown = 10;
       } else if (pitAt1 || spikesAhead || stepAhead) {
@@ -149,10 +189,13 @@ export class Autopilot implements Input {
     }
     const rescuing = falling && voidBelow && this.rescueFrames > 0 && this.rescueFrames < 90;
 
+    // Wait rather than walk into a descending press.
+    const waiting = pressBlocking && player.isOnGround;
     const goingBack = this.backUpFrames > 0;
-    this.set('right', !goingBack);
+    this.set('right', !goingBack && !waiting);
     this.set('left', goingBack);
-    this.set('jump', this.jumpHoldFrames > 0 || rescuing);
+    // Never jump into the underside of a press.
+    this.set('jump', (this.jumpHoldFrames > 0 && !crusherOverhead) || rescuing);
     // A dash helps cross a wide pit once airborne and past the apex.
     this.set('dash', pitWidth >= 3 && !player.isOnGround && body.vy > 0);
     this.set('down', false);

@@ -247,6 +247,14 @@ function updateDrone(enemy: Enemy, dtSec: number, context: EnemyUpdateContext): 
   }
 }
 
+/**
+ * Turrets fire *aimed* bolts.
+ *
+ * Aiming is what makes turrets work as level furniture: they can be bolted to ledges and gantries
+ * off the walking route — where the player can never be forced to touch them, since they cannot be
+ * stomped — and still threaten. Straight horizontal fire would sail harmlessly over the player's
+ * head from anywhere but their own floor.
+ */
 function updateTurret(enemy: Enemy, dtSec: number, context: EnemyUpdateContext): void {
   const { playerBody, playerAlive, projectiles, events, map } = context;
   enemy.timer -= dtSec;
@@ -255,30 +263,38 @@ function updateTurret(enemy: Enemy, dtSec: number, context: EnemyUpdateContext):
   const playerCenterX = playerBody.x + playerBody.width / 2;
   const playerCenterY = playerBody.y + playerBody.height / 2;
 
-  // Aim at the player when they are on roughly the same level and within range.
   const dx = playerCenterX - centerX;
   const dy = playerCenterY - centerY;
-  const inRange = Math.abs(dx) <= TURRET_RANGE && Math.abs(dy) <= 26;
+  const distanceToPlayer = Math.hypot(dx, dy);
+  const inRange = distanceToPlayer <= TURRET_RANGE;
   if (inRange && playerAlive) {
     enemy.direction = dx < 0 ? -1 : 1;
   }
-  if (!inRange || !playerAlive) {
+  if (!inRange || !playerAlive || distanceToPlayer < 1) {
     enemy.timer = Math.max(enemy.timer, TURRET_WINDUP);
     return;
   }
-  if (!hasLineOfSight(map, centerX, centerY, playerCenterX, centerY)) {
+  if (!hasLineOfSight(map, centerX, centerY, playerCenterX, playerCenterY)) {
     return;
   }
   if (enemy.timer > 0) return;
 
   enemy.timer = TURRET_COOLDOWN;
-  projectiles.spawn(centerX + enemy.direction * 9, centerY - 1, enemy.direction * PROJECTILE_SPEED, 0);
+  const aimX = dx / distanceToPlayer;
+  const aimY = dy / distanceToPlayer;
+  projectiles.spawn(centerX + aimX * 9, centerY + aimY * 9, aimX * PROJECTILE_SPEED, aimY * PROJECTILE_SPEED);
   events.push({ type: 'enemyShot', x: centerX, y: centerY, kind: 'turret' });
 }
 
+/**
+ * Crusher cycle: rest → windup → slam → return → rest.
+ *
+ * The timer is only consumed while parked at the top; the return stroke resets it. (It used to tick
+ * during the slam and the return, so after its first cycle a press slammed the instant it finished
+ * winching back up — no rest, no telegraph, and nothing could ever walk underneath.)
+ */
 function updateCrusher(enemy: Enemy, dtSec: number, context: EnemyUpdateContext): void {
   const { events } = context;
-  enemy.timer -= dtSec;
   const restY = enemy.homeY;
   const bottomLimit = restY + CRUSHER_MAX_DROP;
 
@@ -294,6 +310,7 @@ function updateCrusher(enemy: Enemy, dtSec: number, context: EnemyUpdateContext)
     if (enemy.body.y >= bottomLimit || hitFloor) {
       enemy.body.y = Math.min(enemy.body.y, bottomLimit);
       enemy.lethal = false;
+      // Rest is counted from the moment it is parked again, not from the impact.
       enemy.timer = CRUSHER_REST_TIME;
       events.push({
         type: 'crusherImpact',
@@ -306,10 +323,12 @@ function updateCrusher(enemy: Enemy, dtSec: number, context: EnemyUpdateContext)
   }
 
   if (enemy.body.y > restY) {
-    // Winching back up.
+    // Winching back up; the rest timer restarts once it is home.
     enemy.body.y = Math.max(restY, enemy.body.y - CRUSHER_RETURN_SPEED * dtSec);
+    if (enemy.body.y <= restY) enemy.timer = CRUSHER_REST_TIME;
     return;
   }
+  enemy.timer -= dtSec;
   if (enemy.timer <= -CRUSHER_WINDUP_TIME) {
     enemy.lethal = true;
     enemy.timer = 0;

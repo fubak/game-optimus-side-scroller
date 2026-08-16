@@ -227,7 +227,32 @@ describe('turret', () => {
     expect(events.filter((event) => event.type === 'enemyShot').length).toBe(2);
   });
 
-  it('does not fire at a player out of range or on another floor', () => {
+  it('aims its bolts, so a turret on a ledge can hit the floor below', () => {
+    const LEDGE = mapFromAscii([
+      '....................',
+      '....................',
+      '..###...............',
+      '....................',
+      '....................',
+      '####################',
+    ]);
+    // Turret perched at the right-hand end of the ledge, player on the floor below and to the
+    // right. (Mounted mid-ledge its own platform would block the downward shot — as it should.)
+    const turret = makeEnemy('turret', 4, 1);
+    const projectiles = new ProjectilePool(8);
+    stepEnemy(turret, LEDGE, {
+      projectiles,
+      playerBody: { x: 9 * TILE_SIZE, y: 5 * TILE_SIZE - 22, width: 10, height: 22 },
+      frames: 60,
+    });
+    const bolt = projectiles.all.find((projectile) => projectile.active);
+    expect(bolt).toBeDefined();
+    // Travelling right and downwards, i.e. actually aimed at the player.
+    expect(bolt?.vx ?? 0).toBeGreaterThan(0);
+    expect(bolt?.vy ?? 0).toBeGreaterThan(0);
+  });
+
+  it('does not fire at a player out of range or with no line of sight', () => {
     const turret = makeEnemy('turret', 3, 2);
     const projectiles = new ProjectilePool(8);
     stepEnemy(turret, CORRIDOR, {
@@ -237,9 +262,10 @@ describe('turret', () => {
     });
     expect(projectiles.activeCount).toBe(0);
 
+    // Straight up through the level ceiling: no line of sight.
     stepEnemy(turret, CORRIDOR, {
       projectiles,
-      playerBody: { x: 8 * TILE_SIZE, y: turret.body.y - 90, width: 10, height: 22 },
+      playerBody: { x: 3 * TILE_SIZE, y: turret.body.y - 90, width: 10, height: 22 },
       frames: 120,
     });
     expect(projectiles.activeCount).toBe(0);
