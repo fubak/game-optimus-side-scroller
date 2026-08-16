@@ -30,6 +30,13 @@ export class Autopilot implements Input {
   private backUpFrames = 0;
   private rescueFrames = 0;
   private lastX = 0;
+  /**
+   * Latched once the player first steps into the boss bay.
+   *
+   * Without it the autopilot flip-flopped on the threshold: boss mode told it to retreat, retreating
+   * took it out of the bay, normal mode ran it straight back in, and it died in the doorway forever.
+   */
+  private bossEngaged = false;
 
   constructor(world: World) {
     this.world = world;
@@ -59,6 +66,17 @@ export class Autopilot implements Input {
     this.decide();
   }
 
+  /**
+   * Hold jump for `frames`, then guarantee a release gap before the next press.
+   *
+   * The player only jumps on a *fresh* press. Re-arming on the same frame the hold expired kept the
+   * button down forever, which looked like the bot standing on the boss doing nothing.
+   */
+  private armJump(frames: number): void {
+    this.jumpHoldFrames = frames;
+    this.jumpCooldown = frames + 6;
+  }
+
   private set(action: Action, down: boolean): void {
     if (down) {
       if (!this.held.has(action)) this.pressedThisFrame.add(action);
@@ -66,6 +84,15 @@ export class Autopilot implements Input {
     } else {
       this.held.delete(action);
     }
+  }
+
+  /** Has the player entered the boss' bay (i.e. is the fight on)? Latches until the boss dies. */
+  private isInsideArena(boss: { patrolMinX: number; patrolMaxX: number }): boolean {
+    const playerX = this.world.player.body.x;
+    if (playerX > boss.patrolMinX - 24 && playerX < boss.patrolMaxX + 24) {
+      this.bossEngaged = true;
+    }
+    return this.bossEngaged;
   }
 
   private decide(): void {
@@ -165,15 +192,12 @@ export class Autopilot implements Input {
 
     if (player.isOnGround && this.jumpCooldown === 0 && this.backUpFrames === 0) {
       if (boltIncoming) {
-        this.jumpHoldFrames = 16;
-        this.jumpCooldown = 6;
+        this.armJump(16);
       } else if (enemyAhead) {
-        this.jumpHoldFrames = 14;
-        this.jumpCooldown = 10;
+        this.armJump(14);
       } else if (pitAt1 || spikesAhead || stepAhead) {
         // Hold longer for the harder obstacles; the player only gains height while jump is held.
-        this.jumpHoldFrames = pitWidth >= 2 || tallStep || spikesAhead ? 20 : 12;
-        this.jumpCooldown = 8;
+        this.armJump(pitWidth >= 2 || tallStep || spikesAhead ? 20 : 12);
       }
     }
 
@@ -188,6 +212,58 @@ export class Autopilot implements Input {
       this.rescueFrames = 0;
     }
     const rescuing = falling && voidBelow && this.rescueFrames > 0 && this.rescueFrames < 90;
+
+    /*
+     * Boss mode.
+     *
+     * While the Overseer is alive the goal is the boss, not the exit: close in and stomp the core
+     * during its exposed window, and back off out of its column while it is armed. This overrides
+     * the terrain rules — the arena floor is flat, so there is nothing else to negotiate.
+     */
+    const boss = this.world.boss;
+    if (boss !== null && boss.state === 'active' && this.isInsideArena(boss)) {
+      const bossCenter = boss.body.x + boss.body.width / 2;
+      const playerCenter = body.x + body.width / 2;
+      const gap = bossCenter - playerCenter;
+      const exposed = this.world.isBossVulnerable(boss);
+
+      if (exposed) {
+        // Line up on the core, then hop onto it (a stomp needs a descending landing).
+        this.set('right', gap > 6);
+        this.set('left', gap < -6);
+        const lined = Math.abs(gap) < 26;
+        if (lined && player.isOnGround && this.jumpCooldown === 0) {
+          this.armJump(12);
+        }
+        this.set('jump', this.jumpHoldFrames > 0);
+        // Dash to close the distance: the exposed window is short.
+        this.set('dash', Math.abs(gap) > 90 && player.isOnGround);
+        this.set('down', false);
+        return;
+      }
+
+      // Anything else wandering into the waiting spot still needs stomping.
+      const minionClose = this.world.enemies.some((other) => {
+        if (other === boss || other.state !== 'active') return false;
+        const otherGap = other.body.x + other.body.width / 2 - playerCenter;
+        return Math.abs(otherGap) < 34 && Math.abs(other.body.y - body.y) < 30;
+      });
+      if (minionClose && player.isOnGround && this.jumpCooldown === 0) {
+        this.armJump(12);
+      }
+
+      // Armed: retreat out of the bay door, where the wall breaks its line of fire, and wait for
+      // the core to open. Standing in the open trading hits with a boss is how bots die.
+      // Far enough back that the bay wall blocks the boss' downward line of fire.
+      const safeX = boss.patrolMinX - 130;
+      const towardsSafety = safeX - body.x;
+      this.set('right', towardsSafety > 8);
+      this.set('left', towardsSafety < -8);
+      this.set('jump', this.jumpHoldFrames > 0 || (boltIncoming && player.isOnGround));
+      this.set('dash', false);
+      this.set('down', false);
+      return;
+    }
 
     // Wait rather than walk into a descending press.
     const waiting = pressBlocking && player.isOnGround;

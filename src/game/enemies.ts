@@ -17,14 +17,19 @@ import { TileKind, tileFlags } from './tiles';
  * - **Turret** — bolted down, fires slow tracking bolts along its firing line. Cannot be stomped;
  *   it must be dodged or out-ranged.
  * - **Crusher** — a telegraphed slamming press. Instantly lethal at the bottom of its stroke.
+ * - **Overseer** — the finale. A gantry crane that patrols overhead, rains bolts, then slams down and
+ *   exposes its cooling core for exactly one stomp. Three stomps and the plant loses its manager.
  *
  * Everything lives in a flat array of `Enemy` records with a discriminated `kind`, updated by one
  * exhaustive switch, so adding an archetype is a compile error until it is handled everywhere.
  */
 
-export type EnemyKind = 'walker' | 'drone' | 'turret' | 'crusher';
+export type EnemyKind = 'walker' | 'drone' | 'turret' | 'crusher' | 'overseer';
 
 export type EnemyState = 'active' | 'dying' | 'dead';
+
+/** Overseer phases: patrol overhead → slam → sit exposed → winch back up. */
+export type OverseerPhase = 'patrol' | 'slam' | 'exposed' | 'rise';
 
 export interface Enemy {
   readonly kind: EnemyKind;
@@ -40,13 +45,20 @@ export interface Enemy {
   readonly homeX: number;
   readonly homeY: number;
   /** Sine phase offset so a row of drones does not move in lockstep. */
-  readonly phase: number;
+  readonly sinePhase: number;
   /** Remaining hits before dying (drones take one stomp, crushers are invincible). */
   hitPoints: number;
   /** Time left in the death animation. */
   deathTimer: number;
-  /** Set while a crusher is slamming — its contact is lethal. */
+  /** Set while a crusher/boss is slamming — its contact is lethal. */
   lethal: boolean;
+  /** Boss only: current phase of the encounter. */
+  bossPhase: OverseerPhase;
+  /** Boss only: seconds until the next volley. */
+  volleyTimer: number;
+  /** Boss only: patrol bounds in world pixels. */
+  patrolMinX: number;
+  patrolMaxX: number;
 }
 
 export interface Projectile {
@@ -59,7 +71,7 @@ export interface Projectile {
 }
 
 export interface EnemyEvent {
-  readonly type: 'enemyKilled' | 'enemyShot' | 'crusherSlam' | 'crusherImpact';
+  readonly type: 'enemyKilled' | 'enemyHurt' | 'enemyShot' | 'crusherSlam' | 'crusherImpact';
   readonly x: number;
   readonly y: number;
   readonly kind: EnemyKind;
@@ -79,7 +91,7 @@ export const TURRET_COOLDOWN = 1.7;
 export const TURRET_WINDUP = 0.45;
 export const PROJECTILE_SPEED = 118;
 export const PROJECTILE_SIZE = 5;
-export const PROJECTILE_LIFE = 3.2;
+export const PROJECTILE_LIFE = 2;
 export const CRUSHER_SIZE = { width: 30, height: 22 } as const;
 export const CRUSHER_REST_TIME = 1.5;
 export const CRUSHER_WINDUP_TIME = 0.45;
@@ -87,11 +99,27 @@ export const CRUSHER_SLAM_SPEED = 420;
 export const CRUSHER_RETURN_SPEED = 46;
 export const CRUSHER_MAX_DROP = 96;
 export const ENEMY_DEATH_TIME = 0.4;
+
+// ── Overseer (boss) ─────────────────────────────────────────────────────────────────────────────
+export const OVERSEER_SIZE = { width: 46, height: 26 } as const;
+export const OVERSEER_HIT_POINTS = 3;
+/** Horizontal patrol speed; each hit taken makes it angrier (and faster). */
+export const OVERSEER_PATROL_SPEED = 40;
+export const OVERSEER_PATROL_SPEED_PER_HIT = 16;
+export const OVERSEER_PATROL_TIME = 3.4;
+export const OVERSEER_VOLLEY_INTERVAL = 1.15;
+export const OVERSEER_SLAM_SPEED = 360;
+export const OVERSEER_RISE_SPEED = 70;
+/** How long the core stays exposed (and stompable) after a slam. */
+export const OVERSEER_VULNERABLE_TIME = 3;
+export const OVERSEER_MAX_DROP = 118;
 /** Vertical band, measured from an enemy's top edge, in which a falling player counts as stomping. */
 export const STOMP_TOLERANCE = 8;
 
 export function isEnemyKind(kind: string): kind is EnemyKind {
-  return kind === 'walker' || kind === 'drone' || kind === 'turret' || kind === 'crusher';
+  return (
+    kind === 'walker' || kind === 'drone' || kind === 'turret' || kind === 'crusher' || kind === 'overseer'
+  );
 }
 
 export function createEnemy(spawn: EntitySpawn, kind: EnemyKind, index: number): Enemy {
@@ -110,10 +138,16 @@ export function createEnemy(spawn: EntitySpawn, kind: EnemyKind, index: number):
     timer: kind === 'turret' ? TURRET_WINDUP + (index % 4) * 0.25 : CRUSHER_REST_TIME,
     homeX: x,
     homeY: y,
-    phase: (index % 8) * 0.85,
-    hitPoints: kind === 'turret' ? 1 : 1,
+    sinePhase: (index % 8) * 0.85,
+    hitPoints: kind === 'overseer' ? OVERSEER_HIT_POINTS : 1,
     deathTimer: 0,
     lethal: false,
+    bossPhase: 'patrol',
+    volleyTimer: OVERSEER_VOLLEY_INTERVAL,
+    // Patrol bounds are widened by the world once the arena is known; a sensible default keeps the
+    // boss oscillating around its spawn if nobody sets them.
+    patrolMinX: x - 60,
+    patrolMaxX: x + 60,
   };
 }
 
@@ -127,6 +161,8 @@ export function sizeFor(kind: EnemyKind): { readonly width: number; readonly hei
       return TURRET_SIZE;
     case 'crusher':
       return CRUSHER_SIZE;
+    case 'overseer':
+      return OVERSEER_SIZE;
     default: {
       const exhaustive: never = kind;
       throw new Error(`Unhandled enemy kind: ${String(exhaustive)}`);
@@ -143,6 +179,9 @@ export function isStompable(kind: EnemyKind): boolean {
     case 'turret':
     case 'crusher':
       return false;
+    // The boss *is* stompable, but only while its core is exposed — see `isStompContact`.
+    case 'overseer':
+      return true;
     default: {
       const exhaustive: never = kind;
       throw new Error(`Unhandled enemy kind: ${String(exhaustive)}`);
@@ -186,6 +225,9 @@ export function updateEnemy(enemy: Enemy, dtSec: number, context: EnemyUpdateCon
       break;
     case 'crusher':
       updateCrusher(enemy, dtSec, context);
+      break;
+    case 'overseer':
+      updateOverseer(enemy, dtSec, context);
       break;
     default: {
       const exhaustive: never = enemy.kind;
@@ -239,7 +281,7 @@ function updateDrone(enemy: Enemy, dtSec: number, context: EnemyUpdateContext): 
   }
 
   const hoverY =
-    enemy.homeY + Math.sin(enemy.animTime * DRONE_HOVER_SPEED + enemy.phase) * DRONE_HOVER_AMPLITUDE;
+    enemy.homeY + Math.sin(enemy.animTime * DRONE_HOVER_SPEED + enemy.sinePhase) * DRONE_HOVER_AMPLITUDE;
   enemy.body.vy = (hoverY - enemy.body.y) / Math.max(dtSec, 1e-6);
   moveAndCollide(enemy.body, dtSec, map, scratchCollision, { useOneWay: false });
   if (scratchCollision.hitWallLeft || scratchCollision.hitWallRight) {
@@ -341,6 +383,148 @@ function updateCrusher(enemy: Enemy, dtSec: number, context: EnemyUpdateContext)
   }
 }
 
+/**
+ * The Overseer: the finale encounter.
+ *
+ * A four-phase loop built from the same primitives as the rest of the cast:
+ * 1. **patrol** — tracks the player along its gantry, dropping aimed volleys (turret behaviour).
+ * 2. **slam** — drops like a press; contact is lethal (crusher behaviour).
+ * 3. **exposed** — sits on the floor with its cooling core open: the only window to stomp it.
+ * 4. **rise** — winches back up and starts again, faster and angrier for each hit taken.
+ *
+ * The player is never required to touch it outside the exposed window, so the fight is about
+ * reading the telegraph rather than trading damage.
+ */
+function updateOverseer(enemy: Enemy, dtSec: number, context: EnemyUpdateContext): void {
+  const { playerBody, playerAlive, projectiles, events, map, rng } = context;
+  const hitsTaken = OVERSEER_HIT_POINTS - enemy.hitPoints;
+  const centerX = enemy.body.x + enemy.body.width / 2;
+
+  switch (enemy.bossPhase) {
+    case 'patrol': {
+      enemy.lethal = false;
+      // Chase the player horizontally within the gantry limits.
+      const playerCenterX = playerBody.x + playerBody.width / 2;
+      const speed = OVERSEER_PATROL_SPEED + hitsTaken * OVERSEER_PATROL_SPEED_PER_HIT;
+      const towards = Math.sign(playerCenterX - centerX);
+      enemy.direction = towards < 0 ? -1 : 1;
+      enemy.body.x = clamp(
+        enemy.body.x + towards * speed * dtSec,
+        enemy.patrolMinX,
+        Math.max(enemy.patrolMinX, enemy.patrolMaxX - enemy.body.width),
+      );
+      enemy.body.y = enemy.homeY;
+
+      /*
+       * The Overseer only engages targets inside its bay.
+       *
+       * Firing at the doorway from across the room made the approach a coin-flip: there is no cover
+       * on the threshold, so the only counterplay was luck. Now stepping out of the bay is a real
+       * option, which is what makes the "wait for the slam, then rush the core" rhythm readable.
+       */
+      const playerInBay =
+        playerBody.x + playerBody.width > enemy.patrolMinX && playerBody.x < enemy.patrolMaxX;
+      enemy.volleyTimer -= dtSec;
+      if (enemy.volleyTimer <= 0 && playerAlive && playerInBay) {
+        enemy.volleyTimer = Math.max(0.55, OVERSEER_VOLLEY_INTERVAL - hitsTaken * 0.18);
+        // A short spread of aimed bolts from the underside of the gantry.
+        const muzzleY = enemy.body.y + enemy.body.height;
+        const spread = 0.22;
+        const baseAngle = Math.atan2(
+          playerBody.y + playerBody.height / 2 - muzzleY,
+          playerBody.x + playerBody.width / 2 - centerX,
+        );
+        for (let i = -1; i <= 1; i += 1) {
+          const angle = baseAngle + i * spread + rng.signedRange(0.04);
+          projectiles.spawn(
+            centerX + i * 12,
+            muzzleY + 2,
+            Math.cos(angle) * PROJECTILE_SPEED,
+            Math.sin(angle) * PROJECTILE_SPEED,
+          );
+        }
+        events.push({ type: 'enemyShot', x: centerX, y: muzzleY, kind: 'overseer' });
+      }
+
+      enemy.timer -= dtSec;
+      if (enemy.timer <= 0) {
+        enemy.bossPhase = 'slam';
+        enemy.lethal = true;
+        // The slam is a reset beat: it clears the air so the stomp window is a clean sprint rather
+        // than a run through leftover bolts.
+        projectiles.clear();
+        events.push({ type: 'crusherSlam', x: centerX, y: enemy.body.y, kind: 'overseer' });
+      }
+      break;
+    }
+    case 'slam': {
+      enemy.body.y += OVERSEER_SLAM_SPEED * dtSec;
+      const hitFloor = map.overlapsSolid({
+        x: enemy.body.x + 2,
+        y: enemy.body.y + enemy.body.height,
+        width: enemy.body.width - 4,
+        height: 2,
+      });
+      if (enemy.body.y >= enemy.homeY + OVERSEER_MAX_DROP || hitFloor) {
+        enemy.bossPhase = 'exposed';
+        enemy.lethal = false;
+        enemy.timer = OVERSEER_VULNERABLE_TIME;
+        events.push({
+          type: 'crusherImpact',
+          x: centerX,
+          y: enemy.body.y + enemy.body.height,
+          kind: 'overseer',
+        });
+      }
+      break;
+    }
+    case 'exposed': {
+      enemy.timer -= dtSec;
+      if (enemy.timer <= 0) {
+        enemy.bossPhase = 'rise';
+      }
+      break;
+    }
+    case 'rise': {
+      enemy.body.y = Math.max(enemy.homeY, enemy.body.y - OVERSEER_RISE_SPEED * dtSec);
+      if (enemy.body.y <= enemy.homeY) {
+        enemy.bossPhase = 'patrol';
+        enemy.timer = Math.max(1.4, OVERSEER_PATROL_TIME - hitsTaken * 0.6);
+        enemy.volleyTimer = 0.4;
+      }
+      break;
+    }
+    default: {
+      const exhaustive: never = enemy.bossPhase;
+      throw new Error(`Unhandled overseer phase: ${String(exhaustive)}`);
+    }
+  }
+}
+
+/** Is the boss' core exposed, i.e. can it be hurt right now? */
+export function isOverseerVulnerable(enemy: Enemy): boolean {
+  return enemy.kind === 'overseer' && enemy.bossPhase === 'exposed' && enemy.state === 'active';
+}
+
+/**
+ * Does touching this enemy hurt?
+ *
+ * The boss is inert while its core is open and while it retracts: landing a stomp and then being
+ * punished for standing next to the thing you just hit is the kind of unfairness that makes a fight
+ * feel broken rather than hard.
+ */
+export function contactDamages(enemy: Enemy): boolean {
+  if (enemy.state !== 'active') return false;
+  if (enemy.kind !== 'overseer') return true;
+  return enemy.bossPhase === 'patrol' || enemy.bossPhase === 'slam';
+}
+
+/** Set the gantry the boss patrols along (called by the world once the arena is known). */
+export function setOverseerPatrolBounds(enemy: Enemy, minX: number, maxX: number): void {
+  enemy.patrolMinX = minX;
+  enemy.patrolMaxX = maxX;
+}
+
 /** Is the crusher winding up (shaking) rather than resting? */
 export function isCrusherWindingUp(enemy: Enemy): boolean {
   return enemy.kind === 'crusher' && !enemy.lethal && enemy.timer <= 0 && enemy.body.y <= enemy.homeY;
@@ -368,8 +552,22 @@ export function hasLineOfSight(
 export function damageEnemy(enemy: Enemy, events: EnemyEvent[]): boolean {
   if (enemy.state !== 'active') return false;
   if (!isStompable(enemy.kind)) return false;
+  if (enemy.kind === 'overseer' && !isOverseerVulnerable(enemy)) return false;
   enemy.hitPoints -= 1;
-  if (enemy.hitPoints > 0) return false;
+  if (enemy.hitPoints > 0) {
+    // Survived: the boss recoils, closes up and immediately starts winching away.
+    if (enemy.kind === 'overseer') {
+      enemy.bossPhase = 'rise';
+      enemy.timer = 0;
+      events.push({
+        type: 'enemyHurt',
+        x: enemy.body.x + enemy.body.width / 2,
+        y: enemy.body.y,
+        kind: enemy.kind,
+      });
+    }
+    return false;
+  }
   enemy.state = 'dying';
   enemy.deathTimer = ENEMY_DEATH_TIME;
   enemy.body.vx = 0;
@@ -393,6 +591,8 @@ export function damageEnemy(enemy: Enemy, events: EnemyEvent[]): boolean {
 export function isStompContact(playerBody: Rect, playerVy: number, enemy: Enemy): boolean {
   if (playerVy <= 0) return false;
   if (!isStompable(enemy.kind)) return false;
+  // The boss is only stompable during its exposed window; at any other time it is solid death.
+  if (enemy.kind === 'overseer' && !isOverseerVulnerable(enemy)) return false;
   const feet = playerBody.y + playerBody.height;
   return feet <= enemy.body.y + STOMP_TOLERANCE;
 }

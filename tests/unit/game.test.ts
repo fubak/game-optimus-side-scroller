@@ -349,8 +349,9 @@ describe('Game — level select', () => {
     menuTap(game, input, 'confirm');
     expect(game.scene.name).toBe('levelSelect');
 
-    // Level 2 is unlocked and starts.
-    menuTap(game, input, 'up');
+    // Walk back up to level 2, which is unlocked, and start it.
+    for (let i = 0; i < LEVELS.length - 2; i += 1) menuTap(game, input, 'up');
+    expect(game.scene.cursor).toBe(1);
     menuTap(game, input, 'confirm');
     expect(game.scene.name).toBe('playing');
     expect(game.scene.levelIndex).toBe(1);

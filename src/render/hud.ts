@@ -1,5 +1,6 @@
 import { clamp } from '../core/math';
 import { ENERGY_LOW_THRESHOLD, HEALTH_MAX } from '../game/constants';
+import { OVERSEER_HIT_POINTS } from '../game/enemies';
 import type { World } from '../game/world';
 import { palette } from './palette';
 import { drawText } from './text';
@@ -85,6 +86,26 @@ export class Hud {
       color: overPar ? palette.uiWarn : palette.uiDim,
       align: 'right',
     });
+
+    // ── Boss health ───────────────────────────────────────────────────────────────────────────
+    const boss = world.boss;
+    if (boss !== null && boss.state !== 'dead') {
+      const barWidth = 120;
+      const x = Math.round(viewWidth / 2 - barWidth / 2);
+      drawText(ctx, 'OVERSEER', viewWidth / 2, 6, { color: palette.hazard, align: 'center' });
+      ctx.fillStyle = palette.plateShadow;
+      ctx.fillRect(x - 1, 15, barWidth + 2, 6);
+      ctx.fillStyle = palette.hazardDark;
+      ctx.fillRect(x, 16, barWidth, 4);
+      ctx.fillStyle = world.isBossVulnerable(boss) ? palette.visorGlow : palette.hazard;
+      ctx.fillRect(x, 16, Math.round((barWidth * Math.max(0, boss.hitPoints)) / OVERSEER_HIT_POINTS), 4);
+      if (world.isBossVulnerable(boss)) {
+        drawText(ctx, 'CORE EXPOSED — STOMP IT', viewWidth / 2, 24, {
+          color: palette.visorGlow,
+          align: 'center',
+        });
+      }
+    }
 
     // ── Toasts ────────────────────────────────────────────────────────────────────────────────
     this.toasts.forEach((toast, index) => {

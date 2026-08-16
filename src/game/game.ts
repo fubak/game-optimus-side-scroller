@@ -334,6 +334,10 @@ export class Game {
         case 'enemyShot':
           this.audio.play('shoot', { volume: 0.6 });
           break;
+        case 'enemyHurt':
+          this.audio.play('stomp');
+          this.hud.push('CORE BREACHED', palette.uiWarn, 1.4);
+          break;
         case 'crusherSlam':
           this.audio.play('crusher', { volume: 0.7 });
           break;
@@ -355,6 +359,10 @@ export class Game {
           break;
         case 'goal':
           this.audio.play('goal');
+          break;
+        case 'goalLocked':
+          this.audio.play('empty', { volume: 0.6 });
+          this.hud.push('HATCH SEALED — SHUT DOWN THE OVERSEER', palette.uiWarn, 1.6);
           break;
         case 'failed':
           break;

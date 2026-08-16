@@ -384,6 +384,59 @@ export function drawCrusher(ctx: CanvasRenderingContext2D, options: EnemyRenderO
   ctx.restore();
 }
 
+/**
+ * The Overseer: a gantry crane with a cooling core.
+ *
+ * The core is the whole point of the sprite — it reads dark and sealed while the boss is dangerous
+ * and glows open during the stomp window, so the player learns the rhythm by eye alone.
+ */
+export function drawOverseer(
+  ctx: CanvasRenderingContext2D,
+  options: EnemyRenderOptions & { readonly vulnerable: boolean; readonly hitPoints: number },
+): void {
+  const { x, y, width, height, animTime, telegraph, vulnerable, hitPoints } = options;
+  ctx.save();
+  applyDying(ctx, options);
+  const shake = telegraph === true ? Math.sin(animTime * 50) * 1.2 : 0;
+
+  // Rails to the ceiling.
+  fill(ctx, x + 4, -2, width - 8, 3, palette.plateDark);
+  fill(ctx, x + width / 2 - 4, -2, 8, y + 4, palette.plateDark);
+  fill(ctx, x + width / 2 - 1, -2, 2, y + 4, palette.plateFace);
+
+  // Chassis.
+  fill(ctx, x + shake, y, width, height, palette.plateFace);
+  fill(ctx, x + shake, y, width, 3, palette.plateLight);
+  fill(ctx, x + shake, y + height - 5, width, 5, palette.joint);
+  fill(ctx, x + 3 + shake, y + 4, width - 6, height - 11, palette.plateDark);
+
+  // Hazard chevrons on the crushing face.
+  for (let i = 0; i < width - 6; i += 8) {
+    fill(ctx, x + 3 + i + shake, y + height - 5, 4, 5, telegraph === true ? palette.hazard : palette.uiWarn);
+  }
+
+  // Cooling core: sealed vents, or an open glowing eye during the stomp window.
+  const coreX = x + width / 2 - 7 + shake;
+  const coreY = y + 7;
+  if (vulnerable) {
+    const pulse = 0.6 + 0.4 * Math.sin(animTime * 14);
+    fill(ctx, coreX - 2, coreY - 2, 18, 12, palette.hazardDark);
+    fill(ctx, coreX, coreY, 14, 8, pulse > 0.75 ? palette.visorGlow : palette.visor);
+    fill(ctx, coreX + 3, coreY + 2, 8, 4, palette.white);
+  } else {
+    fill(ctx, coreX, coreY, 14, 8, palette.grate);
+    for (let i = 0; i < 14; i += 4) {
+      fill(ctx, coreX + i, coreY, 2, 8, palette.plateShadow);
+    }
+  }
+
+  // Damage pips, so the player can see the fight progressing.
+  for (let i = 0; i < 3; i += 1) {
+    fill(ctx, x + 5 + i * 6 + shake, y + 3, 4, 2, i < hitPoints ? palette.hazard : palette.plateShadow);
+  }
+  ctx.restore();
+}
+
 export function drawProjectile(
   ctx: CanvasRenderingContext2D,
   x: number,

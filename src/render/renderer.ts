@@ -12,6 +12,7 @@ import {
   drawDashGhost,
   drawDrone,
   drawOptimus,
+  drawOverseer,
   drawProjectile,
   drawTurret,
   drawWalker,
@@ -107,7 +108,14 @@ export class WorldRenderer {
 
     for (const enemy of world.enemies) {
       if (enemy.state === 'dead') continue;
-      drawEnemy(ctx, enemy, cameraX, cameraY, world.isCrusherTelegraphing(enemy));
+      drawEnemy(
+        ctx,
+        enemy,
+        cameraX,
+        cameraY,
+        world.isCrusherTelegraphing(enemy),
+        world.isBossVulnerable(enemy),
+      );
     }
 
     for (const projectile of world.projectiles.all) {
@@ -193,6 +201,7 @@ function drawEnemy(
   cameraX: number,
   cameraY: number,
   telegraphing: boolean,
+  vulnerable = false,
 ): void {
   const options = {
     x: Math.round(enemy.body.x - cameraX),
@@ -216,6 +225,9 @@ function drawEnemy(
       break;
     case 'crusher':
       drawCrusher(ctx, options);
+      break;
+    case 'overseer':
+      drawOverseer(ctx, { ...options, vulnerable, hitPoints: enemy.hitPoints });
       break;
     default: {
       const exhaustive: never = enemy.kind;

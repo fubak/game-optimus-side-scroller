@@ -6,12 +6,15 @@ import { ParticleSystem } from '../render/particles';
 import { Camera } from './camera';
 import {
   ProjectilePool,
+  contactDamages,
   createEnemy,
   damageEnemy,
   isCrusherWindingUp,
   isEnemyKind,
+  isOverseerVulnerable,
   isStompContact,
   overlapsEnemy,
+  setOverseerPatrolBounds,
   updateEnemy,
 } from './enemies';
 import type { Enemy, EnemyEvent, EnemyKind } from './enemies';
@@ -57,6 +60,7 @@ export type WorldEvent =
       readonly score: number;
     }
   | { readonly type: 'enemyShot'; readonly x: number; readonly y: number }
+  | { readonly type: 'enemyHurt'; readonly x: number; readonly y: number }
   | { readonly type: 'crusherSlam'; readonly x: number; readonly y: number }
   | {
       readonly type: 'pickup';
@@ -67,6 +71,7 @@ export type WorldEvent =
     }
   | { readonly type: 'checkpoint'; readonly tx: number; readonly ty: number }
   | { readonly type: 'goal'; readonly timeSec: number; readonly score: number }
+  | { readonly type: 'goalLocked' }
   | { readonly type: 'death'; readonly cause: DeathCause; readonly livesLeft: number }
   | { readonly type: 'respawn' }
   | { readonly type: 'failed' };
@@ -121,6 +126,8 @@ export class World {
    * they connect; particles and the camera keep moving so it reads as impact, not as a stall.
    */
   private hitStopTimer = 0;
+  /** Rate limit for the "hatch is sealed" prompt. */
+  private goalLockedCooldown = 0;
   private readonly enemyEvents: EnemyEvent[] = [];
 
   /** When true, screen shake is suppressed (accessibility setting). */
@@ -147,7 +154,14 @@ export class World {
         continue;
       }
       if (isEnemyKind(spawn.kind)) {
-        this.enemies.push(createEnemy(spawn, spawn.kind, enemyIndex));
+        const enemy = createEnemy(spawn, spawn.kind, enemyIndex);
+        if (spawn.kind === 'overseer') {
+          // The boss patrols the open span of its arena: from its spawn column outwards until the
+          // level walls it in.
+          const bounds = this.findOpenSpan(spawn.tx, spawn.ty);
+          setOverseerPatrolBounds(enemy, bounds.minX, bounds.maxX);
+        }
+        this.enemies.push(enemy);
         enemyIndex += 1;
       }
     }
@@ -196,6 +210,16 @@ export class World {
     this.camera.addShake(amount);
   }
 
+  /** Widest run of open tiles around a spawn column, used to size the boss arena. */
+  private findOpenSpan(tx: number, ty: number): { minX: number; maxX: number } {
+    const tileSize = this.map.tileSize;
+    let left = tx;
+    while (left > 0 && this.map.tileAt(left - 1, ty) === TileKind.Empty) left -= 1;
+    let right = tx;
+    while (right < this.map.width - 1 && this.map.tileAt(right + 1, ty) === TileKind.Empty) right += 1;
+    return { minX: left * tileSize, maxX: (right + 1) * tileSize };
+  }
+
   /** Is this checkpoint tile the one the player will respawn at? */
   isCheckpointActive(tx: number, ty: number): boolean {
     const position = spawnPositionFor(tx, ty);
@@ -215,6 +239,8 @@ export class World {
     if (this.state === 'playing') {
       this.elapsed += dtSec;
     }
+
+    this.goalLockedCooldown = Math.max(0, this.goalLockedCooldown - dtSec);
 
     if (this.hitStopTimer > 0) {
       // Frozen: keep the presentation alive (particles, shake) but do not advance the simulation.
@@ -364,6 +390,11 @@ export class World {
             score: SCORE_ENEMY,
           });
           break;
+        case 'enemyHurt':
+          this.shake(SHAKE_STOMP);
+          this.particles.burst('spark', event.x, event.y, 16, this.rng, { speed: 150, life: 0.5 });
+          this.events.push({ type: 'enemyHurt', x: event.x, y: event.y });
+          break;
         case 'enemyShot':
           this.events.push({ type: 'enemyShot', x: event.x, y: event.y });
           break;
@@ -394,7 +425,7 @@ export class World {
     for (const enemy of this.enemies) {
       if (!overlapsEnemy(this.player.body, enemy)) continue;
 
-      if (enemy.kind === 'crusher' && enemy.lethal) {
+      if ((enemy.kind === 'crusher' || enemy.kind === 'overseer') && enemy.lethal) {
         this.pendingDeathCause = 'crushed';
         this.player.kill(this.playerEvents);
         return;
@@ -410,6 +441,7 @@ export class World {
         }
       }
 
+      if (!contactDamages(enemy)) continue;
       const enemyCenterX = enemy.body.x + enemy.body.width / 2;
       if (this.damagePlayer(1, enemyCenterX, 'damage')) {
         this.hitStopTimer = 0.06;
@@ -431,7 +463,17 @@ export class World {
 
   /** Is this crusher telegraphing its slam? Used by the renderer to shake it. */
   isCrusherTelegraphing(enemy: Enemy): boolean {
-    return isCrusherWindingUp(enemy);
+    return isCrusherWindingUp(enemy) || (enemy.kind === 'overseer' && enemy.lethal);
+  }
+
+  /** Is the boss' core open right now? Drives the HUD prompt and its sprite. */
+  isBossVulnerable(enemy: Enemy): boolean {
+    return isOverseerVulnerable(enemy);
+  }
+
+  /** The boss, if this level has one. */
+  get boss(): Enemy | null {
+    return this.enemies.find((enemy) => enemy.kind === 'overseer') ?? null;
   }
 
   private checkTileTriggers(): void {
@@ -548,8 +590,22 @@ export class World {
     });
   }
 
+  /** True while a boss level still has its boss alive: the extraction hatch stays shut. */
+  get isGoalLocked(): boolean {
+    const boss = this.boss;
+    return boss !== null && boss.state !== 'dead';
+  }
+
   private completeLevel(): void {
     if (this.state !== 'playing') return;
+    if (this.isGoalLocked) {
+      // Reaching the hatch mid-fight is not a win; nudge the player back towards the boss.
+      if (this.goalLockedCooldown <= 0) {
+        this.goalLockedCooldown = 1.6;
+        this.events.push({ type: 'goalLocked' });
+      }
+      return;
+    }
     this.state = 'complete';
     this.scoreValue += this.timeBonus();
     this.player.celebrate();
