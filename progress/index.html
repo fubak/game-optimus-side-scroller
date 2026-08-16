@@ -74,23 +74,23 @@
 <body>
 <header class="top">
   <h1>Optimus<b>:</b> Red Protocol</h1>
-  <div class="sub">build progress &middot; generated 2026-08-16 02:21:43 UTC &middot; page refreshes every 30 s</div>
+  <div class="sub">build progress &middot; generated 2026-08-16 02:36:45 UTC &middot; page refreshes every 30 s</div>
 </header>
 <main>
-  <div class="banner"><strong>Round 1: Playable — physics, controller, level, and a lighting rebalance</strong><br />
-         Currently working on: Cast shadows and bloom energy. Shadow casters are wired up and the occluder mask renders correctly, but no shadow is actually visible in any frame — the character does not appear anchored to the ground. Bloom energy measures 0.001 against a 0.015-0.06 target on both gameplay scenarios, so there is no god-ray or glow presence, and cyan presence is 10x below target. These three together are why the image still reads flat next to the reference bar.</div>
+  <div class="banner"><strong>Round 2: Grounding — contact occlusion and a working shadow term</strong><br />
+         Currently working on: Bloom and volumetrics carry almost no energy. God rays render but are effectively invisible, and bloom energy measures around 0.001 against a 0.015-0.06 target on gameplay framings, so there is no atmospheric light in the frame. Next to the reference bar the image reads as correctly lit but inert: nothing glows, nothing scatters, and the air is empty. Particle density is also far below the bar - a few hundred dust motes where the reference has thousands, with no wind gusts, no ground-level drift, and no impact debris.</div>
 
   <section>
     <h2>Latest clips (recorded at a locked 60 fps)</h2>
     <div class="videos"><figure class="video">
+            <video src="media/ares_traversal.mp4" controls loop muted playsinline preload="metadata"></video>
+            <figcaption>ares_traversal <span>805 KB · 60 fps</span></figcaption>
+          </figure><figure class="video">
             <video src="media/ares_closeup.mp4" controls loop muted playsinline preload="metadata"></video>
             <figcaption>ares_closeup <span>75 KB · 60 fps</span></figcaption>
           </figure><figure class="video">
             <video src="media/ares_vista.mp4" controls loop muted playsinline preload="metadata"></video>
             <figcaption>ares_vista <span>101 KB · 60 fps</span></figcaption>
-          </figure><figure class="video">
-            <video src="media/ares_traversal.mp4" controls loop muted playsinline preload="metadata"></video>
-            <figcaption>ares_traversal <span>1107 KB · 60 fps</span></figcaption>
           </figure></div>
   </section>
 
@@ -101,6 +101,11 @@
         <h3>scenes</h3>
         <div class="grid">
           <figure>
+                <a href="media/ares_traversal_hero0.png" target="_blank" rel="noopener">
+                  <img src="media/ares_traversal_hero0.png" alt="ares_traversal_hero0" loading="lazy" />
+                </a>
+                <figcaption>ares_traversal_hero0 <span>1850 KB</span></figcaption>
+              </figure><figure>
                 <a href="media/ares_closeup_hero0.png" target="_blank" rel="noopener">
                   <img src="media/ares_closeup_hero0.png" alt="ares_closeup_hero0" loading="lazy" />
                 </a>
@@ -110,11 +115,62 @@
                   <img src="media/ares_vista_hero0.png" alt="ares_vista_hero0" loading="lazy" />
                 </a>
                 <figcaption>ares_vista_hero0 <span>1790 KB</span></figcaption>
-              </figure><figure>
-                <a href="media/ares_traversal_hero0.png" target="_blank" rel="noopener">
-                  <img src="media/ares_traversal_hero0.png" alt="ares_traversal_hero0" loading="lazy" />
+              </figure>
+        </div>
+      </section>
+      <section class="gallery-group">
+        <h3>debug</h3>
+        <div class="grid">
+          <figure>
+                <a href="media/debug/11_contactAO.png" target="_blank" rel="noopener">
+                  <img src="media/debug/11_contactAO.png" alt="11_contactAO" loading="lazy" />
                 </a>
-                <figcaption>ares_traversal_hero0 <span>1848 KB</span></figcaption>
+                <figcaption>11_contactAO <span>8 KB</span></figcaption>
+              </figure><figure>
+                <a href="media/debug/10_scene.png" target="_blank" rel="noopener">
+                  <img src="media/debug/10_scene.png" alt="10_scene" loading="lazy" />
+                </a>
+                <figcaption>10_scene <span>12 KB</span></figcaption>
+              </figure><figure>
+                <a href="media/debug/08_bloom.png" target="_blank" rel="noopener">
+                  <img src="media/debug/08_bloom.png" alt="08_bloom" loading="lazy" />
+                </a>
+                <figcaption>08_bloom <span>11 KB</span></figcaption>
+              </figure><figure>
+                <a href="media/debug/07_godrays.png" target="_blank" rel="noopener">
+                  <img src="media/debug/07_godrays.png" alt="07_godrays" loading="lazy" />
+                </a>
+                <figcaption>07_godrays <span>9 KB</span></figcaption>
+              </figure><figure>
+                <a href="media/debug/06_light.png" target="_blank" rel="noopener">
+                  <img src="media/debug/06_light.png" alt="06_light" loading="lazy" />
+                </a>
+                <figcaption>06_light <span>8 KB</span></figcaption>
+              </figure><figure>
+                <a href="media/debug/05_occluder.png" target="_blank" rel="noopener">
+                  <img src="media/debug/05_occluder.png" alt="05_occluder" loading="lazy" />
+                </a>
+                <figcaption>05_occluder <span>9 KB</span></figcaption>
+              </figure><figure>
+                <a href="media/debug/04_depth.png" target="_blank" rel="noopener">
+                  <img src="media/debug/04_depth.png" alt="04_depth" loading="lazy" />
+                </a>
+                <figcaption>04_depth <span>5 KB</span></figcaption>
+              </figure><figure>
+                <a href="media/debug/03_material.png" target="_blank" rel="noopener">
+                  <img src="media/debug/03_material.png" alt="03_material" loading="lazy" />
+                </a>
+                <figcaption>03_material <span>14 KB</span></figcaption>
+              </figure><figure>
+                <a href="media/debug/02_normal.png" target="_blank" rel="noopener">
+                  <img src="media/debug/02_normal.png" alt="02_normal" loading="lazy" />
+                </a>
+                <figcaption>02_normal <span>151 KB</span></figcaption>
+              </figure><figure>
+                <a href="media/debug/01_albedo.png" target="_blank" rel="noopener">
+                  <img src="media/debug/01_albedo.png" alt="01_albedo" loading="lazy" />
+                </a>
+                <figcaption>01_albedo <span>76 KB</span></figcaption>
               </figure>
         </div>
       </section>
@@ -159,57 +215,6 @@
               </figure>
         </div>
       </section>
-      <section class="gallery-group">
-        <h3>debug</h3>
-        <div class="grid">
-          <figure>
-                <a href="media/debug/10_scene.png" target="_blank" rel="noopener">
-                  <img src="media/debug/10_scene.png" alt="10_scene" loading="lazy" />
-                </a>
-                <figcaption>10_scene <span>461 KB</span></figcaption>
-              </figure><figure>
-                <a href="media/debug/08_bloom.png" target="_blank" rel="noopener">
-                  <img src="media/debug/08_bloom.png" alt="08_bloom" loading="lazy" />
-                </a>
-                <figcaption>08_bloom <span>93 KB</span></figcaption>
-              </figure><figure>
-                <a href="media/debug/07_godrays.png" target="_blank" rel="noopener">
-                  <img src="media/debug/07_godrays.png" alt="07_godrays" loading="lazy" />
-                </a>
-                <figcaption>07_godrays <span>14 KB</span></figcaption>
-              </figure><figure>
-                <a href="media/debug/06_light.png" target="_blank" rel="noopener">
-                  <img src="media/debug/06_light.png" alt="06_light" loading="lazy" />
-                </a>
-                <figcaption>06_light <span>465 KB</span></figcaption>
-              </figure><figure>
-                <a href="media/debug/05_occluder.png" target="_blank" rel="noopener">
-                  <img src="media/debug/05_occluder.png" alt="05_occluder" loading="lazy" />
-                </a>
-                <figcaption>05_occluder <span>8 KB</span></figcaption>
-              </figure><figure>
-                <a href="media/debug/04_depth.png" target="_blank" rel="noopener">
-                  <img src="media/debug/04_depth.png" alt="04_depth" loading="lazy" />
-                </a>
-                <figcaption>04_depth <span>8 KB</span></figcaption>
-              </figure><figure>
-                <a href="media/debug/03_material.png" target="_blank" rel="noopener">
-                  <img src="media/debug/03_material.png" alt="03_material" loading="lazy" />
-                </a>
-                <figcaption>03_material <span>9 KB</span></figcaption>
-              </figure><figure>
-                <a href="media/debug/02_normal.png" target="_blank" rel="noopener">
-                  <img src="media/debug/02_normal.png" alt="02_normal" loading="lazy" />
-                </a>
-                <figcaption>02_normal <span>189 KB</span></figcaption>
-              </figure><figure>
-                <a href="media/debug/01_albedo.png" target="_blank" rel="noopener">
-                  <img src="media/debug/01_albedo.png" alt="01_albedo" loading="lazy" />
-                </a>
-                <figcaption>01_albedo <span>134 KB</span></figcaption>
-              </figure>
-        </div>
-      </section>
   </section>
 
   <section>
@@ -223,12 +228,12 @@
     <span class="val">8.0</span></div><div class="score"><span class="label">Atmospheric relevance</span>
     <span class="track ok"><i style="width:65%"></i></span>
     <span class="val">6.5</span></div><div class="score"><span class="label">Lighting</span>
-    <span class="track poor"><i style="width:55%"></i></span>
-    <span class="val">5.5</span></div><div class="score"><span class="label">Particle quality</span>
+    <span class="track ok"><i style="width:65%"></i></span>
+    <span class="val">6.5</span></div><div class="score"><span class="label">Particle quality</span>
     <span class="track poor"><i style="width:45%"></i></span>
     <span class="val">4.5</span></div><div class="score"><span class="label">Presence</span>
-    <span class="track poor"><i style="width:50%"></i></span>
-    <span class="val">5.0</span></div><div class="score"><span class="label">Composition &amp; readability</span>
+    <span class="track ok"><i style="width:60%"></i></span>
+    <span class="val">6.0</span></div><div class="score"><span class="label">Composition &amp; readability</span>
     <span class="track poor"><i style="width:55%"></i></span>
     <span class="val">5.5</span></div><div class="score"><span class="label">Thematic coherence</span>
     <span class="track ok"><i style="width:70%"></i></span>
@@ -281,27 +286,27 @@
         <table>
           <thead><tr><th>metric</th><th class="num">value</th><th class="target">target</th></tr></thead>
           <tbody>
-            <tr><td>dynamic range (p99-p1)</td><td class="num">0.596</td>
+            <tr><td>dynamic range (p99-p1)</td><td class="num">0.592</td>
     <td class="target">&amp;ge; 0.72</td></tr>
-            <tr><td>mean luminance</td><td class="num">0.311</td>
+            <tr><td>mean luminance</td><td class="num">0.308</td>
     <td class="target">0.18 - 0.45</td></tr>
             <tr><td>clipped white</td><td class="num">0.000</td>
     <td class="target">&amp;lt; 0.005</td></tr>
-            <tr><td>clipped black</td><td class="num">4.13e-3</td>
+            <tr><td>clipped black</td><td class="num">4.52e-3</td>
     <td class="target">&amp;lt; 0.05</td></tr>
-            <tr><td>near/far contrast ratio</td><td class="num">1.62</td>
+            <tr><td>near/far contrast ratio</td><td class="num">1.46</td>
     <td class="target">1.8 - 3.5</td></tr>
-            <tr><td>far/near saturation</td><td class="num">0.47</td>
+            <tr><td>far/near saturation</td><td class="num">0.46</td>
     <td class="target">0.35 - 0.70</td></tr>
-            <tr><td>bloom energy</td><td class="num">9.57e-4</td>
+            <tr><td>bloom energy</td><td class="num">9.03e-4</td>
     <td class="target">0.015 - 0.06</td></tr>
-            <tr><td>local contrast</td><td class="num">0.038</td>
+            <tr><td>local contrast</td><td class="num">0.036</td>
     <td class="target">&amp;ge; 0.03</td></tr>
-            <tr><td>cyan accent presence</td><td class="num">1.85e-4</td>
+            <tr><td>cyan accent presence</td><td class="num">2.08e-4</td>
     <td class="target">0.002 - 0.05</td></tr>
-            <tr><td>hue entropy</td><td class="num">0.557</td>
+            <tr><td>hue entropy</td><td class="num">0.552</td>
     <td class="target">&amp;le; 0.75</td></tr>
-            <tr><td>draw calls</td><td class="num">22.000</td>
+            <tr><td>draw calls</td><td class="num">23.000</td>
     <td class="target">&amp;le; 120</td></tr>
             <tr><td>fullscreen passes</td><td class="num">14.000</td>
     <td class="target">&amp;le; 18</td></tr>
@@ -345,6 +350,14 @@
   <section>
     <h2>Round history</h2>
     
+      <article class="round">
+        <header>
+          <h3>Round 2 — Grounding — contact occlusion and a working shadow term</h3>
+          <time>2026-08-16</time>
+        </header>
+        <ul><li>Rewrote shadow accumulation as a soft maximum along the ray instead of a mean. Averaging produced about 4% darkening and was invisible: a character is roughly 0.03 of the screen wide while the sun ray spanned 0.55, so at most one sample in sixteen could land on it, and dividing that single hit by the sample count erased it.</li><li>Shadow *reception* now falls off with parallax depth. Every occluder lives in the playfield plane, so without it a crate cast a long dark band across a mesa fifty metres behind it.</li><li>Added a dedicated contact-occlusion buffer. WebGL2 has no per-attachment blend state, so an earlier multiply blend aimed at the albedo also scaled the normal, material, and depth attachments — flipping normals inside the affected rectangle and rendering a soft pool as a hard black box.</li><li>Contact pools shrink and fade with height above the ground, so a jump reads as leaving the surface rather than merely translating upward.</li></ul>
+        <p class="gap"><strong>Biggest remaining gap:</strong> Bloom and volumetrics carry almost no energy. God rays render but are effectively invisible, and bloom energy measures around 0.001 against a 0.015-0.06 target on gameplay framings, so there is no atmospheric light in the frame. Next to the reference bar the image reads as correctly lit but inert: nothing glows, nothing scatters, and the air is empty. Particle density is also far below the bar - a few hundred dust motes where the reference has thousands, with no wind gusts, no ground-level drift, and no impact debris.</p>
+      </article>
       <article class="round">
         <header>
           <h3>Round 1 — Playable — physics, controller, level, and a lighting rebalance</h3>

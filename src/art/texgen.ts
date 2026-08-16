@@ -351,6 +351,50 @@ export function radialFalloff(size: number, power = 2.2, innerBoost = 0.25): Sur
   return surface;
 }
 
+/**
+ * A soft contact-shadow blob, authored for multiply blending.
+ *
+ * In a side-scrolling view the ground is seen edge-on, so a directional shadow
+ * cast by the character lands on whatever is behind them rather than on the
+ * surface they are standing on. That leaves nothing at all connecting the
+ * character to the floor, and the eye reads them as floating however carefully
+ * their feet are aligned.
+ *
+ * A darkened patch beneath the feet is what actually sells contact. It is
+ * dark at the centre and white at the edges so a multiply blend leaves the
+ * surroundings untouched, and it is squashed vertically because it represents a
+ * pool on a horizontal plane seen almost edge-on.
+ */
+export function contactShadow(width: number, height: number, strength = 0.72): Surface {
+  const surface = createSurface(width, height);
+  const centreX = (width - 1) / 2;
+  const centreY = (height - 1) / 2;
+
+  for (let y = 0; y < height; y++) {
+    for (let x = 0; x < width; x++) {
+      const nx = (x - centreX) / (width / 2);
+      const ny = (y - centreY) / (height / 2);
+      const distance = Math.hypot(nx, ny);
+
+      // Squared falloff keeps a dense core with a genuinely invisible edge; a
+      // linear ramp leaves a visible disc boundary.
+      const density = Math.pow(clamp01(1 - distance), 1.8);
+      const value = 1 - density * strength;
+
+      const index = (y * width + x) * 4;
+      surface.albedo[index] = value * 255;
+      surface.albedo[index + 1] = value * 255;
+      surface.albedo[index + 2] = value * 255;
+      surface.albedo[index + 3] = 255;
+
+      const pixel = y * width + x;
+      surface.heightField[pixel] = 0;
+      surface.roughness[pixel] = 1;
+    }
+  }
+  return surface;
+}
+
 /** Premultiplies alpha, which is what the sprite batch's blend mode expects. */
 export function premultiply(albedo: Uint8ClampedArray): Uint8ClampedArray {
   for (let i = 0; i < albedo.length; i += 4) {

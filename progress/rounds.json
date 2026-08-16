@@ -2,7 +2,7 @@
   {
     "round": 0,
     "date": "2026-08-16",
-    "title": "Foundation — engine, renderer, capture harness",
+    "title": "Foundation \u2014 engine, renderer, capture harness",
     "notes": [
       "Hand-written WebGL2 deferred renderer: 4-attachment MRT G-buffer, normal-mapped lighting with raymarched soft shadows, god rays, height fog, dual-Kawase bloom, ACES tonemap, LUT grade, grain.",
       "Fixed 120 Hz simulation with interpolated variable-rate rendering; hitstop and time-dilation stacks; split sim/fx RNG streams.",
@@ -11,7 +11,7 @@
       "Procedural art pipeline: surfaces authored as height fields, so normal maps, ambient occlusion, and material channels are derived rather than hand-painted.",
       "Optimus rig: 25 bones, proportions solved as a chain to exactly 1.73 m, inertialized transitions, spring-driven cable sway, impact compression, foot IK."
     ],
-    "biggestGap": "Not a game yet — no physics, no player input, no level.",
+    "biggestGap": "Not a game yet \u2014 no physics, no player input, no level.",
     "scores": {
       "animationFluidity": 6.5,
       "frameConsistency": 7.0,
@@ -30,7 +30,7 @@
   {
     "round": 1,
     "date": "2026-08-16",
-    "title": "Playable — physics, controller, level, and a lighting rebalance",
+    "title": "Playable \u2014 physics, controller, level, and a lighting rebalance",
     "notes": [
       "Swept-AABB physics and a full player controller: coyote time, jump buffering, variable jump height, apex hang, corner correction, eight-way dash with i-frames, wall slide and wall jump.",
       "First real room, sized against the measured jump envelope (3.83 m peak, 10.15 m range) so no jump needs frame-perfect input.",
@@ -41,7 +41,7 @@
       "New crate art: the props previously reused the bright shell panel and read unmistakably as wall-mounted TV screens.",
       "Solved the foot attachment offset from the geometry, correcting a 4.3 cm hover."
     ],
-    "biggestGap": "Cast shadows and bloom energy. Shadow casters are wired up and the occluder mask renders correctly, but no shadow is actually visible in any frame — the character does not appear anchored to the ground. Bloom energy measures 0.001 against a 0.015-0.06 target on both gameplay scenarios, so there is no god-ray or glow presence, and cyan presence is 10x below target. These three together are why the image still reads flat next to the reference bar.",
+    "biggestGap": "Cast shadows and bloom energy. Shadow casters are wired up and the occluder mask renders correctly, but no shadow is actually visible in any frame \u2014 the character does not appear anchored to the ground. Bloom energy measures 0.001 against a 0.015-0.06 target on both gameplay scenarios, so there is no god-ray or glow presence, and cyan presence is 10x below target. These three together are why the image still reads flat next to the reference bar.",
     "scores": {
       "animationFluidity": 7.0,
       "frameConsistency": 7.5,
@@ -50,6 +50,32 @@
       "lighting": 5.5,
       "particles": 4.5,
       "presence": 5.0,
+      "composition": 5.5,
+      "thematicCoherence": 7.0,
+      "combatImpact": 0,
+      "audio": 0,
+      "uiPolish": 0
+    }
+  },
+  {
+    "round": 2,
+    "date": "2026-08-16",
+    "title": "Grounding \u2014 contact occlusion and a working shadow term",
+    "notes": [
+      "Rewrote shadow accumulation as a soft maximum along the ray instead of a mean. Averaging produced about 4% darkening and was invisible: a character is roughly 0.03 of the screen wide while the sun ray spanned 0.55, so at most one sample in sixteen could land on it, and dividing that single hit by the sample count erased it.",
+      "Shadow *reception* now falls off with parallax depth. Every occluder lives in the playfield plane, so without it a crate cast a long dark band across a mesa fifty metres behind it.",
+      "Added a dedicated contact-occlusion buffer. WebGL2 has no per-attachment blend state, so an earlier multiply blend aimed at the albedo also scaled the normal, material, and depth attachments \u2014 flipping normals inside the affected rectangle and rendering a soft pool as a hard black box.",
+      "Contact pools shrink and fade with height above the ground, so a jump reads as leaving the surface rather than merely translating upward."
+    ],
+    "biggestGap": "Bloom and volumetrics carry almost no energy. God rays render but are effectively invisible, and bloom energy measures around 0.001 against a 0.015-0.06 target on gameplay framings, so there is no atmospheric light in the frame. Next to the reference bar the image reads as correctly lit but inert: nothing glows, nothing scatters, and the air is empty. Particle density is also far below the bar - a few hundred dust motes where the reference has thousands, with no wind gusts, no ground-level drift, and no impact debris.",
+    "scores": {
+      "animationFluidity": 7.0,
+      "frameConsistency": 7.5,
+      "scaleCoherence": 8.0,
+      "atmosphere": 6.5,
+      "lighting": 6.5,
+      "particles": 4.5,
+      "presence": 6.0,
       "composition": 5.5,
       "thematicCoherence": 7.0,
       "combatImpact": 0,

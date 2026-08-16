@@ -159,7 +159,7 @@ export class Game {
         g: 0.72,
         b: 0.46,
         intensity: 1.5,
-        shadowStrength: 0.6,
+        shadowStrength: 0.82,
       }),
     );
     this.lightFlicker.push(0);
@@ -307,6 +307,7 @@ export class Game {
       timeSeconds: this.time,
       drawGeometry: (batch) => this.drawGeometry(batch),
       drawOccluders: (batch) => this.drawOccluders(batch),
+      drawContactAO: (batch) => this.drawContactAO(batch),
     });
 
     if (this.loop) {
@@ -384,6 +385,77 @@ export class Game {
         0,
       );
     }
+  }
+
+  /**
+   * Contact occlusion: soft pools where objects meet surfaces.
+   *
+   * Accumulated additively into a dedicated single-channel target, which the
+   * lighting pass then uses to attenuate both ambient and direct light.
+   *
+   * This deliberately does *not* go into the G-buffer. WebGL2 has no
+   * per-attachment blend state, so a multiply blend aimed at the albedo also
+   * scaled the normal, material, and depth attachments — flipping the normals
+   * in the affected rectangle and turning a soft pool into a hard black box.
+   *
+   * The player's pool shrinks and fades with height, which is what makes a jump
+   * read as leaving the ground rather than merely translating upward.
+   */
+  private drawContactAO(batch: SpriteBatch): void {
+    batch.setTextures(this.atlas.textures);
+    batch.setBlend(BlendMode.Additive);
+
+    const entry = this.atlas.get('aoBlob');
+    const material = packMaterial(1, 1, 0, 0);
+    const visible = this.camera.getVisibleBounds(3);
+
+    /**
+     * @param surfaceY World Y of the surface the pool sits on.
+     *
+     * The ellipse is offset downward so the great majority of it lands *below*
+     * the surface line. Centring it on the line put most of the pool in empty
+     * air above the platform, where there is no geometry to darken — the
+     * buffer was being written correctly and read correctly, and still nothing
+     * was visible.
+     */
+    const blob = (x: number, surfaceY: number, width: number, density: number): void => {
+      const height = width * 0.62;
+      batch.draw(
+        x,
+        surfaceY + height * 0.38,
+        width,
+        height,
+        entry.u0,
+        entry.v0,
+        entry.u1,
+        entry.v1,
+        Depth.Playfield,
+        // Premultiplied, and additive, so the colour *is* the density.
+        packColor(density, density, density, density),
+        material,
+        0,
+      );
+    };
+
+    for (const prop of this.room.props) {
+      if (!prop.castsShadow) continue;
+      if (prop.x < visible.minX || prop.x > visible.maxX) continue;
+      // Nudged below the surface so the pool sits on the platform's top face.
+      blob(prop.x + 0.06, prop.y + prop.height / 2, prop.width * 2.3, 1.0);
+    }
+
+    const player = this.player;
+    const heightAboveGround = Math.max(0, player.groundY - player.feetY);
+    // Fades over two metres, roughly half a jump.
+    const fade = clamp01(1 - heightAboveGround / 2.2);
+    if (fade > 0.02) {
+      // Widening with height mimics a penumbra spreading as the occluder moves
+      // away from the surface.
+      const width = 1.9 * (1 + heightAboveGround * 0.30);
+      blob(player.feetX + 0.05, player.groundY, width, fade * fade);
+    }
+
+    batch.setBlend(BlendMode.Premultiplied);
   }
 
   private drawProps(batch: SpriteBatch): void {

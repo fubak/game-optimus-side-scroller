@@ -24,6 +24,7 @@ const VIEWS: { id: number; name: string; note: string }[] = [
   { id: 7, name: 'godrays', note: 'volumetric light shafts' },
   { id: 8, name: 'bloom', note: 'bloom chain level 0' },
   { id: 10, name: 'scene', note: 'post-fog HDR scene, pre-composite' },
+  { id: 11, name: 'contactAO', note: 'contact occlusion pools' },
 ];
 
 async function main(): Promise<void> {

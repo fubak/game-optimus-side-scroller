@@ -372,6 +372,14 @@ export function buildCoreAtlasSources(): AtlasSource[] {
   });
 
   sources.push({
+    // Written additively into the contact-occlusion buffer, so this is a
+    // *density* map: white with a soft radial alpha, not a dark sprite.
+    name: 'aoBlob',
+    surface: radialFalloff(128, 1.5, 0.35),
+    widthMetres: 2,
+  });
+
+  sources.push({
     name: 'mote',
     surface: radialFalloff(32, 1.8, 0.5),
     widthMetres: 0.08,

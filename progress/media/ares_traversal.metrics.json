@@ -1,57 +1,57 @@
 {
   "scenario": "ares_traversal",
   "image": {
-    "meanLuminance": 0.3108674326616071,
-    "luminanceP1": 0.02311764657497406,
-    "luminanceP99": 0.6190094351768494,
-    "dynamicRange": 0.5958917886018753,
-    "clippedBlack": 0.004128086419753086,
+    "meanLuminance": 0.3084556874848922,
+    "luminanceP1": 0.020312940701842308,
+    "luminanceP99": 0.6119843125343323,
+    "dynamicRange": 0.59167137183249,
+    "clippedBlack": 0.004521604938271605,
     "clippedWhite": 0,
-    "meanSaturation": 0.5229502905953285,
-    "highlightSaturation": 0.3751187447318445,
-    "localContrast": 0.03777520827831429,
-    "edgeDensity": 0.01778242677824268,
-    "bloomEnergy": 0.0009567901234567902,
+    "meanSaturation": 0.5255488839657889,
+    "highlightSaturation": 0.38905619857433454,
+    "localContrast": 0.03592543248945797,
+    "edgeDensity": 0.016065072128895273,
+    "bloomEnergy": 0.0009027777777777777,
     "bandContrast": [
-      0.015124347197740372,
-      0.05855660602418293,
-      0.024510889951588514
+      0.015134926621285112,
+      0.055980249333284306,
+      0.022098556755987757
     ],
     "bandSaturation": [
-      0.37857473721355306,
-      0.3781247562426283,
-      0.8119456467539763
+      0.3773698341527861,
+      0.3819242995983658,
+      0.8172178245346361
     ],
-    "cyanPresence": 0.00018518518518518518,
-    "hueEntropy": 0.5566402362481039,
+    "cyanPresence": 0.00020833333333333335,
+    "hueEntropy": 0.5515038493342582,
     "dominantHues": [
       {
         "hue": 15,
-        "share": 0.38069157617493093
+        "share": 0.38822006252894736
       },
       {
         "hue": 25,
-        "share": 0.22008622579710946
+        "share": 0.2158195093145753
       },
       {
         "hue": 5,
-        "share": 0.07462385184813328
-      },
-      {
-        "hue": 355,
-        "share": 0.07358549213529413
+        "share": 0.07958175599382876
       },
       {
         "hue": 265,
-        "share": 0.07262919443611943
+        "share": 0.07306893214948616
+      },
+      {
+        "hue": 355,
+        "share": 0.0709272139195677
       }
     ],
     "width": 480,
     "height": 270
   },
   "stats": {
-    "drawCalls": 22,
-    "triangles": 346,
+    "drawCalls": 23,
+    "triangles": 354,
     "textureBinds": 29,
     "fullscreenPasses": 14,
     "lights": 3,
@@ -60,15 +60,15 @@
     "props": 13,
     "motes": 420,
     "layers": 7,
-    "renderWidth": 640,
-    "renderHeight": 360,
+    "renderWidth": 512,
+    "renderHeight": 288,
     "playerX": 72.62441666666523,
     "playerY": -8.2,
     "playerVX": 0,
     "playerVY": 0,
     "grounded": 1,
     "simMs": 0,
-    "renderMs": 0.5,
+    "renderMs": 0.30000000074505806,
     "frameMs": 16.66666666666572
   }
 }

@@ -139,6 +139,11 @@ export interface FrameRequest {
   drawOccluders(batch: SpriteBatch): void;
   /** Optional screen-space distortion writes (heat haze, shockwaves). */
   drawDistortion?(batch: SpriteBatch): void;
+  /**
+   * Optional contact-occlusion writes: soft pools where objects meet surfaces.
+   * Accumulated additively into a dedicated single-channel target.
+   */
+  drawContactAO?(batch: SpriteBatch): void;
   /** Draw unlit UI over the composited image. */
   drawUI?(batch: SpriteBatch): void;
   timeSeconds: number;
@@ -157,6 +162,7 @@ export class Pipeline {
   private lightTarget!: RenderTarget;
   private godRayTarget!: RenderTarget;
   private distortionTarget!: RenderTarget;
+  private contactAOTarget!: RenderTarget;
   private sceneTarget!: RenderTarget;
   private fogTarget!: RenderTarget;
   private bloomChain: RenderTarget[] = [];
@@ -388,6 +394,16 @@ export class Pipeline {
       halfRes,
     );
 
+    // Contact occlusion: where objects meet surfaces. Half resolution is ample,
+    // since these are soft pools with no high-frequency detail at all.
+    this.contactAOTarget = this.pool.create(
+      'contactAO',
+      [{ format: TexFormat.R8, filter: Filter.Linear }],
+      w,
+      h,
+      halfRes,
+    );
+
     this.bloomChain = [];
     for (let i = 0; i < BLOOM_LEVELS_MAX; i++) {
       this.bloomChain.push(
@@ -470,6 +486,7 @@ export class Pipeline {
     lights.pack(camera, this.settings.shadowCasters);
 
     this.renderGBuffer(request);
+    this.renderContactAO(request);
     this.renderOccluders(request);
     this.renderDistortion(request);
     this.renderLighting(request);
@@ -514,6 +531,18 @@ export class Pipeline {
     this.batch.end();
   }
 
+  private renderContactAO(request: FrameRequest): void {
+    this.contactAOTarget.bindAndClear(0, 0, 0, 1);
+    if (!request.drawContactAO) return;
+
+    this.batch.begin(this.spriteProgram, BlendMode.Additive);
+    this.spriteProgram.setMat3('uViewProjection', request.camera.viewProjection);
+    this.spriteProgram.setVec4('uLayerTint', 1, 1, 1, 1);
+    this.spriteProgram.setFloat('uMaterialId', 0);
+    request.drawContactAO(this.batch);
+    this.batch.end();
+  }
+
   private renderOccluders(request: FrameRequest): void {
     this.occluder.bindAndClear(0, 0, 0, 0);
     if (this.settings.shadowSteps === 0 && this.settings.godRaySamples === 0) return;
@@ -550,6 +579,7 @@ export class Pipeline {
     program.setTexture('uDepth', 3, this.gbuffer.textures[3]!.handle);
     program.setTexture('uOccluder', 4, this.occluder.texture.handle);
     program.setTexture('uBlueNoise', 5, this.blueNoise.handle);
+    program.setTexture('uContactAO', 6, this.contactAOTarget.texture.handle);
 
     program.setVec4Array('uLightPosition', lights.positionData);
     program.setVec4Array('uLightColor', lights.colorData);
@@ -753,6 +783,7 @@ export class Pipeline {
       this.bloomChain[0]?.texture,
       this.distortionTarget.texture,
       this.sceneTarget.texture,
+      this.contactAOTarget.texture,
     ];
     const texture = views[this.debugView] ?? this.sceneTarget.texture;
     this.copyProgram.use();

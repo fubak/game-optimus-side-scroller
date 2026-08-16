@@ -40,6 +40,8 @@ uniform sampler2D uMaterial;
 uniform sampler2D uDepth;
 uniform sampler2D uOccluder;
 uniform sampler2D uBlueNoise;
+/** Single-channel contact occlusion: soft pools where objects meet surfaces. */
+uniform sampler2D uContactAO;
 
 /** Packed light data. xy = screen position (0..1), z = radius (screen units), w = intensity. */
 uniform vec4 uLightPosition[MAX_LIGHTS];
@@ -90,13 +92,22 @@ float traceShadow(vec2 origin, vec2 lightPos, float jitter, float strength) {
   float rayLength = length(delta * uAspect);
   if (rayLength < 0.0005) return 1.0;
 
-  float occlusion = 0.0;
-
   // Start the march a little away from the receiving surface. Without this
   // bias a fragment that is itself in the occluder mask immediately samples
   // its own coverage and shadows itself, which turns every lit surface a
   // uniform grey instead of producing actual cast shadows.
-  const float START_BIAS = 0.045;
+  const float START_BIAS = 0.03;
+
+  // Occlusion is accumulated as a soft maximum rather than a mean.
+  //
+  // Averaging along the ray was the original approach and produced no visible
+  // shadow at all: a character is roughly 0.03 of the screen wide while the
+  // ray spans 0.5, so at most one sample in sixteen can land on it, and
+  // dividing that single hit by the sample count left about four percent of
+  // darkening. An occluder either blocks the light or it does not, so the
+  // strongest hit along the ray is the physically meaningful quantity; the
+  // per-pixel jitter and the filtered half-resolution mask supply the penumbra.
+  float occlusion = 0.0;
 
   for (int i = 1; i <= SHADOW_STEPS; i++) {
     float t = mix(START_BIAS, 1.0, (float(i) - jitter) / float(SHADOW_STEPS));
@@ -110,14 +121,13 @@ float traceShadow(vec2 origin, vec2 lightPos, float jitter, float strength) {
 
     float occluder = texture(uOccluder, samplePos).r;
 
-    // Weight by how far along the ray the sample sits: an occluder right next
-    // to the receiver casts a hard, dark shadow, one near the light casts a
-    // broad soft one.
-    float proximity = 1.0 - t;
-    occlusion += occluder * proximity;
+    // Contact shadows are tight and dark; the further along the ray an
+    // occluder sits, the softer and weaker its shadow, matching how a real
+    // penumbra widens with distance.
+    float proximity = 1.0 - t * 0.55;
+    occlusion = max(occlusion, occluder * proximity);
   }
 
-  occlusion /= float(SHADOW_STEPS) * 0.5;
   return clamp(1.0 - occlusion * strength, 0.0, 1.0);
 #endif
 }
@@ -147,7 +157,15 @@ void main() {
   float normalZ = sqrt(max(1.0 - dot(normalXY, normalXY), 0.0));
   vec3 normal = normalize(vec3(normalXY, max(normalZ, 0.05)));
 
-  float ambientOcclusion = normalSample.a;
+  // Baked relief occlusion, combined with the dynamic contact pools.
+  //
+  // In a side-scrolling view the ground is seen edge-on, so a directional
+  // shadow lands on whatever is behind the character rather than on the surface
+  // they stand on. Contact occlusion is what actually connects them to it; the
+  // eye reads a character with no darkening beneath as floating, however
+  // precisely their feet are aligned.
+  float contactAO = clamp(texture(uContactAO, vUV).r, 0.0, 1.0);
+  float ambientOcclusion = normalSample.a * (1.0 - contactAO * 0.95);
   float roughness = clamp(material.r, 0.04, 1.0);
   float metallic = material.g;
   float emissive = material.b;
@@ -159,6 +177,11 @@ void main() {
   // collapses.
   float depthAttenuation = 1.0 / (1.0 + parallaxDepth * 0.35);
   float depthFlatten = clamp(parallaxDepth * 0.16, 0.0, 0.75);
+
+  // Shadow *reception* also falls off with depth. Every occluder lives in the
+  // playfield plane, so without this a crate standing on the ground casts a
+  // long dark band across a mesa fifty metres behind it.
+  float shadowReceive = clamp(1.0 - parallaxDepth * 0.30, 0.0, 1.0);
 
   // Hemispheric ambient: sky from above, bounce from below.
   float upFacing = normal.y * -0.5 + 0.5;
@@ -193,7 +216,7 @@ void main() {
       float lambert = max(dot(normal, lightDir), 0.0);
       lambert = mix(lambert, 1.0, depthFlatten);
 
-      float shadow = traceShadow(vUV, lightPos.xy, jitter, lightParams.z);
+      float shadow = mix(1.0, traceShadow(vUV, lightPos.xy, jitter, lightParams.z), shadowReceive);
 
       // Light passing through a thin surface, lit from behind.
       float backLight = max(-dot(normal, lightDir), 0.0) * translucency;
@@ -207,8 +230,8 @@ void main() {
       lambert = mix(lambert, 1.0, depthFlatten);
 
       // March toward a virtual light position far along the sun direction.
-      vec2 virtualLight = vUV + vec2(cos(angle), sin(angle)) * 0.55;
-      float shadow = traceShadow(vUV, virtualLight, jitter, lightParams.z);
+      vec2 virtualLight = vUV + vec2(cos(angle), sin(angle)) * 0.30;
+      float shadow = mix(1.0, traceShadow(vUV, virtualLight, jitter, lightParams.z), shadowReceive);
 
       float backLight = max(-dot(normal, lightDir), 0.0) * translucency;
 
@@ -232,7 +255,7 @@ void main() {
       float lambert = max(dot(normal, lightDir), 0.0);
       lambert = mix(lambert, 1.0, depthFlatten);
 
-      float shadow = traceShadow(vUV, lightPos.xy, jitter, lightParams.z);
+      float shadow = mix(1.0, traceShadow(vUV, lightPos.xy, jitter, lightParams.z), shadowReceive);
 
       contribution = lightColor.rgb * lightPos.w * attenuation * cone * lambert * shadow;
     }
@@ -258,6 +281,11 @@ void main() {
   // Blending toward the raw albedo keeps a fully-emissive surface at exactly
   // its authored value, instead of stacking ambient light on top and pushing
   // it past white.
+  // Direct light is occluded as well as ambient. Without this the pool
+  // disappears entirely wherever the key light is strong, which is exactly
+  // where contact most needs to read.
+  accumulated *= 1.0 - contactAO * 0.72 * (1.0 - emissive);
+
   vec3 lit = albedo.rgb * accumulated + rim * albedo.a * (1.0 - emissive);
   lit = mix(lit, albedo.rgb * uEmissiveScale, emissive);
 
