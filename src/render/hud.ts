@@ -89,8 +89,8 @@ export class Hud {
     });
 
     // ── Boss health ───────────────────────────────────────────────────────────────────────────
-    const boss = world.boss;
-    if (boss !== null && boss.state !== 'dead') {
+    const boss = world.isBossEngaged ? world.boss : null;
+    if (boss !== null) {
       const barWidth = 120;
       const x = Math.round(viewWidth / 2 - barWidth / 2);
       drawText(ctx, 'OVERSEER', viewWidth / 2, 6, { color: palette.hazard, align: 'center' });

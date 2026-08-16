@@ -200,6 +200,18 @@ describe('the extraction hatch', () => {
   });
 });
 
+describe('boss HUD gating', () => {
+  it('only counts the fight as engaged once the player is at the bay', () => {
+    const world = createWorld(LEVEL_4, { lives: 99 });
+    const boss = bossOf(world);
+    expect(world.isBossEngaged).toBe(false);
+    world.player.body.x = boss.patrolMinX + 40;
+    expect(world.isBossEngaged).toBe(true);
+    boss.state = 'dead';
+    expect(world.isBossEngaged).toBe(false);
+  });
+});
+
 describe('the finale is winnable', () => {
   it('the autopilot beats the Overseer and reaches the hatch', () => {
     const run = runWorldWithBot(LEVEL_4, { frames: 60 * 240, stopWhenFinished: true, lives: 99 });

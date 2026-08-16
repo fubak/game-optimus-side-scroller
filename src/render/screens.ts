@@ -15,6 +15,41 @@ import { drawText } from './text';
 
 const CENTER_X = INTERNAL_WIDTH / 2;
 
+/**
+ * Full-screen transition wipe.
+ *
+ * Every scene change fades in from black over a fraction of a second, which stops menus from
+ * snapping in and hides the one-frame pop when a level's art is built.
+ */
+export function drawSceneTransition(ctx: CanvasRenderingContext2D, game: Game): void {
+  const duration = 0.28;
+  if (game.timeInScene >= duration) return;
+  const alpha = 1 - game.timeInScene / duration;
+  ctx.fillStyle = `rgb(5 7 12 / ${String(alpha * 0.9)})`;
+  ctx.fillRect(0, 0, INTERNAL_WIDTH, INTERNAL_HEIGHT);
+}
+
+/**
+ * Red vignette while Optimus is hurt, and a white flash on the frame damage lands.
+ *
+ * Suppressed entirely in reduced-motion mode, where the health pips are the only feedback.
+ */
+export function drawDamageFeedback(ctx: CanvasRenderingContext2D, game: Game): void {
+  if (game.save.settings.reducedMotion) return;
+  const world = game.world;
+  if (world === null) return;
+  const invulnerable = world.player.invulnerableTime;
+  if (invulnerable <= 0) return;
+  const strength = Math.min(1, invulnerable / 1.2);
+  const gradient = ctx.createLinearGradient(0, 0, 0, INTERNAL_HEIGHT);
+  gradient.addColorStop(0, `rgb(217 86 79 / ${String(strength * 0.35)})`);
+  gradient.addColorStop(0.4, 'rgb(217 86 79 / 0)');
+  gradient.addColorStop(0.6, 'rgb(217 86 79 / 0)');
+  gradient.addColorStop(1, `rgb(217 86 79 / ${String(strength * 0.35)})`);
+  ctx.fillStyle = gradient;
+  ctx.fillRect(0, 0, INTERNAL_WIDTH, INTERNAL_HEIGHT);
+}
+
 export function drawScene(ctx: CanvasRenderingContext2D, game: Game): void {
   const scene = game.scene;
   switch (scene.name) {

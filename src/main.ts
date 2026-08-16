@@ -11,7 +11,7 @@ import { ALL_LEVELS, LEVELS } from './game/levels/index';
 import { drawTouchControls } from './render/hud';
 import { palette } from './render/palette';
 import { WorldRenderer } from './render/renderer';
-import { drawScene } from './render/screens';
+import { drawDamageFeedback, drawScene, drawSceneTransition } from './render/screens';
 import { drawText } from './render/text';
 
 /**
@@ -129,7 +129,9 @@ function draw(): void {
     ctx.fillRect(0, 0, INTERNAL_WIDTH, INTERNAL_HEIGHT);
   }
 
+  drawDamageFeedback(ctx, game);
   drawScene(ctx, game);
+  drawSceneTransition(ctx, game);
 
   if (touch !== null) {
     drawTouchControls(ctx, touchButtons, touch.activeActions);

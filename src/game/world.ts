@@ -476,6 +476,19 @@ export class World {
     return this.enemies.find((enemy) => enemy.kind === 'overseer') ?? null;
   }
 
+  /**
+   * Is the boss fight actually underway?
+   *
+   * Used to gate the boss health bar: showing it from the moment a boss level loads spoils the
+   * arrival and clutters the HUD through the whole approach.
+   */
+  get isBossEngaged(): boolean {
+    const boss = this.boss;
+    if (boss === null || boss.state === 'dead') return false;
+    const playerRight = this.player.body.x + this.player.body.width;
+    return playerRight > boss.patrolMinX - 40 && this.player.body.x < boss.patrolMaxX + 40;
+  }
+
   private checkTileTriggers(): void {
     let hazardHit = false;
     for (const overlap of this.player.lastCollision.overlaps) {
