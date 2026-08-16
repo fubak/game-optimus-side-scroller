@@ -190,12 +190,20 @@ function drawSettings(ctx: CanvasRenderingContext2D, game: Game): void {
         return `VOLUME: ${String(Math.round(settings.volume * 100))}%  ← →`;
       case 'REDUCED MOTION':
         return `REDUCED MOTION: ${settings.reducedMotion ? 'ON' : 'OFF'}`;
+      case 'HIGH CONTRAST':
+        return `HIGH CONTRAST: ${settings.highContrast ? 'ON' : 'OFF'}`;
+      case 'KEY LAYOUT':
+        return `KEY LAYOUT: ${settings.altBindings ? 'Z / X' : 'SPACE / SHIFT'}`;
       default:
         return item;
     }
   });
-  drawMenu(ctx, labels, game.scene.cursor, 78, { spacing: 14, time: game.timeInScene });
-  drawText(ctx, 'REDUCED MOTION DISABLES SCREEN SHAKE AND FLASHES', CENTER_X, INTERNAL_HEIGHT - 30, {
+  drawMenu(ctx, labels, game.scene.cursor, 62, { spacing: 13, time: game.timeInScene });
+  drawText(ctx, 'REDUCED MOTION DISABLES SCREEN SHAKE AND FLASHES', CENTER_X, INTERNAL_HEIGHT - 32, {
+    color: palette.uiDim,
+    align: 'center',
+  });
+  drawText(ctx, 'HIGH CONTRAST BRIGHTENS TERRAIN AND DIMS THE BACKDROP', CENTER_X, INTERNAL_HEIGHT - 22, {
     color: palette.uiDim,
     align: 'center',
   });

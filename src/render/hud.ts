@@ -2,6 +2,7 @@ import { clamp } from '../core/math';
 import { ENERGY_LOW_THRESHOLD, HEALTH_MAX } from '../game/constants';
 import { OVERSEER_HIT_POINTS } from '../game/enemies';
 import type { World } from '../game/world';
+import type { TouchButton } from '../core/touch';
 import { palette } from './palette';
 import { drawText } from './text';
 
@@ -114,6 +115,36 @@ export class Hud {
       drawText(ctx, toast.text, 6, 34 + index * 9, { color: toast.color });
       ctx.globalAlpha = 1;
     });
+  }
+}
+
+/** Draw the on-screen touch controls (only called when they are enabled). */
+export function drawTouchControls(
+  ctx: CanvasRenderingContext2D,
+  buttons: readonly TouchButton[],
+  active: readonly string[],
+): void {
+  for (const button of buttons) {
+    // The invisible "tap anywhere to confirm" region has no label and is never drawn.
+    if (button.label === '') continue;
+    const pressed = active.includes(button.action);
+    ctx.globalAlpha = pressed ? 0.75 : 0.4;
+    ctx.fillStyle = pressed ? palette.visor : palette.plateFace;
+    if (button.round) {
+      const cx = button.x + button.width / 2;
+      const cy = button.y + button.height / 2;
+      ctx.beginPath();
+      ctx.arc(cx, cy, Math.max(button.width, button.height) / 2, 0, Math.PI * 2);
+      ctx.fill();
+    } else {
+      ctx.fillRect(button.x, button.y, button.width, button.height);
+    }
+    ctx.globalAlpha = pressed ? 1 : 0.8;
+    drawText(ctx, button.label, button.x + button.width / 2, button.y + button.height / 2 - 3, {
+      color: pressed ? palette.ink : palette.uiText,
+      align: 'center',
+    });
+    ctx.globalAlpha = 1;
   }
 }
 

@@ -110,6 +110,30 @@ export const DEFAULT_BINDINGS: KeyBindings = {
   F3: ['debug'],
 };
 
+/**
+ * Alternative layout for players who find space/shift awkward: everything sits on the left hand,
+ * arrows or WASD for movement, Z to jump, X to dash.
+ */
+export const ALT_BINDINGS: KeyBindings = {
+  ArrowLeft: ['left'],
+  KeyA: ['left'],
+  ArrowRight: ['right'],
+  KeyD: ['right'],
+  ArrowUp: ['up'],
+  KeyW: ['up'],
+  ArrowDown: ['down'],
+  KeyS: ['down'],
+  KeyZ: ['jump', 'confirm'],
+  KeyX: ['dash'],
+  KeyC: ['jump'],
+  Space: ['jump'],
+  Escape: ['pause', 'back'],
+  Enter: ['confirm'],
+  KeyR: ['restart'],
+  KeyM: ['mute'],
+  F3: ['debug'],
+};
+
 /** Keys whose default browser behaviour (scrolling, search) would ruin gameplay. */
 const SWALLOWED_KEYS = new Set([
   'ArrowLeft',

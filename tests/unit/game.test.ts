@@ -308,12 +308,26 @@ describe('Game — settings', () => {
     expect(game.save.settings.reducedMotion).toBe(true);
     expect(loadSave(storage).settings.reducedMotion).toBe(true);
 
+    // HIGH CONTRAST and KEY LAYOUT toggles.
+    menuTap(game, input, 'down');
+    menuTap(game, input, 'confirm');
+    expect(game.save.settings.highContrast).toBe(true);
+    let rebound: boolean | null = null;
+    game.onBindingsChanged = (alt) => {
+      rebound = alt;
+    };
+    menuTap(game, input, 'down');
+    menuTap(game, input, 'confirm');
+    expect(game.save.settings.altBindings).toBe(true);
+    expect(rebound).toBe(true);
+
     // RESET PROGRESS wipes records but keeps settings.
     menuTap(game, input, 'down');
     menuTap(game, input, 'confirm');
     expect(game.save.completed).toEqual([]);
     expect(game.save.unlockedIndex).toBe(0);
     expect(game.save.settings.reducedMotion).toBe(true);
+    expect(game.save.settings.highContrast).toBe(true);
 
     // BACK returns to the title.
     menuTap(game, input, 'down');

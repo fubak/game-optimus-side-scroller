@@ -1,11 +1,14 @@
 import { createAudio } from './core/audio';
 import { createDisplay, INTERNAL_HEIGHT, INTERNAL_WIDTH } from './core/canvas';
-import { KeyboardInput } from './core/input';
+import { ALT_BINDINGS, CompositeInput, DEFAULT_BINDINGS, KeyboardInput } from './core/input';
+import type { Input } from './core/input';
 import { createLoop } from './core/loop';
 import type { Loop } from './core/loop';
 import { installTestHooks, shouldInstallTestHooks } from './core/testHooks';
+import { TouchInput, createTouchLayout, prefersTouchControls } from './core/touch';
 import { Game } from './game/game';
 import { ALL_LEVELS, LEVELS } from './game/levels/index';
+import { drawTouchControls } from './render/hud';
 import { palette } from './render/palette';
 import { WorldRenderer } from './render/renderer';
 import { drawScene } from './render/screens';
@@ -38,6 +41,46 @@ const display = createDisplay(host);
 const keyboard = new KeyboardInput(window);
 const audio = createAudio();
 
+/**
+ * Touch controls appear only on devices with a coarse pointer (or when forced with `?touch=1`, which
+ * is how they get tested in a desktop browser's device emulation).
+ */
+const touchEnabled = prefersTouchControls() || params.get('touch') === '1';
+const touchButtons = createTouchLayout({ viewWidth: INTERNAL_WIDTH, viewHeight: INTERNAL_HEIGHT });
+const touch = touchEnabled
+  ? new TouchInput({
+      buttons: touchButtons,
+      toBuffer: (clientX, clientY) => display.clientToBuffer(clientX, clientY),
+    })
+  : null;
+const input: Input = touch === null ? keyboard : new CompositeInput([keyboard, touch]);
+
+if (touch !== null) {
+  const canvas = display.canvas;
+  canvas.addEventListener(
+    'pointerdown',
+    (event) => {
+      if (touch.pointerDown(event.pointerId, event.clientX, event.clientY)) {
+        event.preventDefault();
+        canvas.setPointerCapture(event.pointerId);
+      }
+      audio.resume();
+    },
+    { passive: false },
+  );
+  canvas.addEventListener('pointermove', (event) => {
+    touch.pointerMove(event.pointerId, event.clientX, event.clientY);
+  });
+  for (const eventName of ['pointerup', 'pointercancel', 'pointerleave'] as const) {
+    canvas.addEventListener(eventName, (event) => {
+      touch.pointerUp(event.pointerId);
+    });
+  }
+  window.addEventListener('blur', () => {
+    touch.releaseAllPointers();
+  });
+}
+
 // A level requested by id starts straight away; otherwise the title screen runs the show.
 const levelList = requestedLevel === null ? LEVELS : ALL_LEVELS;
 const requestedIndex =
@@ -52,6 +95,11 @@ const game = new Game({
   ...(seedParam === null ? {} : { seed: Number(seedParam) }),
 });
 
+game.onBindingsChanged = (altBindings) => {
+  keyboard.setBindings(altBindings ? ALT_BINDINGS : DEFAULT_BINDINGS);
+};
+keyboard.setBindings(game.save.settings.altBindings ? ALT_BINDINGS : DEFAULT_BINDINGS);
+
 const renderer = new WorldRenderer(game.world ?? game.attractWorld);
 let debugVisible = false;
 
@@ -59,7 +107,7 @@ const loop: Loop = createLoop({
   update(dtSec) {
     // Read the debug toggle first: `game.update` consumes the input frame.
     if (keyboard.justPressed('debug')) debugVisible = !debugVisible;
-    game.update(dtSec, keyboard);
+    game.update(dtSec, input);
     const world = game.world ?? game.attractWorld;
     if (world !== null) renderer.trackTrail(world, dtSec);
   },
@@ -82,6 +130,10 @@ function draw(): void {
   }
 
   drawScene(ctx, game);
+
+  if (touch !== null) {
+    drawTouchControls(ctx, touchButtons, touch.activeActions);
+  }
 
   if (debugVisible) {
     if (world !== null) renderer.drawDebug(ctx, world);

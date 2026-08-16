@@ -45,6 +45,58 @@ export const palette = {
   uiDim: '#7c879b',
   uiWarn: '#ffca6b',
   health: '#ff6b6b',
-} as const;
+};
 
-export type PaletteKey = keyof typeof palette;
+export type Palette = typeof palette;
+export type PaletteKey = keyof Palette;
+
+/**
+ * High-contrast overrides.
+ *
+ * Only the values that matter for readability change: the backdrop drops towards black, terrain and
+ * Optimus brighten, and hazards/pickups take saturated colours. Shapes are untouched, so the game
+ * looks like itself — just legible on a bad screen or with low vision.
+ */
+const highContrastOverrides: Partial<Palette> = {
+  skyTop: '#000000',
+  skyBottom: '#05070c',
+  farStructure: '#0a0e16',
+  midStructure: '#101620',
+  nearStructure: '#182030',
+  fog: '#1b2230',
+  plateFace: '#7d8ca8',
+  plateLight: '#cfdcf2',
+  plateDark: '#404b60',
+  plateShadow: '#12161f',
+  grate: '#5b6a84',
+  hazard: '#ff4d4d',
+  hazardDark: '#a01f1f',
+  shell: '#ffffff',
+  shellLight: '#ffffff',
+  shellDark: '#b9c4d4',
+  visor: '#39e0ff',
+  visorGlow: '#ffffff',
+  energy: '#3dffc0',
+  spark: '#ffe066',
+  uiText: '#ffffff',
+  uiDim: '#a8b4c6',
+  uiWarn: '#ffd23f',
+  health: '#ff5c5c',
+};
+
+const defaultPalette: Palette = { ...palette };
+
+/**
+ * Swap the active palette in place.
+ *
+ * The palette is imported as a live object everywhere, so mutating it re-tints the entire game
+ * (tiles, sprites, HUD, menus, particles) without threading a theme parameter through every draw
+ * call. Nothing caches colours between frames, so the change is instant.
+ */
+export function setHighContrast(enabled: boolean): void {
+  Object.assign(palette, defaultPalette, enabled ? highContrastOverrides : {});
+}
+
+export function isHighContrast(): boolean {
+  return palette.skyTop === highContrastOverrides.skyTop;
+}

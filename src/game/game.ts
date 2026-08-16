@@ -5,7 +5,7 @@ import type { Input } from '../core/input';
 import { loadSave, recordLevelResult, saveGame, createDefaultSave } from '../core/storage';
 import type { SaveData, StorageLike } from '../core/storage';
 import { Hud } from '../render/hud';
-import { palette } from '../render/palette';
+import { palette, setHighContrast } from '../render/palette';
 import { Autopilot } from './autopilot';
 import { LEVELS } from './levels/index';
 import { parseLevel } from './levelParser';
@@ -71,6 +71,9 @@ export class Game {
   /** Set while the player holds the key that opened a menu, to avoid instant double-actions. */
   private menuCooldown = 0;
 
+  /** Called when the key layout setting changes, so the host can rebind the keyboard. */
+  onBindingsChanged: ((altBindings: boolean) => void) | null = null;
+
   constructor(options: GameOptions = {}) {
     this.levels = options.levels ?? LEVELS;
     this.audio = options.audio ?? new NullAudio();
@@ -80,6 +83,8 @@ export class Game {
     this.saveData = this.storage === null ? createDefaultSave() : loadSave(this.storage);
     this.audio.setMuted(this.saveData.settings.muted);
     this.audio.setVolume(this.saveData.settings.volume);
+    // Themes are global (the palette object is shared), so apply the saved preference immediately.
+    setHighContrast(this.saveData.settings.highContrast);
 
     if (options.startLevelIndex !== undefined) {
       this.startLevel(options.startLevelIndex);
@@ -495,6 +500,20 @@ export class Game {
         this.saveData = { ...this.saveData, settings: { ...this.saveData.settings, reducedMotion } };
         this.liveWorld?.setReducedMotion(reducedMotion);
         this.attract?.world.setReducedMotion(reducedMotion);
+        this.persist();
+        break;
+      }
+      case 'HIGH CONTRAST': {
+        const highContrast = !this.saveData.settings.highContrast;
+        this.saveData = { ...this.saveData, settings: { ...this.saveData.settings, highContrast } };
+        setHighContrast(highContrast);
+        this.persist();
+        break;
+      }
+      case 'KEY LAYOUT': {
+        const altBindings = !this.saveData.settings.altBindings;
+        this.saveData = { ...this.saveData, settings: { ...this.saveData.settings, altBindings } };
+        this.onBindingsChanged?.(altBindings);
         this.persist();
         break;
       }

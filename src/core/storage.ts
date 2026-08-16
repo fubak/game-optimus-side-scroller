@@ -7,7 +7,7 @@
  */
 
 export const SAVE_KEY = 'optimus.save.v1';
-export const SAVE_VERSION = 2;
+export const SAVE_VERSION = 3;
 
 export interface Settings {
   muted: boolean;
@@ -15,6 +15,10 @@ export interface Settings {
   volume: number;
   /** Disables screen shake, flashes and heavy particle effects. */
   reducedMotion: boolean;
+  /** Brightens terrain and the player, darkens the backdrop, saturates hazards. */
+  highContrast: boolean;
+  /** Alternative keyboard layout (Z/X style) for players who cannot reach shift/space comfortably. */
+  altBindings: boolean;
   /** Key code → action names, for remapping. */
   bindings: Record<string, string[]>;
 }
@@ -36,6 +40,8 @@ export const DEFAULT_SETTINGS: Settings = {
   muted: false,
   volume: 0.7,
   reducedMotion: false,
+  highContrast: false,
+  altBindings: false,
   bindings: {},
 };
 
@@ -105,6 +111,9 @@ function parseSettings(value: unknown): Settings {
         : DEFAULT_SETTINGS.volume,
     reducedMotion:
       typeof value.reducedMotion === 'boolean' ? value.reducedMotion : DEFAULT_SETTINGS.reducedMotion,
+    highContrast:
+      typeof value.highContrast === 'boolean' ? value.highContrast : DEFAULT_SETTINGS.highContrast,
+    altBindings: typeof value.altBindings === 'boolean' ? value.altBindings : DEFAULT_SETTINGS.altBindings,
     bindings,
   };
 }
@@ -114,6 +123,8 @@ function parseSettings(value: unknown): Settings {
  *
  * v1 → v2: `bestScores` and `completed` were added, and `unlockedLevel` (a level id) became
  * `unlockedIndex` (a campaign index).
+ * v2 → v3: the accessibility settings (`highContrast`, `altBindings`) were added; missing values
+ * simply fall back to their defaults, which `parseSettings` already handles.
  */
 function migrate(raw: Record<string, unknown>): SaveData {
   const save = createDefaultSave();

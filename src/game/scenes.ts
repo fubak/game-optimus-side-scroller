@@ -50,7 +50,7 @@ export const MENU_ITEMS: Readonly<Record<SceneName, readonly string[]>> = {
   title: ['START', 'LEVEL SELECT', 'HOW TO PLAY', 'SETTINGS'],
   levelSelect: [],
   howToPlay: ['BACK'],
-  settings: ['SOUND', 'VOLUME', 'REDUCED MOTION', 'RESET PROGRESS', 'BACK'],
+  settings: ['SOUND', 'VOLUME', 'REDUCED MOTION', 'HIGH CONTRAST', 'KEY LAYOUT', 'RESET PROGRESS', 'BACK'],
   playing: [],
   paused: ['RESUME', 'RESTART', 'SETTINGS', 'QUIT TO TITLE'],
   levelComplete: ['CONTINUE', 'RETRY', 'QUIT TO TITLE'],
