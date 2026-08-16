@@ -98,17 +98,6 @@ function drawTitle(ctx: CanvasRenderingContext2D, game: Game): void {
 
   drawMenu(ctx, MENU_ITEMS.title, game.scene.cursor, 122, { time });
 
-  // Mascot standing next to the menu.
-  drawOptimus(ctx, {
-    x: CENTER_X + 96,
-    y: 128,
-    facing: -1,
-    state: 'idle',
-    animTime: time,
-    speedRatio: 0,
-    energyRatio: 1,
-  });
-
   const save = game.save;
   const completed = save.completed.length;
   drawText(

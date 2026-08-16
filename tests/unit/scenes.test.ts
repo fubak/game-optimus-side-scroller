@@ -16,7 +16,7 @@ function reduce(state: SceneState, ...events: SceneEvent[]): SceneState {
 }
 
 function at(name: SceneName, overrides: Partial<SceneState> = {}): SceneState {
-  return { name, levelIndex: 0, cursor: 0, returnTo: 'title', ...overrides };
+  return { name, levelIndex: 0, cursor: 0, returnTo: 'title', returnCursor: 0, ...overrides };
 }
 
 describe('scene machine', () => {
@@ -51,6 +51,16 @@ describe('scene machine', () => {
 
     const settings = reduce(createSceneState(), { type: 'moveCursor', delta: 3 }, { type: 'confirm' });
     expect(settings.name).toBe('settings');
+  });
+
+  it('restores the menu cursor when leaving a sub-menu', () => {
+    // Open HOW TO PLAY (third title item) and come back: the cursor should still be on it.
+    const opened = reduce(createSceneState(), { type: 'moveCursor', delta: 2 }, { type: 'confirm' });
+    expect(opened.name).toBe('howToPlay');
+    const back = reduce(opened, { type: 'back' });
+    expect(back.name).toBe('title');
+    expect(back.cursor).toBe(2);
+    expect(currentMenuItem(back)).toBe('HOW TO PLAY');
   });
 
   it('returns from sub-menus to wherever they were opened from', () => {

@@ -25,6 +25,8 @@ export interface SceneState {
   readonly cursor: number;
   /** Scene to return to when leaving a sub-menu. */
   readonly returnTo: SceneName;
+  /** Cursor position to restore when leaving a sub-menu, so the caller's selection is remembered. */
+  readonly returnCursor: number;
 }
 
 export type SceneEvent =
@@ -57,7 +59,7 @@ export const MENU_ITEMS: Readonly<Record<SceneName, readonly string[]>> = {
 };
 
 export function createSceneState(): SceneState {
-  return { name: 'title', levelIndex: 0, cursor: 0, returnTo: 'title' };
+  return { name: 'title', levelIndex: 0, cursor: 0, returnTo: 'title', returnCursor: 0 };
 }
 
 function menuLength(name: SceneName, levelCount: number): number {
@@ -95,6 +97,7 @@ export function reduceScene(state: SceneState, event: SceneEvent, context: Scene
         levelIndex: Math.max(0, Math.min(context.levelCount - 1, event.levelIndex)),
         cursor: 0,
         returnTo: 'title',
+        returnCursor: 0,
       };
     case 'pause':
       return state.name === 'playing' ? { ...state, name: 'paused', cursor: 0 } : state;
@@ -122,7 +125,7 @@ export function reduceScene(state: SceneState, event: SceneEvent, context: Scene
       };
     }
     case 'quitToTitle':
-      return { name: 'title', levelIndex: state.levelIndex, cursor: 0, returnTo: 'title' };
+      return { name: 'title', levelIndex: state.levelIndex, cursor: 0, returnTo: 'title', returnCursor: 0 };
     case 'openLevelSelect':
       return {
         ...state,
@@ -145,12 +148,22 @@ export function reduceScene(state: SceneState, event: SceneEvent, context: Scene
   }
 }
 
+/** Open a sub-menu, remembering where the cursor was so `back` can put it back. */
+function openSubMenu(state: SceneState, name: SceneName, cursor: number): SceneState {
+  return { ...state, name, cursor, returnTo: state.name, returnCursor: state.cursor };
+}
+
+/** Leave a sub-menu, restoring the caller's cursor. */
+function closeSubMenu(state: SceneState): SceneState {
+  return { ...state, name: state.returnTo, cursor: state.returnCursor, returnTo: 'title', returnCursor: 0 };
+}
+
 function applyBack(state: SceneState): SceneState {
   switch (state.name) {
     case 'howToPlay':
     case 'settings':
     case 'levelSelect':
-      return { ...state, name: state.returnTo, cursor: 0, returnTo: 'title' };
+      return closeSubMenu(state);
     case 'paused':
       return { ...state, name: 'playing', cursor: 0 };
     case 'playing':
@@ -174,13 +187,13 @@ function applyConfirm(state: SceneState, context: SceneContext): SceneState {
       if (item === undefined) return state;
       switch (item) {
         case 'START':
-          return { name: 'playing', levelIndex: 0, cursor: 0, returnTo: 'title' };
+          return { name: 'playing', levelIndex: 0, cursor: 0, returnTo: 'title', returnCursor: 0 };
         case 'LEVEL SELECT':
-          return { ...state, name: 'levelSelect', cursor: 0, returnTo: 'title' };
+          return openSubMenu(state, 'levelSelect', 0);
         case 'HOW TO PLAY':
-          return { ...state, name: 'howToPlay', cursor: 0, returnTo: 'title' };
+          return openSubMenu(state, 'howToPlay', 0);
         case 'SETTINGS':
-          return { ...state, name: 'settings', cursor: 0, returnTo: 'title' };
+          return openSubMenu(state, 'settings', 0);
         default:
           return state;
       }
@@ -188,14 +201,14 @@ function applyConfirm(state: SceneState, context: SceneContext): SceneState {
     case 'levelSelect': {
       const index = state.cursor;
       if (index > context.unlockedIndex) return state;
-      return { name: 'playing', levelIndex: index, cursor: 0, returnTo: 'title' };
+      return { name: 'playing', levelIndex: index, cursor: 0, returnTo: 'title', returnCursor: 0 };
     }
     case 'howToPlay':
-      return { ...state, name: state.returnTo, cursor: 0, returnTo: 'title' };
+      return closeSubMenu(state);
     case 'settings': {
       // Toggles are applied by the caller (they mutate settings); only BACK changes the scene.
       const item = MENU_ITEMS.settings[state.cursor];
-      if (item === 'BACK') return { ...state, name: state.returnTo, cursor: 0, returnTo: 'title' };
+      if (item === 'BACK') return closeSubMenu(state);
       return state;
     }
     case 'paused': {
@@ -207,9 +220,15 @@ function applyConfirm(state: SceneState, context: SceneContext): SceneState {
         case 'RESTART':
           return { ...state, name: 'playing', cursor: 0 };
         case 'SETTINGS':
-          return { ...state, name: 'settings', cursor: 0, returnTo: 'paused' };
+          return openSubMenu(state, 'settings', 0);
         case 'QUIT TO TITLE':
-          return { name: 'title', levelIndex: state.levelIndex, cursor: 0, returnTo: 'title' };
+          return {
+            name: 'title',
+            levelIndex: state.levelIndex,
+            cursor: 0,
+            returnTo: 'title',
+            returnCursor: 0,
+          };
         default:
           return state;
       }
@@ -225,7 +244,13 @@ function applyConfirm(state: SceneState, context: SceneContext): SceneState {
         case 'RETRY':
           return { ...state, name: 'playing', cursor: 0 };
         case 'QUIT TO TITLE':
-          return { name: 'title', levelIndex: state.levelIndex, cursor: 0, returnTo: 'title' };
+          return {
+            name: 'title',
+            levelIndex: state.levelIndex,
+            cursor: 0,
+            returnTo: 'title',
+            returnCursor: 0,
+          };
         default:
           return state;
       }
@@ -233,10 +258,10 @@ function applyConfirm(state: SceneState, context: SceneContext): SceneState {
     case 'gameOver': {
       const item = MENU_ITEMS.gameOver[state.cursor];
       if (item === 'RETRY') return { ...state, name: 'playing', cursor: 0 };
-      return { name: 'title', levelIndex: state.levelIndex, cursor: 0, returnTo: 'title' };
+      return { name: 'title', levelIndex: state.levelIndex, cursor: 0, returnTo: 'title', returnCursor: 0 };
     }
     case 'campaignComplete':
-      return { name: 'title', levelIndex: 0, cursor: 0, returnTo: 'title' };
+      return { name: 'title', levelIndex: 0, cursor: 0, returnTo: 'title', returnCursor: 0 };
     case 'playing':
       return state;
     default: {
