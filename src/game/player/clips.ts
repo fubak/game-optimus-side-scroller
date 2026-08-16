@@ -22,6 +22,14 @@
  *   values are **negative**. Getting this backwards hyperextends the arm and
  *   is instantly, comically wrong.
  *
+ * ## Body mechanics
+ *
+ * Attack clips rotate the hips, abdomen, chest, and head as much as the arm.
+ * A punch thrown from a rigid torso reads as the arm being pushed out on a
+ * rail; the weight comes from the body turning into it. The first pass here
+ * used roughly half these values and a reviewer described the result as "only
+ * the arm extends".
+ *
  * ## Authoring notes
  *
  * Cycles use six keys rather than four. Four keys (contact, pass, contact,
@@ -825,25 +833,25 @@ export const ATTACK_1: ClipDefinition = {
     chest: {
       rot: [
         [0, 0],
-        [0.09, 9],
-        [0.17, -13],
-        [0.26, -6],
+        [0.09, 17],
+        [0.17, -24],
+        [0.26, -11],
         [0.36, 0],
       ],
     },
     abdomen: {
       rot: [
         [0, 0],
-        [0.09, 5],
-        [0.17, -8],
+        [0.09, 10],
+        [0.17, -15],
         [0.36, 0],
       ],
     },
     hips: {
       rot: [
         [0, 0],
-        [0.09, 4],
-        [0.17, -6],
+        [0.09, 8],
+        [0.17, -12],
         [0.36, 0],
       ],
     },
@@ -914,23 +922,23 @@ export const ATTACK_2: ClipDefinition = {
     },
     chest: {
       rot: [
-        [0, -10],
-        [0.08, -15],
-        [0.16, 12],
+        [0, -18],
+        [0.08, -27],
+        [0.16, 22],
         [0.34, 0],
       ],
     },
     abdomen: {
       rot: [
-        [0, -6],
-        [0.16, 8],
+        [0, -11],
+        [0.16, 15],
         [0.34, 0],
       ],
     },
     hips: {
       rot: [
-        [0, -4],
-        [0.16, 6],
+        [0, -8],
+        [0.16, 12],
         [0.34, 0],
       ],
     },
@@ -994,25 +1002,25 @@ export const ATTACK_3: ClipDefinition = {
     chest: {
       rot: [
         [0, 0],
-        [0.16, 16],
-        [0.26, -19],
-        [0.36, -10],
+        [0.16, 26],
+        [0.26, -32],
+        [0.36, -16],
         [0.52, 0],
       ],
     },
     abdomen: {
       rot: [
         [0, 0],
-        [0.16, 9],
-        [0.26, -12],
+        [0.16, 16],
+        [0.26, -21],
         [0.52, 0],
       ],
     },
     hips: {
       rot: [
         [0, 0],
-        [0.16, 5],
-        [0.26, -8],
+        [0.16, 10],
+        [0.26, -15],
         [0.52, 0],
       ],
       // The whole body drops into the blow.

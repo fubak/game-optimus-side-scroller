@@ -510,7 +510,7 @@ export class Game {
       this.groundedTime = 0;
     }
 
-    this.respawnFade = Math.max(0, this.respawnFade - dt * 1.6);
+    this.respawnFade = Math.max(0, this.respawnFade - dt * 1.15);
 
     // The kill plane sits below the room, not at its edge, so a deep jump near
     // the lower bound is not punished.
@@ -753,7 +753,10 @@ export class Game {
       drawOccluders: (batch) => this.drawOccluders(batch),
       drawContactAO: (batch) => this.drawContactAO(batch),
       emitParticles: (quads, submit) => this.emitParticles(quads, submit),
-      drawUI: (batch) => this.hud.draw(batch, this.camera, this.playerHealth / 100),
+      drawUI: (batch) => {
+        this.hud.draw(batch, this.camera, this.playerHealth / 100);
+        this.drawRespawnFade(batch);
+      },
     });
 
     if (this.loop) {
@@ -826,33 +829,79 @@ export class Game {
     this.parallax.drawForeground(batch, this.layers, this.time);
   }
 
+  /**
+   * Draws platforms by *tiling* their texture rather than stretching it.
+   *
+   * A 30 m floor drawn as a single quad stretches a 512 px texture across the
+   * whole span, which destroys the surface detail and leaves the slab reading
+   * as a flat rectangle of smeared dirt. Tiling at a fixed world size keeps
+   * texel density constant no matter how long a platform is, so a short ledge
+   * and a long floor are made of visibly the same material.
+   *
+   * The tile is mirrored on alternate columns. That doubles the apparent period
+   * of the pattern for free, which is what stops a long run of ground from
+   * showing an obvious repeat.
+   */
   private drawPlatforms(batch: SpriteBatch): void {
     const white = packColor(1, 1, 1, 1);
     const material = packMaterial(0, 0.5, 0.2, 0);
     const visible = this.camera.getVisibleBounds(4);
 
+    /** World width of one texture repeat, in metres. */
+    const TILE_WIDTH = 7.5;
+
     for (const platform of this.room.platforms) {
-      if (
-        platform.x + platform.width / 2 < visible.minX ||
-        platform.x - platform.width / 2 > visible.maxX
-      ) {
+      const left = platform.x - platform.width / 2;
+      const right = platform.x + platform.width / 2;
+      if (right < visible.minX || left > visible.maxX) continue;
+
+      const entry = this.atlas.get(platform.sprite);
+
+      // Thin ledges get a single stretched quad: they are shorter than a tile,
+      // and tiling them would crop the lit top edge that makes them readable.
+      if (platform.width <= TILE_WIDTH * 1.1) {
+        batch.draw(
+          platform.x,
+          platform.y,
+          platform.width,
+          platform.height,
+          entry.u0,
+          entry.v0,
+          entry.u1,
+          entry.v1,
+          Depth.Playfield,
+          white,
+          material,
+          0,
+        );
         continue;
       }
-      const entry = this.atlas.get(platform.sprite);
-      batch.draw(
-        platform.x,
-        platform.y,
-        platform.width,
-        platform.height,
-        entry.u0,
-        entry.v0,
-        entry.u1,
-        entry.v1,
-        Depth.Playfield,
-        white,
-        material,
-        0,
-      );
+
+      const tiles = Math.ceil(platform.width / TILE_WIDTH);
+      const tileWidth = platform.width / tiles;
+
+      for (let i = 0; i < tiles; i++) {
+        const x = left + tileWidth * (i + 0.5);
+        // Cull per tile, so a long floor only draws the part in view.
+        if (x + tileWidth / 2 < visible.minX || x - tileWidth / 2 > visible.maxX) continue;
+
+        // Mirror alternate tiles to double the apparent period.
+        const flip = i % 2 === 1;
+        batch.draw(
+          x,
+          platform.y,
+          tileWidth,
+          platform.height,
+          flip ? entry.u1 : entry.u0,
+          entry.v0,
+          flip ? entry.u0 : entry.u1,
+          entry.v1,
+          Depth.Playfield,
+          white,
+          material,
+          0,
+        );
+      }
     }
   }
 
@@ -864,7 +913,7 @@ export class Game {
    *
    * This deliberately does *not* go into the G-buffer. WebGL2 has no
    * per-attachment blend state, so a multiply blend aimed at the albedo also
-   * scaled the normal, material, and depth attachments — flipping the normals
+   * scaled the normal, material, and depth attachments - flipping the normals
    * in the affected rectangle and turning a soft pool into a hard black box.
    *
    * The player's pool shrinks and fades with height, which is what makes a jump
@@ -883,9 +932,7 @@ export class Game {
      *
      * The ellipse is offset downward so the great majority of it lands *below*
      * the surface line. Centring it on the line put most of the pool in empty
-     * air above the platform, where there is no geometry to darken — the
-     * buffer was being written correctly and read correctly, and still nothing
-     * was visible.
+     * air above the platform, where there is no geometry to darken.
      */
     const blob = (x: number, surfaceY: number, width: number, density: number): void => {
       const height = width * 0.62;
@@ -899,7 +946,6 @@ export class Game {
         entry.u1,
         entry.v1,
         Depth.Playfield,
-        // Premultiplied, and additive, so the colour *is* the density.
         packColor(density, density, density, density),
         material,
         0,
@@ -909,17 +955,24 @@ export class Game {
     for (const prop of this.room.props) {
       if (!prop.castsShadow) continue;
       if (prop.x < visible.minX || prop.x > visible.maxX) continue;
-      // Nudged below the surface so the pool sits on the platform's top face.
       blob(prop.x + 0.06, prop.y + prop.height / 2, prop.width * 2.3, 1.0);
+    }
+
+    // Enemies are grounded to the world too, even while hovering.
+    for (const drone of this.enemies) {
+      if (drone.x < visible.minX || drone.x > visible.maxX) continue;
+      const surface = this.physics.surfaceHeightAt(drone.x, drone.y, 8);
+      if (!surface.found) continue;
+      const height = surface.y - drone.y;
+      const fade = clamp01(1 - height / 4.5);
+      if (fade <= 0.02) continue;
+      blob(drone.x, surface.y, 1.5 * (1 + height * 0.2), fade * fade * 0.8);
     }
 
     const player = this.player;
     const heightAboveGround = Math.max(0, player.groundY - player.feetY);
-    // Fades over two metres, roughly half a jump.
     const fade = clamp01(1 - heightAboveGround / 2.2);
     if (fade > 0.02) {
-      // Widening with height mimics a penumbra spreading as the occluder moves
-      // away from the surface.
       const width = 1.9 * (1 + heightAboveGround * 0.30);
       blob(player.feetX + 0.05, player.groundY, width, fade * fade);
     }
@@ -1011,6 +1064,44 @@ export class Game {
     }
     // Stretched along travel, which is what makes a spark read as a streak.
     submit([glow.u0, glow.v0, glow.u1, glow.v1], this.atlas.textures.albedo.handle, 3.2);
+  }
+
+  /**
+   * A full-screen wipe covering a respawn.
+   *
+   * Without it the teleport is visible as a hard cut: the camera jumps, the
+   * character appears somewhere else, and it reads as a glitch rather than a
+   * mechanic. A fast fade out and a slower fade in is the standard solution
+   * because it hides the discontinuity *and* gives the player a moment to
+   * register that something happened.
+   */
+  private drawRespawnFade(batch: SpriteBatch): void {
+    if (this.respawnFade <= 0.002) return;
+
+    const fill = this.atlas.get('barFill');
+    batch.setTextures(this.atlas.textures);
+    batch.setBlend(BlendMode.Alpha);
+
+    // Squared, so the screen clears quickly and lingers dark only briefly.
+    const alpha = this.respawnFade * this.respawnFade;
+
+    batch.draw(
+      this.camera.x,
+      this.camera.y,
+      this.camera.viewWidthMetres * 1.1,
+      this.camera.viewHeightMetres * 1.1,
+      fill.u0,
+      fill.v0,
+      fill.u1,
+      fill.v1,
+      0,
+      // Not pure black: a very dark red keeps it inside the biome's palette.
+      packColor(0.04 * alpha, 0.012 * alpha, 0.01 * alpha, alpha),
+      packMaterial(0, 1, 0, 0),
+      0,
+    );
+
+    batch.setBlend(BlendMode.Premultiplied);
   }
 
   private drawEnemies(batch: SpriteBatch): void {
