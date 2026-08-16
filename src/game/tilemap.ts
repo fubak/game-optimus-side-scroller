@@ -4,9 +4,11 @@ import type { Rect } from '../core/math';
 /**
  * Grid of tiles backed by a `Uint8Array`.
  *
- * Out-of-bounds policy is deliberate:
- * - above the map (`ty < 0`) is **empty**, so the player can jump past the ceiling of a level;
- * - left/right of the map is **solid**, an invisible wall that keeps bodies inside the level;
+ * Out-of-bounds policy is deliberate — a level is a closed box that is only open at the bottom:
+ * - left/right of the map is **solid**: invisible walls keep bodies inside the level;
+ * - above the map is **solid** too, an invisible ceiling. (It used to be open sky. A test bot then
+ *   jetpacked over the top of a level and *ran along the side wall column*, which reads as solid at
+ *   every row — so "open sky" was really an infinite ledge at y = 0.)
  * - below the map is **empty**, so falling off the bottom is a pit death the world can detect.
  */
 export class TileMap {
@@ -59,11 +61,9 @@ export class TileMap {
   }
 
   tileAt(tx: number, ty: number): TileKind {
-    if (tx < 0 || tx >= this.width) {
-      // Invisible side walls, but only within/below the level body — above the map is open sky.
-      return ty < 0 ? TileKind.Empty : TileKind.Solid;
-    }
-    if (ty < 0 || ty >= this.height) return TileKind.Empty;
+    // Sides and ceiling are solid; only the bottom is open (that is the pit).
+    if (tx < 0 || tx >= this.width || ty < 0) return TileKind.Solid;
+    if (ty >= this.height) return TileKind.Empty;
     return (this.cells[ty * this.width + tx] ?? TileKind.Empty) as TileKind;
   }
 

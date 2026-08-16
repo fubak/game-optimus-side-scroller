@@ -136,7 +136,15 @@ describe('Player — jumping feel', () => {
 
   it('buffers a jump pressed just before landing', () => {
     // Fall from a height; tap jump a few frames before touchdown — it must fire on landing.
-    const rows = ['..........', '..........', '..........', '..........', '..........', '##########'];
+    const rows = [
+      '..........',
+      '..........',
+      '..........',
+      '..........',
+      '..........',
+      '..........',
+      '##########',
+    ];
     const probe = runPlayer({ rows, spawnTile: [1, 0], frames: 90 });
     const landFrame = probe.samples.findIndex((sample) => sample.grounded);
     expect(landFrame).toBeGreaterThan(2);
@@ -161,7 +169,15 @@ describe('Player — jumping feel', () => {
   });
 
   it('a press just before touchdown becomes a jump, not a puff of jetpack', () => {
-    const rows = ['..........', '..........', '..........', '..........', '..........', '##########'];
+    const rows = [
+      '..........',
+      '..........',
+      '..........',
+      '..........',
+      '..........',
+      '..........',
+      '##########',
+    ];
     const run = runPlayer({
       rows,
       spawnTile: [1, 0],
@@ -175,7 +191,15 @@ describe('Player — jumping feel', () => {
   });
 
   it('a press high above the ground engages the jetpack immediately', () => {
-    const rows = ['..........', '..........', '..........', '..........', '..........', '##########'];
+    const rows = [
+      '..........',
+      '..........',
+      '..........',
+      '..........',
+      '..........',
+      '..........',
+      '##########',
+    ];
     const run = runPlayer({
       rows,
       spawnTile: [1, 0],
@@ -483,13 +507,13 @@ describe('Player — damage, death and respawn', () => {
 
 describe('Player — conveyors', () => {
   it('drifts with the belt while standing still, and can walk against it', () => {
-    const rows = ['..........', '>>>>>>>>>>'];
-    const drifting = runPlayer({ rows, spawnTile: [1, 0], frames: 60 });
+    const rows = ['..........', '..........', '>>>>>>>>>>'];
+    const drifting = runPlayer({ rows, spawnTile: [1, 1], frames: 60 });
     expect(drifting.samples[59]!.x).toBeGreaterThan(drifting.samples[0]!.x + 20);
 
     const walkingBack = runPlayer({
       rows,
-      spawnTile: [4, 0],
+      spawnTile: [4, 1],
       spans: [{ action: 'left', start: 0, duration: 60 }],
       frames: 60,
     });
@@ -498,8 +522,12 @@ describe('Player — conveyors', () => {
 
   it('belt drift does not change the player run speed', () => {
     const belt = runPlayer({
-      rows: ['..............................', '>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>'],
-      spawnTile: [1, 0],
+      rows: [
+        '..............................',
+        '..............................',
+        '>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>',
+      ],
+      spawnTile: [1, 1],
       spans: [{ action: 'right', start: 0, duration: 60 }],
       frames: 40,
     });

@@ -183,15 +183,17 @@ describe('moveAndCollide — one-way platforms', () => {
   });
 
   it('does not catch the body when it is rising through the platform', () => {
-    const map = mapFromAscii(['....', '====', '....', '####']);
-    const body = createBody(16, 20, 10, 14);
+    const map = mapFromAscii(['....', '....', '====', '....', '####']);
+    const body = createBody(16, 36, 10, 14);
     body.vy = -400;
     // Multiple steps: the body crosses the platform row entirely without ever landing.
-    for (let frame = 0; frame < 5; frame += 1) {
+    for (let frame = 0; frame < 4; frame += 1) {
       const result = moveAndCollide(body, DT, map, createCollisionResult());
       expect(result.onGround).toBe(false);
     }
-    expect(body.y).toBeLessThan(0);
+    // Ends up above the platform row (which starts at y = 32), still rising.
+    expect(body.y).toBeLessThan(18);
+    expect(body.vy).toBeLessThan(0);
   });
 
   it('drops through when asked (holding down)', () => {

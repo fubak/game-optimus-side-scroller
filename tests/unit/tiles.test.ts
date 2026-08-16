@@ -66,13 +66,14 @@ describe('TileMap', () => {
     expect(() => new TileMap(2, 2, new Uint8Array(3))).toThrow(/does not match/);
   });
 
-  it('treats the sides as solid walls, and above/below as open', () => {
+  it('is a closed box: solid sides and ceiling, open bottom', () => {
     const map = mapFromAscii(['....', '####']);
     expect(map.tileAt(-1, 0)).toBe(TileKind.Solid);
     expect(map.tileAt(4, 0)).toBe(TileKind.Solid);
-    // Above the level is sky, even outside the horizontal bounds, so high jumps never hit a corner.
-    expect(map.tileAt(-1, -1)).toBe(TileKind.Empty);
-    expect(map.tileAt(0, -1)).toBe(TileKind.Empty);
+    // The ceiling is solid: with open sky, the side-wall column reads as solid at every row, which
+    // is an infinite ledge a jetpack can run along out of the level. (Found by the level bot.)
+    expect(map.tileAt(0, -1)).toBe(TileKind.Solid);
+    expect(map.tileAt(-1, -1)).toBe(TileKind.Solid);
     // Below the level is empty: falling off the bottom is a pit death, not a collision.
     expect(map.tileAt(0, 99)).toBe(TileKind.Empty);
   });
