@@ -404,6 +404,28 @@ export function makeDrone(size: number, seed: number): Surface {
   return surface;
 }
 
+/** A flat interface fill with hard edges and a holographic scanline. */
+export function makeBarFill(width: number, height: number): Surface {
+  const surface = createSurface(width, height);
+  for (let y = 0; y < height; y++) {
+    // Brighter through the middle, so the bar has a slight tube-like read
+    // rather than being a dead flat rectangle.
+    const t = y / (height - 1);
+    const core = 1 - Math.abs(t - 0.5) * 1.3;
+    // Scanlines: the holographic motif shared with the visor and consoles.
+    const scan = y % 4 === 0 ? 0.78 : 1;
+    const value = clamp01(0.55 + core * 0.45) * scan;
+    for (let x = 0; x < width; x++) {
+      const index = y * width + x;
+      setPixel(surface, x, y, value, value, value, 1);
+      surface.emissive[index] = 1;
+      surface.roughness[index] = 1;
+      surface.heightField[index] = 0;
+    }
+  }
+  return surface;
+}
+
 /** Builds the initial atlas source list. */
 export function buildCoreAtlasSources(): AtlasSource[] {
   const sources: AtlasSource[] = [];
@@ -448,6 +470,17 @@ export function buildCoreAtlasSources(): AtlasSource[] {
   sources.push({
     // Written additively into the contact-occlusion buffer, so this is a
     // *density* map: white with a soft radial alpha, not a dark sprite.
+    // A flat fill with hard edges and a faint horizontal scanline.
+    //
+    // Interface bars need definite ends. Stretching the soft radial glow across
+    // a bar makes it read as a lens flare rather than a gauge, because the
+    // value is exactly where the edge is and a soft edge has no value.
+    name: 'barFill',
+    surface: makeBarFill(64, 16),
+    widthMetres: 1,
+  });
+
+  sources.push({
     name: 'drone',
     surface: makeDrone(metresToTexels(0.85, 3), 0xd40e),
     widthMetres: 0.85,

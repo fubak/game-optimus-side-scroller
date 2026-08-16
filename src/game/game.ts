@@ -43,6 +43,7 @@ import { AudioEngine } from '../audio/engine.ts';
 import { Sfx } from '../audio/sfx.ts';
 import { Ambience } from '../audio/ambience.ts';
 import { DroneState as DS } from './enemies/drone.ts';
+import { Hud } from '../ui/hud.ts';
 import { clamp01 } from '../core/math/scalar.ts';
 
 const driftNoise = new NoiseField(0x4d51);
@@ -62,6 +63,7 @@ export class Game {
   player!: PlayerController;
   animator!: OptimusAnimator;
   private optimusRenderer!: OptimusRenderer;
+  private hud!: Hud;
 
   /**
    * All airborne particulate.
@@ -160,6 +162,7 @@ export class Game {
 
     this.animator = new OptimusAnimator();
     this.optimusRenderer = new OptimusRenderer(this.atlas, this.animator.skeleton);
+    this.hud = new Hud(this.atlas);
     this.player = new PlayerController(this.physics, this.room.spawn.x, this.room.spawn.y);
     this.autopilot = new Autopilot(this.physics, this.player);
 
@@ -649,6 +652,8 @@ export class Game {
     }
     this.dashTrail.update(unscaledDt);
 
+    this.hud.update(this.playerHealth / 100, unscaledDt);
+
     this.updateLights();
     this.updateGodRaySource();
 
@@ -661,6 +666,7 @@ export class Game {
       drawOccluders: (batch) => this.drawOccluders(batch),
       drawContactAO: (batch) => this.drawContactAO(batch),
       emitParticles: (quads, submit) => this.emitParticles(quads, submit),
+      drawUI: (batch) => this.hud.draw(batch, this.camera, this.playerHealth / 100),
     });
 
     if (this.loop) {
