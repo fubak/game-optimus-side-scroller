@@ -1,10 +1,17 @@
 # OPTIMUS — side-scroller
 
-A browser side-scrolling platformer starring **Optimus**, a humanoid factory robot climbing out of a decaying
-robotics plant. Built from scratch with TypeScript and Canvas2D: no game engine, no binary art assets — every
-sprite, tile and sound is generated in code.
+A browser side-scrolling platformer starring **Optimus**, a humanoid factory robot climbing out of a
+decaying robotics plant. Built from scratch with TypeScript and Canvas2D: **no game engine and no
+binary assets** — every sprite, tile, sound and skyline is generated in code.
 
-> Status: in active development. See [Roadmap](#roadmap).
+Four sectors, a jetpack, a dash, and a gantry crane at the end that would rather you stayed.
+
+![Title screen with the attract-mode demo playing behind it](docs/media/title.png)
+
+|                                                           |                                                            |
+| --------------------------------------------------------- | ---------------------------------------------------------- |
+| ![Assembly Line, the first sector](docs/media/level1.png) | ![The level summary screen](docs/media/level-complete.png) |
+| ![How to play](docs/media/how-to-play.png)                | ![On-screen touch controls](docs/media/touch-controls.png) |
 
 ## Quick start
 
@@ -15,58 +22,147 @@ npm run dev      # http://127.0.0.1:5173
 
 ## Controls
 
-| Action        | Keys                   |
-| ------------- | ---------------------- |
-| Move          | `A` / `D` or `←` / `→` |
-| Jump          | `Space` / `W` / `↑`    |
-| Debug overlay | `F3`                   |
+| Action               | Keys                                     | Touch                  |
+| -------------------- | ---------------------------------------- | ---------------------- |
+| Move                 | `←` `→` or `A` `D`                       | on-screen d-pad        |
+| Jump                 | `Space` (tap = low hop, hold = high)     | `JUMP`                 |
+| **Jetpack**          | press jump again in mid-air **and hold** | hold `JUMP` in mid-air |
+| Dash                 | `Shift` or `J`                           | `DASH`                 |
+| Drop through catwalk | hold `↓`                                 | `↓`                    |
+| Pause / back         | `Esc`                                    | `II`                   |
+| Restart level        | `R`                                      | —                      |
+| Mute                 | `M`                                      | settings               |
+| Debug overlay        | `F3`                                     | —                      |
 
-More actions (dash, thrust, pause, mute) arrive with the gameplay phases.
+An alternative `Z` / `X` layout is available in **Settings → Key layout**.
+
+### How it plays
+
+- **Energy** (the green bar) powers the jetpack and the dash, and only refills with both feet on the
+  ground. Hovering is a resource, not a mode.
+- **Stomp** walkers and drones from above. Turrets and hydraulic presses cannot be stomped — turrets
+  are bolted to ledges and fire aimed bolts, presses telegraph before they slam.
+- **Checkpoints** cost nothing; dying costs a chassis (you get three per attempt).
+- **Parts** are score. Most sit on catwalks a plain jump cannot reach — that is what the jetpack is for.
+- Finish under **par** for a time bonus. Best times and scores are saved locally.
+
+### URL parameters
+
+| Parameter        | Effect                                                                          |
+| ---------------- | ------------------------------------------------------------------------------- |
+| `?level=level-2` | start a specific level (`level-1`…`level-4`, or `dev` for the movement sandbox) |
+| `?autoplay=1`    | hand the controls to the autopilot (attract mode / demo recording)              |
+| `?touch=1`       | force the on-screen touch controls                                              |
+| `?seed=1234`     | pin the world RNG seed                                                          |
+| `?test=1`        | expose the deterministic `window.__optimus` test hooks in a production build    |
 
 ## Scripts
 
-| Script                  | What it does                                     |
-| ----------------------- | ------------------------------------------------ |
-| `npm run dev`           | Vite dev server with hot reload                  |
-| `npm run build`         | Production bundle into `dist/`                   |
-| `npm run preview`       | Serve the production bundle                      |
-| `npm run lint`          | ESLint (type-aware) over the whole repo          |
-| `npm run typecheck`     | `tsc --noEmit` with strict settings              |
-| `npm test`              | Vitest unit suite                                |
-| `npm run test:coverage` | Unit suite with coverage thresholds              |
-| `npm run ci`            | lint + typecheck + tests + build (CI equivalent) |
+| Script                  | What it does                                            |
+| ----------------------- | ------------------------------------------------------- |
+| `npm run dev`           | Vite dev server with hot reload                         |
+| `npm run build`         | production bundle into `dist/`                          |
+| `npm run preview`       | serve the production bundle on :4173                    |
+| `npm run lint`          | type-aware ESLint over the whole repo                   |
+| `npm run typecheck`     | `tsc --noEmit`, strict                                  |
+| `npm test`              | Vitest unit suite (325 tests)                           |
+| `npm run test:coverage` | unit suite with coverage thresholds                     |
+| `npm run test:e2e`      | Playwright browser smoke tests against the built bundle |
+| `npm run levels`        | print every level with rulers and a layout audit        |
+| `npm run ci`            | lint + typecheck + unit + build + e2e (what CI runs)    |
 
 ## Design notes
 
-- **Fixed 480×270 internal buffer**, integer-upscaled to the viewport. Crisp pixels, cheap fill-rate, and
-  gameplay code never deals with real window sizes (`src/core/canvas.ts`).
-- **Fixed-timestep simulation** at 1/60 s with an accumulator and render interpolation. `advance()` and
-  `stepFrames()` are wall-clock free, so unit tests and browser smoke tests can drive the game frame-exactly
-  (`src/core/loop.ts`).
-- **Determinism first.** All randomness flows through a seeded PRNG owned by the world, so the same input tape
-  plus the same seed always reproduce the same run — which is what makes the gameplay testable.
-- **Simulation is pure, rendering is a read-only view.** Nothing in `src/render/` mutates game state.
+**Fixed 480×270 internal buffer**, integer-upscaled to the viewport. Crisp pixels, cheap fill-rate,
+and gameplay code never deals with real window sizes (`src/core/canvas.ts`).
+
+**Fixed-timestep simulation** at 1/60 s with an accumulator and render interpolation. `advance()` and
+`stepFrames()` are wall-clock free, so tests and the browser harness drive the game frame-exactly
+(`src/core/loop.ts`).
+
+**Determinism first.** Every random decision flows through a seeded PRNG owned by the world, so the
+same seed plus the same input tape reproduces a run exactly — that is what makes gameplay testable.
+The browser and headless runs agree to the millisecond: the autopilot clears level 1 in `0:10.65`
+either way.
+
+**Simulation is pure; rendering is a read-only view.** Nothing in `src/render/` mutates game state,
+and nothing in `src/game/` touches the DOM. The whole game — menus, saves, boss fight — runs headless
+in Node.
+
+**Movement feel is explicit, not emergent.** Coyote time, jump buffering, variable jump height with a
+minimum hop, apex hang, a cooldown dash, and a jetpack that defers to the jump buffer when you are
+about to land. Every number lives in `src/game/constants.ts`.
+
+**Everything is drawn from code.** Tiles pick their edges from neighbours, the skyline is generated
+from the level seed, sprites are assembled from rectangles per frame, the font is a 5×7 bitmap, and
+the audio is oscillators and noise bursts with a scheduled arpeggio for music.
 
 ## Project layout
 
 ```
-src/core/     engine primitives: canvas, loop, input, audio, rng, math, storage
-src/game/     simulation: tilemap, physics, player, enemies, levels, scenes
-src/render/   canvas painting: sprites, tiles, parallax, particles, HUD
+src/core/     engine primitives: canvas, loop, input, touch, audio, rng, math, storage
+src/game/     simulation: tilemap, physics, player, enemies, levels, world, scenes, game, autopilot
+src/render/   drawing: tiles, parallax, sprites, particles, HUD, screens, text, palette
+scripts/      developer tools (level report / layout audit)
 tests/unit/   Vitest specs for the pure modules
+tests/e2e/    Playwright smoke tests against the built bundle
 ```
 
-## Roadmap
+## Authoring a level
 
-- [x] Phase 1 — project scaffold, low-res display, fixed-timestep loop
-- [ ] Phase 2 — engine core: input, seeded RNG, tile physics, camera
-- [ ] Phase 3 — Optimus movement, animation, particles
-- [ ] Phase 4 — level parser and the first playable level
-- [ ] Phase 5 — enemies, hazards, combat
-- [ ] Phase 6 — scenes, HUD, progression, audio, levels 2–3
-- [ ] Phase 7 — finale, polish, touch controls, accessibility
-- [ ] Phase 8 — browser smoke tests, CI, deploy
-- [ ] Phase 9 — docs and demo
+Levels are ASCII in TypeScript source (`src/game/levels/`). The parser validates them and the audit
+derives the movement limits from the tuning constants, so an unjumpable pit fails the test suite
+rather than the player.
+
+```
+#  solid          =  one-way catwalk     ^  spikes        < >  conveyor belts
+C  checkpoint     G  goal / hatch        :  scenery       .    empty
+P  spawn (exactly one, needs head room)
+w  walker         d  drone               t  turret        x  press      B  Overseer (boss)
+e  energy cell    o  bolt                k  repair kit
+```
+
+```ts
+export const LEVEL_5: LevelDef = {
+  id: 'level-5',
+  name: 'COOLANT LOOP',
+  subtitle: 'MIND THE GAP',
+  parTimeSec: 45,
+  seed: 0xc001,
+  rows: ['..............', '..P........G..', '######...#####'],
+};
+```
+
+Add it to `LEVELS` in `src/game/levels/index.ts`, then:
+
+```bash
+npm run levels     # rulers + gap/step/entity audit
+npm test           # includes "every campaign level is completable" (played by the autopilot)
+```
+
+The **autopilot** (`src/game/autopilot.ts`) is a greedy platforming AI that reads the tiles ahead and
+plays the game through the normal input interface. It runs the title-screen attract mode, powers
+`?autoplay=1`, and proves in CI that every level — including the boss — can actually be finished.
+
+## Testing
+
+- **325 unit tests** over the pure modules: physics (tunnelling, one-way platforms, corners), the
+  player state machine driven by frame-exact input tapes, enemies, the boss phase machine, level
+  parsing/auditing, scene transitions, save migration, audio synthesis, touch input, and simulation
+  performance budgets.
+- **7 Playwright tests** against the production build: boot without console errors, integer canvas
+  scaling and resize behaviour, attract mode, real keyboard input, pause/resume, a deterministic
+  autopilot playthrough, save persistence across reload, and touch controls.
+- A **fuzz test** hammers 2000 frames of random input at the player, and a **determinism test**
+  asserts that identical inputs produce byte-identical state.
+
+## Accessibility
+
+- **Reduced motion** removes screen shake, flashes and the damage vignette.
+- **High contrast** brightens terrain and Optimus, darkens the backdrop and saturates hazards.
+- Pickups differ in **shape** as well as colour (canister, hex nut, cross).
+- Alternative **key layout** (`Z`/`X`) for players who cannot comfortably reach space/shift.
+- On-screen **touch controls** with multi-touch support on phones and tablets.
 
 ## Licence
 
