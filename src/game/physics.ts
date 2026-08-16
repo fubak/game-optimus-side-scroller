@@ -202,26 +202,60 @@ function resolveVertical(
   }
 }
 
-/** Tile kind directly beneath the body's feet, or `null` when airborne. */
-export function groundKindBelow(body: Body, map: TileMap, probe = 1): TileKind | null {
+export interface GroundProbe {
+  /** Tile kind of the surface found below, or `null` when there is none within range. */
+  kind: TileKind | null;
+  /**
+   * Gap between the body's feet and that surface. Slightly negative when the feet are a hair
+   * inside the tile (which happens with floating-point positions), `Infinity` when nothing is
+   * within `maxDistance`.
+   */
+  distance: number;
+}
+
+/**
+ * Scan downwards for the nearest standable surface (solid or one-way) beneath the body.
+ *
+ * Used for three different questions: "am I standing on something?" (distance ≈ 0), "what am I
+ * standing on?" (conveyors) and "do I have room to fire the jetpack?" (clearance).
+ */
+export function probeGround(body: Body, map: TileMap, maxDistance = 64): GroundProbe {
   const tileSize = map.tileSize;
-  const ty = Math.floor((body.y + body.height + probe * 0.5) / tileSize);
   const bottom = body.y + body.height;
-  // Only counts when the body is (nearly) flush with the tile top, not deep inside it.
   const minTx = Math.floor((body.x + EDGE_EPSILON) / tileSize);
   const maxTx = Math.floor((body.x + body.width - EDGE_EPSILON) / tileSize);
-  for (let tx = minTx; tx <= maxTx; tx += 1) {
-    const kind = map.tileAt(tx, ty);
-    const flags = tileFlags(kind);
-    if (!flags.solid && !flags.oneWay) continue;
+  const firstTy = Math.floor(bottom / tileSize);
+  const lastTy = Math.floor((bottom + maxDistance) / tileSize);
+
+  for (let ty = firstTy; ty <= lastTy; ty += 1) {
     const top = ty * tileSize;
-    if (bottom <= top + probe && bottom >= top - probe) return kind;
+    const gap = top - bottom;
+    if (gap > maxDistance) break;
+    for (let tx = minTx; tx <= maxTx; tx += 1) {
+      const kind = map.tileAt(tx, ty);
+      const flags = tileFlags(kind);
+      if (!flags.solid && !flags.oneWay) continue;
+      // Ignore surfaces the feet have already sunk well past (the body is inside/next to them).
+      if (gap < -tileSize * 0.5) continue;
+      return { kind, distance: gap };
+    }
   }
-  return null;
+  return { kind: null, distance: Number.POSITIVE_INFINITY };
+}
+
+/** Tile kind directly beneath the body's feet, or `null` when airborne. */
+export function groundKindBelow(body: Body, map: TileMap, probe = 1): TileKind | null {
+  const found = probeGround(body, map, probe);
+  return found.distance <= probe && found.distance >= -probe ? found.kind : null;
 }
 
 export function isGrounded(body: Body, map: TileMap, probe = 1): boolean {
   return groundKindBelow(body, map, probe) !== null;
+}
+
+/** Distance from the feet to the nearest ground below, or `Infinity` when there is none nearby. */
+export function distanceToGround(body: Body, map: TileMap, maxDistance = 64): number {
+  return probeGround(body, map, maxDistance).distance;
 }
 
 /** Collect non-solid tiles (hazards, triggers) whose inset hitbox the body overlaps. */
