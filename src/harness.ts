@@ -68,6 +68,8 @@ export interface HarnessApi {
   clearCamera(): void;
   /** Drive the player toward a target X, or pass null to stop. */
   autopilot(targetX: number | null, direction?: number, sprint?: boolean): void;
+  /** Switch biome: 0 = Ares Basin, 1 = The Foundry. */
+  setBiome(id: number): void;
   playTape(tape: TapeEntry[]): void;
   clearTape(): void;
   /** Advance exactly one frame of `dtSeconds` and render it. */
@@ -142,6 +144,10 @@ export function installHarness(context: HarnessContext): void {
 
     clearCamera(): void {
       game.clearCameraOverride();
+    },
+
+    setBiome(id: number): void {
+      game.setBiome(id as 0 | 1);
     },
 
     autopilot(targetX: number | null, direction = 1, sprint = false): void {

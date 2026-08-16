@@ -286,7 +286,16 @@ void main() {
   // where contact most needs to read.
   accumulated *= 1.0 - contactAO * 0.72 * (1.0 - emissive);
 
-  vec3 lit = albedo.rgb * accumulated + rim * albedo.a * (1.0 - emissive);
+  // Rim is *reflected* light, so it has to be modulated by the surface it is
+  // reflecting off. Adding it independently of albedo lifted every dark surface
+  // by the full rim colour, which in an interior biome turned near-black
+  // structure into a flat pink-grey wash — the albedo was measured at 0.05-0.15
+  // while the composited frame read around 0.6.
+  //
+  // A little is kept unmodulated so pure-black silhouettes still catch an edge,
+  // which is what separates a character from the background.
+  vec3 rimTint = mix(albedo.rgb, vec3(1.0), 0.25);
+  vec3 lit = albedo.rgb * accumulated + rim * rimTint * albedo.a * (1.0 - emissive);
   lit = mix(lit, albedo.rgb * uEmissiveScale, emissive);
 
   oLight = vec4(lit, albedo.a);

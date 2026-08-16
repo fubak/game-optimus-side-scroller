@@ -13,13 +13,9 @@ import { ParallaxRenderer, type ParallaxLayer } from '../scene/parallax.ts';
 import { Atlas } from '../art/atlas.ts';
 import { buildCoreAtlasSources } from '../art/library.ts';
 import { buildOptimusAtlasSources } from '../art/optimus.ts';
-import {
-  buildAresAtlasSources,
-  buildAresLayers,
-  buildAresAtmosphere,
-  ARES_SUN_WORLD,
-} from '../world/biomes/ares.ts';
-import { buildAresApproach, type RoomDefinition } from '../world/rooms/ares-approach.ts';
+import { ARES_SUN_WORLD } from '../world/biomes/ares.ts';
+import { BIOMES, BiomeId, allBiomeAtlasSources, type Biome } from '../world/biomes/index.ts';
+import type { RoomDefinition } from '../world/rooms/ares-approach.ts';
 import { SpriteBatch, packColor, packMaterial } from '../gfx/batch.ts';
 import { Depth } from '../core/config.ts';
 import { PhysicsWorld } from './physics.ts';
@@ -52,7 +48,8 @@ export class Game {
   readonly camera = new Camera();
   readonly lights = new LightList();
   readonly physics = new PhysicsWorld();
-  atmosphere: Atmosphere = buildAresAtmosphere();
+  atmosphere: Atmosphere = BIOMES[BiomeId.Ares].atmosphere();
+  private biome: Biome = BIOMES[BiomeId.Ares];
 
   private atlas!: Atlas;
   private parallax!: ParallaxRenderer;
@@ -163,14 +160,16 @@ export class Game {
   ) {}
 
   async load(): Promise<void> {
+    // Every biome's art is baked into one atlas at load, so switching biomes
+    // costs no texture upload and can be seamless.
     this.atlas = new Atlas(
       this.device,
-      [...buildCoreAtlasSources(), ...buildAresAtlasSources(), ...buildOptimusAtlasSources()],
+      [...buildCoreAtlasSources(), ...allBiomeAtlasSources(), ...buildOptimusAtlasSources()],
       4096,
     );
     this.parallax = new ParallaxRenderer(this.atlas, this.camera);
-    this.layers = buildAresLayers();
-    this.room = buildAresApproach();
+    this.layers = this.biome.layers();
+    this.room = this.biome.room();
 
     this.buildCollision();
     this.buildLights();
@@ -192,26 +191,7 @@ export class Game {
     };
     this.combat.registerHurtbox(this.playerHurtbox);
 
-    // Drones posted along the route, spaced so each is met individually.
-    //
-    // Hover height is set relative to the floor each one patrols, not to world
-    // zero. The first pass put them 2.5 m above the player's strike zone, where
-    // they could attack but could not be attacked back.
-    const posts: [number, number, number][] = [
-      // [x, floor surface Y, patrol range]
-      [-4.5, -1.1, 2.6],
-      [14.0, -1.4, 3.0],
-      [27.5, -2.6, 2.2],
-      [68.0, -8.2, 3.4],
-    ];
-    /** Hover height above the floor, in metres. Keeps drones inside the melee box. */
-    const hoverHeight = 1.15;
-    for (let i = 0; i < posts.length; i++) {
-      const [x, floorY, range] = posts[i]!;
-      const drone = new Drone(i + 1, x, floorY - hoverHeight, range, this.enemyRng);
-      this.enemies.push(drone);
-      this.combat.registerHurtbox(drone.hurtbox);
-    }
+    this.spawnEncounters();
 
     this.checkpointX = this.room.spawn.x;
     this.checkpointY = this.room.spawn.y;
@@ -221,6 +201,37 @@ export class Game {
     this.camera.setBounds(this.room.bounds);
     this.camera.viewHeightMetres = 9.6;
     this.camera.snapTo(this.player.feetX, this.player.feetY - 1.4);
+  }
+
+  /**
+   * Places enemies along the current room's route.
+   *
+   * Posts are derived from the room's own platforms rather than hardcoded, so a
+   * biome switch does not need a parallel table that can fall out of sync with
+   * the level. Hover height is relative to the floor each drone patrols: an
+   * earlier hardcoded height put them 2.5 m above the player's strike zone,
+   * where they could attack but could not be attacked back.
+   */
+  private spawnEncounters(): void {
+    /** Keeps drones inside the player's melee box. */
+    const hoverHeight = 1.15;
+
+    // Pick the widest platforms, which are the ones with room to fight on.
+    const candidates = this.room.platforms
+      .filter((platform) => platform.width >= 9)
+      .sort((a, b) => a.x - b.x);
+
+    let id = 1;
+    for (const platform of candidates) {
+      const surfaceY = platform.y - platform.height / 2;
+      // Set back from the edges, so a fight cannot start on a lip.
+      const x = platform.x + platform.width * 0.12;
+      const range = Math.min(platform.width * 0.22, 3.4);
+      const drone = new Drone(id++, x, surfaceY - hoverHeight, range, this.enemyRng);
+      this.enemies.push(drone);
+      this.combat.registerHurtbox(drone.hurtbox);
+      if (id > 5) break;
+    }
   }
 
   /** Builds the audio graph, tolerating environments that have no audio. */
@@ -271,38 +282,43 @@ export class Game {
   private buildLights(): void {
     // The sun: low, hard, and warm, raking in from the direction it occupies in
     // the sky texture, so the baked art and the dynamic lighting agree.
+    const sun = this.biome;
     this.dynamicLights.push(
       createLight({
         type: LightType.Directional,
-        angle: this.sunAngle,
-        r: 1.0,
-        g: 0.72,
-        b: 0.46,
-        intensity: 1.5,
-        shadowStrength: 0.82,
+        angle: sun.sunAngle,
+        r: sun.sunColor[0],
+        g: sun.sunColor[1],
+        b: sun.sunColor[2],
+        intensity: sun.sunIntensity,
+        shadowStrength: sun.sunShadow,
       }),
     );
     this.lightFlicker.push(0);
-    this.baseIntensity.push(1.5);
+    this.baseIntensity.push(sun.sunIntensity);
 
-    // A broad warm fill, so the scene is not lit by a single hard source with
-    // nothing at all filling its shadows.
-    this.dynamicLights.push(
-      createLight({
-        type: LightType.Point,
-        x: ARES_SUN_WORLD.x * 0.4,
-        y: ARES_SUN_WORLD.y * 0.4,
-        radius: 46,
-        r: 1.0,
-        g: 0.66,
-        b: 0.42,
-        intensity: 0.8,
-        shadowStrength: 0,
-        falloffExponent: 1.4,
-      }),
-    );
-    this.lightFlicker.push(0);
-    this.baseIntensity.push(0.8);
+    // A broad, shadowless fill from the key light's direction, so an exterior
+    // is not lit by one hard source with nothing filling its shadows. Interiors
+    // declare no fill: there, all the light is practical.
+    const fill = this.biome.fill;
+    if (fill) {
+      this.dynamicLights.push(
+        createLight({
+          type: LightType.Point,
+          x: ARES_SUN_WORLD.x * 0.4,
+          y: ARES_SUN_WORLD.y * 0.4,
+          radius: fill.radius,
+          r: fill.color[0],
+          g: fill.color[1],
+          b: fill.color[2],
+          intensity: fill.intensity,
+          shadowStrength: 0,
+          falloffExponent: 1.4,
+        }),
+      );
+      this.lightFlicker.push(0);
+      this.baseIntensity.push(fill.intensity);
+    }
 
     this.playerLight = createLight({
       type: LightType.Point,
@@ -342,8 +358,8 @@ export class Game {
     // Seeded around the spawn point; the field wraps around the camera, so it
     // is effectively infinite from here on.
     this.particles.seedAmbient(3200, this.room.spawn.x, this.room.spawn.y - 4, 70, 26, {
-      warm: [1.0, 0.72, 0.44],
-      cool: [0.58, 0.54, 0.72],
+      warm: this.biome.dustWarm,
+      cool: this.biome.dustCool,
     });
     this.particles.windX = 0.62;
     this.particles.windY = -0.05;
@@ -783,7 +799,9 @@ export class Game {
   }
 
   /** Direction of the key light, shared by the sun light and its god rays. */
-  private readonly sunAngle = -(Math.PI - 0.38);
+  private get sunAngle(): number {
+    return this.biome.sunAngle;
+  }
 
   private updateLights(): void {
     // Track the chest, which is where the power core sits.
@@ -1226,6 +1244,50 @@ export class Game {
 
   clearCameraOverride(): void {
     this.cameraOverride = null;
+  }
+
+  /**
+   * Switches biome, rebuilding the world from its definition.
+   *
+   * The atlas already holds every biome's art, so this is a change of layer
+   * list, atmosphere, room geometry, and light rig with no texture work at all.
+   */
+  setBiome(id: BiomeId): void {
+    this.biome = BIOMES[id];
+    this.layers = this.biome.layers();
+    this.atmosphere = this.biome.atmosphere();
+    this.room = this.biome.room();
+
+    this.buildCollision();
+
+    this.dynamicLights.length = 0;
+    this.lightFlicker.length = 0;
+    this.baseIntensity.length = 0;
+    this.buildLights();
+
+    // Rebuild the encounter set for the new room.
+    for (const drone of this.enemies) this.combat.removeHurtbox(drone.id);
+    this.enemies.length = 0;
+    this.previousDroneStates.clear();
+    this.spawnEncounters();
+
+    this.particles.clear();
+    this.buildAmbientDust();
+
+    this.checkpointX = this.room.spawn.x;
+    this.checkpointY = this.room.spawn.y;
+    this.playerHealth = 100;
+    this.respawnCount = 0;
+
+    this.player.teleport(this.room.spawn.x, this.room.spawn.y);
+    this.animator.reset();
+    this.camera.setBounds(this.room.bounds);
+    this.camera.snapTo(this.room.spawn.x, this.room.spawn.y - 1.15);
+    this.autopilot?.reset();
+  }
+
+  get currentBiome(): BiomeId {
+    return this.biome.id;
   }
 
   setAutopilot(options: AutopilotOptions | null): void {

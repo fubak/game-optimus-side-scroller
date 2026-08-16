@@ -10,47 +10,76 @@
  * as a gate.
  */
 
+import type { Page } from 'playwright-core';
 import { launchBrowser, waitForHarness } from './browser.ts';
 import { SCENARIOS } from './scenarios/index.ts';
 
-/** X position the traversal must reach to count as a success. */
-const TARGET_X = 70;
-/** Y below which the player is considered to have fallen out of the room. */
-const FALL_LIMIT = 14;
+/** Per-biome traversal targets. */
+const BIOME_CONFIG = [
+  { name: 'Ares Basin', biome: 0, targetX: 70, autopilotX: 72, fallLimit: 14, duration: 28 },
+  { name: 'The Foundry', biome: 1, targetX: 84, autopilotX: 86, fallLimit: 2, duration: 30 },
+] as const;
 
 async function main(): Promise<void> {
   const scenario = SCENARIOS.find((s) => s.name === 'ares_traversal');
   if (!scenario) throw new Error('ares_traversal scenario is missing');
+
+  const only = process.argv.includes('--biome')
+    ? Number(process.argv[process.argv.indexOf('--biome') + 1])
+    : null;
 
   const { page, close } = await launchBrowser('http://127.0.0.1:5173/?harness=1', 480, 270);
 
   try {
     await waitForHarness(page);
 
+    let anyFailed = false;
+    for (const config of BIOME_CONFIG) {
+      if (only !== null && config.biome !== only) continue;
+      console.log(`\n=== ${config.name} ===`);
+      const failed = await runBiome(page, scenario.seed, config);
+      if (failed) anyFailed = true;
+    }
+    if (anyFailed) process.exitCode = 1;
+  } finally {
+    await close();
+  }
+}
+
+async function runBiome(
+  page: Page,
+  seed: number,
+  config: (typeof BIOME_CONFIG)[number],
+): Promise<boolean> {
+  {
+
     const samples = await page.evaluate(
-      ([config]) => {
+      (configs: { seed: number; duration: number; biome: number; autopilotX: number }[]) => {
+        const config = configs[0]!;
         const harness = (window as unknown as Record<string, unknown>).__H as {
           seed(v: number): void;
           setResolution(w: number, h: number): void;
           setQuality(q: number): void;
           clearCamera(): void;
+          setBiome(id: number): void;
           autopilot(targetX: number | null, direction?: number, sprint?: boolean): void;
           step(dt?: number): void;
           stats(): Record<string, number>;
         };
 
-        harness.seed(config!.seed);
+        harness.seed(config.seed);
         harness.setQuality(0);
         harness.setResolution(320, 180);
+        if (config.biome > 0) harness.setBiome(config.biome);
         harness.clearCamera();
-        harness.autopilot(72, 1, true);
+        harness.autopilot(config.autopilotX, 1, true);
         // Match the recorder's warmup exactly. Without it the gate exercises a
         // slightly different simulation than the one being recorded, and a
         // fall that soft-locked the demo passed the gate cleanly.
         for (let i = 0; i < 30; i++) harness.step(1 / 60);
 
         const out: Record<string, number>[] = [];
-        const frames = Math.round(config!.duration * 60);
+        const frames = Math.round(config.duration * 60);
         for (let i = 0; i < frames; i++) {
           harness.step(1 / 60);
           if (i % 6 === 0) {
@@ -71,7 +100,7 @@ async function main(): Promise<void> {
         }
         return out;
       },
-      [{ seed: scenario.seed, duration: scenario.durationSeconds }],
+      [{ seed, duration: config.duration, biome: config.biome, autopilotX: config.autopilotX }],
     );
 
     let maxX = -Infinity;
@@ -102,8 +131,8 @@ async function main(): Promise<void> {
       }
     }
 
-    console.log('\n--- summary ---');
-    console.log(`furthest X reached : ${maxX.toFixed(2)} (target ${TARGET_X})`);
+    console.log('--- summary ---');
+    console.log(`furthest X reached : ${maxX.toFixed(2)} (target ${config.targetX})`);
     console.log(`Y range            : ${minY.toFixed(2)} .. ${maxY.toFixed(2)}`);
     console.log(`airborne samples   : ${airborneFrames}/${samples.length}`);
 
@@ -116,29 +145,27 @@ async function main(): Promise<void> {
     console.log(`peak particles     : ${peakParticles}`);
     console.log(`respawns           : ${last?.respawns ?? 0}`);
 
-    const fellOut = maxY > FALL_LIMIT;
-    const reached = maxX >= TARGET_X;
+    const fellOut = maxY > config.fallLimit;
+    const reached = maxX >= config.targetX;
 
     if (fellOut) {
-      console.error(`\nFAIL: the player fell out of the room (Y reached ${maxY.toFixed(2)})`);
-      process.exitCode = 1;
+      console.error(`FAIL: the player fell out of the room (Y reached ${maxY.toFixed(2)})`);
+      return true;
     } else if (!reached) {
       console.error(
-        `\nFAIL: the traversal stalled at X=${maxX.toFixed(2)}, short of ${TARGET_X}. ` +
-          'Either a jump is not achievable or the tape timing is wrong.',
+        `FAIL: the traversal stalled at X=${maxX.toFixed(2)}, short of ${config.targetX}. ` +
+          'The route is probably not achievable as laid out.',
       );
-      process.exitCode = 1;
+      return true;
     } else {
       const defeated = startEnemies - endEnemies;
       if (defeated === 0) {
-        console.error('\nFAIL: the run reached the exit but defeated no enemies. Combat is not connecting.');
-        process.exitCode = 1;
-      } else {
-        console.log(`\nPASS: room traversed and ${defeated} enemies defeated.`);
+        console.error('FAIL: reached the exit but defeated no enemies. Combat is not connecting.');
+        return true;
       }
+      console.log(`PASS: room traversed and ${defeated} enemies defeated.`);
     }
-  } finally {
-    await close();
+    return false;
   }
 }
 

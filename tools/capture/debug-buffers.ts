@@ -41,6 +41,7 @@ async function main(): Promise<void> {
   const height = Number(get('--height', '540'));
   const url = get('--url', 'http://127.0.0.1:5173');
   const outputDir = join(ROOT, get('--out', 'progress/media/debug'));
+  const biome = Number(get('--biome', '0'));
 
   mkdirSync(outputDir, { recursive: true });
 
@@ -50,19 +51,23 @@ async function main(): Promise<void> {
     await waitForHarness(page);
 
     await page.evaluate(
-      ([w, h]) => {
+      ([config]) => {
         const harness = (window as unknown as Record<string, unknown>).__H as {
           seed(v: number): void;
           setResolution(w: number, h: number): void;
           setQuality(q: number): void;
+          setBiome(id: number): void;
           warmup(n: number): void;
         };
+        const w = config![0]!;
+        const h = config![1]!;
         harness.seed(1001);
         harness.setQuality(3);
         harness.setResolution(w!, h!);
+        if (config![2]! > 0) harness.setBiome(config![2]!);
         harness.warmup(45);
       },
-      [width, height],
+      [[width, height, biome]],
     );
 
     for (const view of VIEWS) {
