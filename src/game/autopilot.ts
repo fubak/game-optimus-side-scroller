@@ -1,21 +1,24 @@
-import type { Action, Input } from '../../src/core/input';
-import { PLAYER_HEIGHT } from '../../src/game/constants';
-import { isStandable } from '../../src/game/levelParser';
-import { TileKind } from '../../src/game/tiles';
-import type { World } from '../../src/game/world';
+import type { Action, Input } from '../core/input';
+import { PLAYER_HEIGHT } from './constants';
+import { isStandable } from './levelParser';
+import { TileKind } from './tiles';
+import type { World } from './world';
 
 /**
- * A greedy platforming bot.
+ * Autopilot: a greedy platforming AI that plays the game through the normal {@link Input} interface.
  *
- * It reads the tiles around Optimus and decides what to hold: run right, jump when there is a pit,
- * a step or a spike bed coming up, and fire the jetpack when it is falling with nothing underneath.
- * It is deliberately simple — if this bot can finish a level then the level is traversable with the
- * movement set, which is what the level tests assert. It also hammers the controls every frame,
- * which makes it a decent stress test for the player state machine.
+ * It has two jobs:
+ * 1. **Attract mode.** The title screen demos the game by letting the autopilot play a level, and
+ *    `?autoplay=1` runs a level hands-free (handy for demos and for recording footage).
+ * 2. **Level validation.** The level tests assert the autopilot can reach the goal, which proves a
+ *    level is traversable with the movement set. It also hammers the controls every frame, so it
+ *    doubles as a stress test for the player state machine.
  *
- * It is *not* a demo of skilled play: it ignores optional collectables and takes the ground route.
+ * It reads the tiles around Optimus and decides what to hold: run right, jump for pits, steps,
+ * spike beds and enemies, and fire the jetpack when falling into a bottomless column. It plays the
+ * ground route and ignores optional collectables — it is a demo, not a speedrunner.
  */
-export class PlatformerBot implements Input {
+export class Autopilot implements Input {
   private readonly world: World;
   private readonly held = new Set<Action>();
   private readonly pressedThisFrame = new Set<Action>();

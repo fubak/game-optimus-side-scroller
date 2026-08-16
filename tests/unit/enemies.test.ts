@@ -128,7 +128,10 @@ describe('walker', () => {
     let sawSpikeTurn = false;
     for (let frame = 0; frame < 240; frame += 1) {
       stepEnemy(walker, SPIKY);
-      if (walker.body.x + walker.body.width < 4 * TILE_SIZE && walker.direction === -1) sawSpikeTurn = true;
+      // Read through a widened local: TypeScript narrows the literal type after the assignment
+      // above, but `updateEnemy` flips it.
+      const direction: number = walker.direction;
+      if (walker.body.x + walker.body.width < 4 * TILE_SIZE && direction === -1) sawSpikeTurn = true;
     }
     expect(sawSpikeTurn).toBe(true);
     // It never steps onto the spike tile.

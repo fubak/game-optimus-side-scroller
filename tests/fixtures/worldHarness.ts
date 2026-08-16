@@ -4,7 +4,7 @@ import { parseLevel } from '../../src/game/levelParser';
 import type { LevelDef } from '../../src/game/levelParser';
 import { World } from '../../src/game/world';
 import type { WorldEvent, WorldOptions } from '../../src/game/world';
-import { PlatformerBot } from './bot';
+import { Autopilot } from '../../src/game/autopilot';
 
 export const DT = 1 / 60;
 
@@ -31,7 +31,7 @@ export function runWorldWithTape(def: LevelDef, options: RunWorldOptions = {}): 
 /** Drive a world with the greedy platforming bot (proves a level is traversable). */
 export function runWorldWithBot(def: LevelDef, options: RunWorldOptions = {}): WorldRun {
   const world = createWorld(def, options);
-  const bot = new PlatformerBot(world);
+  const bot = new Autopilot(world);
   return stepWorld(world, bot, options);
 }
 

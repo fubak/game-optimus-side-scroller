@@ -1,8 +1,10 @@
 import { createDisplay, INTERNAL_HEIGHT, INTERNAL_WIDTH } from './core/canvas';
-import { KeyboardInput } from './core/input';
+import { CompositeInput, KeyboardInput } from './core/input';
+import type { Input } from './core/input';
 import { createLoop } from './core/loop';
 import type { Loop } from './core/loop';
 import { installTestHooks, shouldInstallTestHooks } from './core/testHooks';
+import { Autopilot } from './game/autopilot';
 import { parseLevel } from './game/levelParser';
 import type { LevelDef } from './game/levelParser';
 import { LEVEL_1 } from './game/levels/level1';
@@ -38,12 +40,19 @@ const levelDef = LEVELS[requestedLevel] ?? LEVEL_1;
 const seedParam = params.get('seed');
 
 const display = createDisplay(host);
-const input = new KeyboardInput(window);
+const keyboard = new KeyboardInput(window);
 const hud = new Hud();
 
 const level = parseLevel(levelDef);
 const world = new World(level, seedParam === null ? {} : { seed: Number(seedParam) });
 const renderer = new WorldRenderer(world);
+
+/**
+ * `?autoplay=1` hands the controls to the autopilot (attract mode / demo recording). The keyboard
+ * stays live alongside it so a human can still nudge things while watching.
+ */
+const autoplay = params.get('autoplay') === '1';
+const input: Input = autoplay ? new CompositeInput([keyboard, new Autopilot(world)]) : keyboard;
 
 let debugVisible = false;
 let introTimer = 2.4;
@@ -55,7 +64,7 @@ const loop: Loop = createLoop({
     renderer.trackTrail(world, dtSec);
     hud.update(dtSec);
     introTimer = Math.max(0, introTimer - dtSec);
-    if (input.justPressed('debug')) debugVisible = !debugVisible;
+    if (keyboard.justPressed('debug')) debugVisible = !debugVisible;
     input.endFrame();
   },
   render() {
