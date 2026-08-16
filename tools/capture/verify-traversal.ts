@@ -44,6 +44,10 @@ async function main(): Promise<void> {
         harness.setResolution(320, 180);
         harness.clearCamera();
         harness.autopilot(72, 1, true);
+        // Match the recorder's warmup exactly. Without it the gate exercises a
+        // slightly different simulation than the one being recorded, and a
+        // fall that soft-locked the demo passed the gate cleanly.
+        for (let i = 0; i < 30; i++) harness.step(1 / 60);
 
         const out: Record<string, number>[] = [];
         const frames = Math.round(config!.duration * 60);
@@ -53,6 +57,7 @@ async function main(): Promise<void> {
             const stats = harness.stats();
             out.push({
               t: i / 60,
+              respawns: stats.respawns!,
               x: stats.playerX!,
               y: stats.playerY!,
               vx: stats.playerVX!,
@@ -109,6 +114,7 @@ async function main(): Promise<void> {
     console.log(`enemies            : ${startEnemies} -> ${endEnemies} (${startEnemies - endEnemies} defeated)`);
     console.log(`player health      : ${first?.health ?? 0} -> ${last?.health ?? 0}`);
     console.log(`peak particles     : ${peakParticles}`);
+    console.log(`respawns           : ${last?.respawns ?? 0}`);
 
     const fellOut = maxY > FALL_LIMIT;
     const reached = maxX >= TARGET_X;

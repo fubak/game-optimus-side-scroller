@@ -193,7 +193,18 @@ export class OptimusAnimator {
     // stops the feet sliding when speed changes: one stride always covers the
     // same ground.
     if (input.grounded && input.speed > 0.2) {
-      const strideLength = lerp(1.35, 2.9, clamp01(remapClamped(input.speed, WALK_SPEED, RUN_SPEED, 0, 1)));
+      // Stride length is derived from the clips, not chosen by feel.
+      //
+      // With a 0.81 m leg, the walk's 24/18 degree thigh sweep moves the foot
+      // 0.58 m per step and the run's 42/32 degree sweep moves it 0.97 m, so a
+      // full two-step cycle covers 1.16 m and 1.94 m respectively. The previous
+      // values of 1.35 and 2.90 advanced the cycle far too slowly, and the feet
+      // slid backwards across a third of the distance travelled.
+      const strideLength = lerp(
+        1.16,
+        1.94,
+        clamp01(remapClamped(input.speed, WALK_SPEED, RUN_SPEED, 0, 1)),
+      );
       this.cyclePhase += (input.speed * dt) / strideLength;
       this.cyclePhase %= 1;
     }
@@ -398,10 +409,24 @@ export class OptimusAnimator {
     if (!input.grounded) {
       // A continuous parameter on top of the discrete rise/fall clips, so the
       // arc between them reads as one motion rather than two states.
-      const verticalBlend = clamp(input.velocityY / 12, -1, 1);
-      pose.rotation[bones.chest] = pose.rotation[bones.chest]! + verticalBlend * 0.06;
-      pose.rotation[bones.thighNear] = pose.rotation[bones.thighNear]! - verticalBlend * 0.10;
-      pose.rotation[bones.thighFar] = pose.rotation[bones.thighFar]! + verticalBlend * 0.07;
+      // A continuous parameter layered on top of the discrete rise/fall clips.
+      //
+      // Without enough of it the character snaps into the rise pose at takeoff
+      // and holds it, which reads as a single static frame rather than an arc.
+      // Driving the whole body from vertical velocity means every point of the
+      // jump is a different pose.
+      const verticalBlend = clamp(input.velocityY / 11, -1, 1);
+      pose.rotation[bones.chest] = pose.rotation[bones.chest]! + verticalBlend * 0.16;
+      pose.rotation[bones.abdomen] = pose.rotation[bones.abdomen]! + verticalBlend * 0.10;
+      pose.rotation[bones.head] = pose.rotation[bones.head]! - verticalBlend * 0.12;
+      // Legs tuck on the way up and reach on the way down.
+      pose.rotation[bones.thighNear] = pose.rotation[bones.thighNear]! - verticalBlend * 0.34;
+      pose.rotation[bones.shinNear] = pose.rotation[bones.shinNear]! - verticalBlend * 0.30;
+      pose.rotation[bones.thighFar] = pose.rotation[bones.thighFar]! + verticalBlend * 0.22;
+      pose.rotation[bones.shinFar] = pose.rotation[bones.shinFar]! - verticalBlend * 0.18;
+      // Arms counterbalance.
+      pose.rotation[bones.upperArmNear] = pose.rotation[bones.upperArmNear]! + verticalBlend * 0.26;
+      pose.rotation[bones.upperArmFar] = pose.rotation[bones.upperArmFar]! + verticalBlend * 0.20;
     }
   }
 

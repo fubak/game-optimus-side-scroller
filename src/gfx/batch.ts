@@ -357,12 +357,20 @@ export class SpriteBatch {
   }
 }
 
-/** Packs normalised RGBA into a single uint32, as the vertex format expects. */
+/**
+ * Packs normalised RGBA into a single uint32, as the vertex format expects.
+ *
+ * Values are clamped, not masked. Masking an over-range channel wraps it: a
+ * hit flash passing 4.0 became 1020, which `& 0xff` turns into 252 — very
+ * nearly the original colour, so the flash silently did nothing at all.
+ */
+const toByte = (value: number): number => {
+  const scaled = value * 255;
+  return scaled < 0 ? 0 : scaled > 255 ? 255 : scaled | 0;
+};
+
 export const packColor = (r: number, g: number, b: number, a = 1): number =>
-  (((r * 255) & 0xff) << 24) |
-  (((g * 255) & 0xff) << 16) |
-  (((b * 255) & 0xff) << 8) |
-  ((a * 255) & 0xff);
+  (toByte(r) << 24) | (toByte(g) << 16) | (toByte(b) << 8) | toByte(a);
 
 /** Packs a {@link SpriteMaterial} into a single uint32. */
 export const packMaterial = (
@@ -371,10 +379,10 @@ export const packMaterial = (
   metallic: number,
   translucency: number,
 ): number =>
-  (((Math.min(emissive, 1) * 255) & 0xff) << 24) |
-  (((roughness * 255) & 0xff) << 16) |
-  (((metallic * 255) & 0xff) << 8) |
-  ((translucency * 255) & 0xff);
+  (toByte(emissive) << 24) |
+  (toByte(roughness) << 16) |
+  (toByte(metallic) << 8) |
+  toByte(translucency);
 
 export const WHITE = packColor(1, 1, 1, 1);
 export const DEFAULT_MATERIAL_PACKED = packMaterial(0, 0.65, 0.9, 0);

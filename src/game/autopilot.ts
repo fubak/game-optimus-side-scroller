@@ -86,7 +86,7 @@ export class Autopilot {
     // buffering rather than mashing a single step.
     this.attackCooldown = Math.max(0, this.attackCooldown - dt);
     const threat = this.nearestThreat(options, player.feetX, player.feetY);
-    this.engagedRecently = threat ? 0.5 : Math.max(0, this.engagedRecently - dt);
+    this.engagedRecently = threat ? 0.25 : Math.max(0, this.engagedRecently - dt);
     if (threat) {
       const gap = threat.x - player.feetX;
       const range = Math.abs(gap);
@@ -192,6 +192,22 @@ export class Autopilot {
       moveX = this.wallKickDirection;
     }
     this.wallKickRemaining = Math.max(0, this.wallKickRemaining - dt);
+
+    // --- Edge safety -------------------------------------------------------
+    // Never walk off a ledge on foot. If there is no ground ahead and a jump is
+    // not being made this frame, stop rather than stepping into the gap. This
+    // is the single most common way an automated run ends, and it accounted for
+    // every one of the seven respawns in the previous recording.
+    if (player.grounded && this.jumpHoldRemaining <= 0 && !near.found) {
+      moveX = 0;
+      // Standing at an edge unable to jump is itself a stall, so let the stall
+      // timer escalate into a jump rather than waiting there for ever.
+      this.stalledFor += dt;
+      if (this.stalledFor > 0.12) {
+        this.jumpHoldRemaining = 0.3;
+        this.stalledFor = 0;
+      }
+    }
 
     if (this.jumpHoldRemaining > 0) held[Action.Jump] = true;
 

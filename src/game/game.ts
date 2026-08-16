@@ -124,6 +124,22 @@ export class Game {
   /** Previous drone states, so transitions can be detected for audio cues. */
   private readonly previousDroneStates = new Map<number, number>();
 
+  // --- Death and respawn ---------------------------------------------------
+  /**
+   * Last position the player stood safely on solid ground.
+   *
+   * Respawning here rather than at the room's start is the difference between
+   * a fall costing a moment and a fall costing the whole run.
+   */
+  private checkpointX = 0;
+  private checkpointY = 0;
+  /** Seconds spent grounded and stable, before a position is trusted. */
+  private groundedTime = 0;
+  /** Counts respawns, surfaced in stats so a soft-lock cannot pass unnoticed. */
+  respawnCount = 0;
+  /** Drives the respawn fade, 1 immediately after death down to 0. */
+  private respawnFade = 0;
+
   /** Harness-only overrides. */
   private cameraOverride: { x: number; y: number; viewHeight: number } | null = null;
   private autopilot: Autopilot | null = null;
@@ -196,6 +212,9 @@ export class Game {
       this.enemies.push(drone);
       this.combat.registerHurtbox(drone.hurtbox);
     }
+
+    this.checkpointX = this.room.spawn.x;
+    this.checkpointY = this.room.spawn.y;
 
     this.initAudio();
 
@@ -353,6 +372,8 @@ export class Game {
     input.beginStep(simTime);
     this.player.update(input, dt);
 
+    this.updateCheckpointAndDeath(dt);
+
     // --- Combat ------------------------------------------------------------
     this.playerIFrames = Math.max(0, this.playerIFrames - dt);
     this.playerHurtbox.invulnerable = this.playerIFrames > 0 || this.player.invulnerable;
@@ -466,6 +487,60 @@ export class Game {
   }
 
   /**
+   * Tracks a safe checkpoint and handles falling out of the world.
+   *
+   * Without this a fall into a gap is unrecoverable: the character keeps
+   * accelerating downward for ever while the camera sits pinned at its lower
+   * bound, and the game silently soft-locks with no death, no respawn, and no
+   * indication that anything has gone wrong.
+   */
+  private updateCheckpointAndDeath(dt: number): void {
+    const player = this.player;
+
+    // Only trust a position the player has stood on steadily. Recording the
+    // instant they touch anything would happily checkpoint the very ledge they
+    // are about to slip off.
+    if (player.grounded && Math.abs(player.velocityY) < 0.5) {
+      this.groundedTime += dt;
+      if (this.groundedTime > 0.35) {
+        this.checkpointX = player.feetX;
+        this.checkpointY = player.feetY;
+      }
+    } else {
+      this.groundedTime = 0;
+    }
+
+    this.respawnFade = Math.max(0, this.respawnFade - dt * 1.6);
+
+    // The kill plane sits below the room, not at its edge, so a deep jump near
+    // the lower bound is not punished.
+    const killY = this.room.bounds.maxY + 6;
+    if (player.feetY > killY || this.playerHealth <= 0) {
+      this.respawn();
+    }
+  }
+
+  /** Returns the player to the last safe checkpoint. */
+  private respawn(): void {
+    this.respawnCount++;
+    this.respawnFade = 1;
+
+    this.player.teleport(this.checkpointX, this.checkpointY);
+    this.player.interruptAttack();
+    this.animator.reset();
+    this.camera.snapTo(this.checkpointX, this.checkpointY - 1.15);
+
+    // A fall is a mistake, not a run-ender: restore enough health to continue,
+    // without making falling free.
+    this.playerHealth = Math.max(this.playerHealth, 45);
+    this.playerIFrames = 1.2;
+
+    this.particles.burstDust(this.checkpointX, this.checkpointY, 0.8, [1.0, 0.74, 0.5]);
+    this.sfx?.land(12);
+    this.camera.addTrauma(0.3);
+  }
+
+  /**
    * Opens, moves, and closes the melee hitbox in step with the animation.
    *
    * The box is placed ahead of the character rather than tracked to the hand
@@ -488,12 +563,12 @@ export class Game {
         halfWidth: reach * 0.5,
         halfHeight: heavy ? 0.72 : 0.58,
         damage: MOVEMENT.attackDamage[step]!,
-        knockbackX: player.facing * (heavy ? 9.5 : 5.5),
-        knockbackY: heavy ? -3.4 : -1.8,
+        knockbackX: player.facing * (heavy ? 14 : 8.5),
+        knockbackY: heavy ? -5.0 : -2.6,
         // A heavier blow freezes the world for longer, which is most of what
         // makes it feel heavier.
-        hitstop: heavy ? 0.135 : 0.055,
-        trauma: heavy ? 0.42 : 0.18,
+        hitstop: heavy ? 0.19 : 0.085,
+        trauma: heavy ? 0.5 : 0.26,
         duration: 0.28,
         multiHit: heavy,
       });
@@ -600,7 +675,19 @@ export class Game {
     }
   }
 
-  render(_alpha: number, _dt: number, unscaledDt: number): void {
+  /**
+   * @param dt          Scaled seconds — zero during hitstop.
+   * @param unscaledDt  Real seconds, unaffected by hitstop or slow motion.
+   *
+   * The split matters. Hitstop exists to *stop the character*, so the rig must
+   * advance on scaled time; running it on unscaled time froze the simulation
+   * while the animation played straight through, which meant the freeze was
+   * completely invisible and every hit felt weightless. Particles, trails,
+   * camera shake, and the HUD stay on unscaled time so impact effects keep
+   * playing during the freeze, which is what makes it read as impact rather
+   * than as a dropped frame.
+   */
+  render(_alpha: number, dt: number, unscaledDt: number): void {
     const player = this.player;
 
     const animationInput: AnimationInput = {
@@ -614,7 +701,7 @@ export class Game {
       attackStep: player.attackStep,
       attackTime: player.attackTime,
     };
-    this.animator.update(animationInput, unscaledDt, player.feetX, player.feetY);
+    this.animator.update(animationInput, dt, player.feetX, player.feetY);
 
     if (this.cameraOverride) {
       this.camera.viewHeightMetres = this.cameraOverride.viewHeight;
@@ -1080,6 +1167,7 @@ export class Game {
       particles: this.particles.count,
       enemies: this.enemies.length,
       playerHealth: this.playerHealth,
+      respawns: this.respawnCount,
       layers: this.layers.length,
       renderWidth: width,
       renderHeight: height,

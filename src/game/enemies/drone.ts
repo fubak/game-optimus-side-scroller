@@ -46,7 +46,7 @@ export const DRONE = {
   alertDuration: 0.55,
   lungeDuration: 0.34,
   recoverDuration: 0.7,
-  staggerDuration: 0.28,
+  staggerDuration: 0.34,
   deathDuration: 0.55,
   contactDamage: 8,
 } as const;
@@ -132,7 +132,7 @@ export class Drone {
     this.stateTime += dt;
     // The flash decays fast: it marks the instant of contact, and lingering
     // turns it into a health bar.
-    this.flash = Math.max(0, this.flash - dt * 7);
+    this.flash = Math.max(0, this.flash - dt * 4.5);
 
     const dx = playerX - this.x;
     const dy = playerY - 0.9 - this.y;
