@@ -1,0 +1,67 @@
+{
+  "scenario": "ares_vista_high",
+  "image": {
+    "meanLuminance": 0.13903802999878848,
+    "luminanceP1": 0,
+    "luminanceP99": 0.7724972367286682,
+    "dynamicRange": 0.7724972367286682,
+    "clippedBlack": 0.28835648148148146,
+    "clippedWhite": 0.0019444444444444444,
+    "meanSaturation": 0.4686473427378442,
+    "highlightSaturation": 0.31826250627302755,
+    "localContrast": 0.10278349967464963,
+    "edgeDensity": 0.3024417660650721,
+    "bloomEnergy": 0.008572530864197531,
+    "bandContrast": [
+      0.047972433495880554,
+      0.11405525581993863,
+      0.12789028602955074
+    ],
+    "bandSaturation": [
+      0.10870314642186618,
+      0.5960912418982008,
+      0.7007278596585592
+    ],
+    "cyanPresence": 0.00246141975308642,
+    "hueEntropy": 0.31907198821963983,
+    "dominantHues": [
+      {
+        "hue": 25,
+        "share": 0.48953147797823976
+      },
+      {
+        "hue": 15,
+        "share": 0.38458066808777747
+      },
+      {
+        "hue": 35,
+        "share": 0.08768241523140934
+      },
+      {
+        "hue": 45,
+        "share": 0.013382327491582873
+      },
+      {
+        "hue": 5,
+        "share": 0.005398628254338727
+      }
+    ],
+    "width": 480,
+    "height": 270
+  },
+  "stats": {
+    "drawCalls": 17,
+    "triangles": 1712,
+    "textureBinds": 28,
+    "fullscreenPasses": 14,
+    "lights": 4,
+    "lightsCulled": 0,
+    "props": 339,
+    "motes": 260,
+    "renderWidth": 800,
+    "renderHeight": 450,
+    "simMs": 0,
+    "renderMs": 0.19999999972060323,
+    "frameMs": 0
+  }
+}

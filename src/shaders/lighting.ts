@@ -1,0 +1,248 @@
+/**
+ * Deferred 2D lighting.
+ *
+ * This pass is where the game earns its look. It reads the G-buffer and
+ * accumulates every light into an HDR target, with:
+ *
+ * - **Normal-mapped diffuse**, so surface detail catches light and moves as the
+ *   light moves, rather than being a flat painted texture.
+ * - **A hemispheric ambient term**, tinted separately for sky and bounce light.
+ *   Flat ambient is the single biggest giveaway of a cheap 2D renderer; giving
+ *   up-facing and down-facing surfaces different ambient colours immediately
+ *   reads as a real environment.
+ * - **Raymarched soft shadows** against the occluder mask, with a penumbra that
+ *   widens with distance, matching how real shadows soften.
+ * - **A rim term**, which separates characters from the background and is a
+ *   large part of the sense of "presence" the art direction is chasing.
+ * - **Translucency**, for the Prismatic Hollow's membranes and crystal, where
+ *   light bleeds *through* a surface rather than bouncing off it.
+ *
+ * Shadow steps and light counts are compile-time `#define`s so the quality
+ * tiers produce genuinely different shaders instead of branching at runtime.
+ */
+
+export const LIGHTING_FS = `#version 300 es
+precision highp float;
+
+#ifndef MAX_LIGHTS
+#define MAX_LIGHTS 24
+#endif
+
+#ifndef SHADOW_STEPS
+#define SHADOW_STEPS 16
+#endif
+
+in vec2 vUV;
+
+uniform sampler2D uAlbedo;
+uniform sampler2D uNormal;
+uniform sampler2D uMaterial;
+uniform sampler2D uDepth;
+uniform sampler2D uOccluder;
+uniform sampler2D uBlueNoise;
+
+/** Packed light data. xy = screen position (0..1), z = radius (screen units), w = intensity. */
+uniform vec4 uLightPosition[MAX_LIGHTS];
+/** rgb = colour, a = light type (0 point, 1 directional, 2 cone). */
+uniform vec4 uLightColor[MAX_LIGHTS];
+/** x = cone direction angle, y = cone half-width, z = shadow strength, w = falloff exponent. */
+uniform vec4 uLightParams[MAX_LIGHTS];
+uniform int uLightCount;
+
+/** rgb = colour from above, a = intensity. */
+uniform vec4 uAmbientSky;
+/** rgb = bounce colour from below, a = intensity. */
+uniform vec4 uAmbientGround;
+/** rgb = rim colour, a = strength. */
+uniform vec4 uRim;
+
+uniform vec2 uResolution;
+uniform float uTime;
+/** Aspect correction so screen-space radii stay circular. */
+uniform vec2 uAspect;
+
+out vec4 oLight;
+
+/**
+ * Marches from the fragment toward a light, accumulating occlusion.
+ *
+ * The penumbra widens with distance from the receiver, which is what makes
+ * contact shadows crisp and distant shadows soft. Sampling is jittered per
+ * pixel so the low step count reads as soft noise rather than as visible bands.
+ */
+float traceShadow(vec2 origin, vec2 lightPos, float jitter, float strength) {
+#if SHADOW_STEPS == 0
+  return 1.0;
+#else
+  if (strength <= 0.001) return 1.0;
+
+  vec2 delta = lightPos - origin;
+  float rayLength = length(delta * uAspect);
+  if (rayLength < 0.0005) return 1.0;
+
+  float occlusion = 0.0;
+
+  for (int i = 1; i <= SHADOW_STEPS; i++) {
+    float t = (float(i) - jitter) / float(SHADOW_STEPS);
+    vec2 samplePos = origin + delta * t;
+
+    // Samples that leave the screen cannot be evaluated; treating them as lit
+    // avoids a dark border creeping in from off-screen geometry.
+    if (samplePos.x < 0.0 || samplePos.x > 1.0 || samplePos.y < 0.0 || samplePos.y > 1.0) {
+      continue;
+    }
+
+    float occluder = texture(uOccluder, samplePos).r;
+
+    // Weight by how far along the ray the sample sits: an occluder right next
+    // to the receiver casts a hard, dark shadow, one near the light casts a
+    // broad soft one.
+    float proximity = 1.0 - t;
+    occlusion += occluder * proximity;
+  }
+
+  occlusion /= float(SHADOW_STEPS) * 0.5;
+  return clamp(1.0 - occlusion * strength, 0.0, 1.0);
+#endif
+}
+
+/**
+ * Smooth radial falloff.
+ *
+ * The squared-then-smoothed form reaches exactly zero at the light's radius,
+ * unlike true inverse-square which never does. A light that never quite ends
+ * forces either a hard cutoff ring or an unbounded loop over every light in the
+ * level, and both are worse than a slight physical inaccuracy.
+ */
+float falloff(float dist, float radius, float exponent) {
+  float normalized = clamp(dist / max(radius, 0.0001), 0.0, 1.0);
+  float inverse = 1.0 - normalized * normalized;
+  return pow(max(inverse, 0.0), exponent);
+}
+
+void main() {
+  vec4 albedo = texture(uAlbedo, vUV);
+  vec4 normalSample = texture(uNormal, vUV);
+  vec4 material = texture(uMaterial, vUV);
+  vec4 depthSample = texture(uDepth, vUV);
+
+  // Rebuild the unit normal from its packed xy.
+  vec2 normalXY = normalSample.rg * 2.0 - 1.0;
+  float normalZ = sqrt(max(1.0 - dot(normalXY, normalXY), 0.0));
+  vec3 normal = normalize(vec3(normalXY, max(normalZ, 0.05)));
+
+  float ambientOcclusion = normalSample.a;
+  float roughness = clamp(material.r, 0.04, 1.0);
+  float metallic = material.g;
+  float emissive = material.b;
+  float translucency = material.a;
+  float parallaxDepth = depthSample.r;
+
+  // Distant layers receive flatter, dimmer light. Without this, a mountain ten
+  // layers back is lit as crisply as the character, and all sense of depth
+  // collapses.
+  float depthAttenuation = 1.0 / (1.0 + parallaxDepth * 0.35);
+  float depthFlatten = clamp(parallaxDepth * 0.16, 0.0, 0.75);
+
+  // Hemispheric ambient: sky from above, bounce from below.
+  float upFacing = normal.y * -0.5 + 0.5;
+  vec3 ambient =
+    mix(uAmbientGround.rgb * uAmbientGround.a, uAmbientSky.rgb * uAmbientSky.a, upFacing);
+  ambient *= ambientOcclusion;
+
+  vec3 accumulated = ambient;
+
+  // Per-pixel jitter for shadow sampling, animated so any residual banding
+  // averages out across frames rather than sitting still and being noticed.
+  float jitter = texture(uBlueNoise, vUV * uResolution / 64.0 + uTime * 0.017).r;
+
+  for (int i = 0; i < MAX_LIGHTS; i++) {
+    if (i >= uLightCount) break;
+
+    vec4 lightPos = uLightPosition[i];
+    vec4 lightColor = uLightColor[i];
+    vec4 lightParams = uLightParams[i];
+
+    float lightType = lightColor.a;
+    vec3 contribution = vec3(0.0);
+
+    if (lightType < 0.5) {
+      // ---- Point light ----
+      vec2 toLight = lightPos.xy - vUV;
+      float lightDistance = length(toLight * uAspect);
+      float attenuation = falloff(lightDistance, lightPos.z, lightParams.w);
+      if (attenuation <= 0.0) continue;
+
+      vec3 lightDir = normalize(vec3(normalize(toLight * uAspect), 0.65));
+      float lambert = max(dot(normal, lightDir), 0.0);
+      lambert = mix(lambert, 1.0, depthFlatten);
+
+      float shadow = traceShadow(vUV, lightPos.xy, jitter, lightParams.z);
+
+      // Light passing through a thin surface, lit from behind.
+      float backLight = max(-dot(normal, lightDir), 0.0) * translucency;
+
+      contribution = lightColor.rgb * lightPos.w * attenuation * (lambert + backLight) * shadow;
+    } else if (lightType < 1.5) {
+      // ---- Directional light (the sun) ----
+      float angle = lightParams.x;
+      vec3 lightDir = normalize(vec3(cos(angle), sin(angle), 0.55));
+      float lambert = max(dot(normal, lightDir), 0.0);
+      lambert = mix(lambert, 1.0, depthFlatten);
+
+      // March toward a virtual light position far along the sun direction.
+      vec2 virtualLight = vUV + vec2(cos(angle), sin(angle)) * 0.55;
+      float shadow = traceShadow(vUV, virtualLight, jitter, lightParams.z);
+
+      float backLight = max(-dot(normal, lightDir), 0.0) * translucency;
+
+      contribution = lightColor.rgb * lightPos.w * (lambert + backLight) * shadow;
+    } else {
+      // ---- Cone light ----
+      vec2 toLight = lightPos.xy - vUV;
+      float lightDistance = length(toLight * uAspect);
+      float attenuation = falloff(lightDistance, lightPos.z, lightParams.w);
+      if (attenuation <= 0.0) continue;
+
+      vec2 lightForward = vec2(cos(lightParams.x), sin(lightParams.x));
+      vec2 fragmentDir = normalize(-toLight * uAspect);
+      float cosAngle = dot(fragmentDir, lightForward);
+      float coneEdge = cos(lightParams.y);
+      // Soften the cone edge over a fixed angular width.
+      float cone = smoothstep(coneEdge, coneEdge + 0.12, cosAngle);
+      if (cone <= 0.0) continue;
+
+      vec3 lightDir = normalize(vec3(normalize(toLight * uAspect), 0.65));
+      float lambert = max(dot(normal, lightDir), 0.0);
+      lambert = mix(lambert, 1.0, depthFlatten);
+
+      float shadow = traceShadow(vUV, lightPos.xy, jitter, lightParams.z);
+
+      contribution = lightColor.rgb * lightPos.w * attenuation * cone * lambert * shadow;
+    }
+
+    // Metal reflects its own albedo; dielectrics scatter white light. A cheap
+    // stand-in for a full BRDF that still keeps painted metal reading as metal.
+    vec3 tinted = mix(contribution, contribution * albedo.rgb, metallic * 0.75);
+
+    // Rough surfaces spread light more evenly; smooth ones concentrate it.
+    float gloss = 1.0 - roughness;
+    tinted *= 1.0 + gloss * 0.35;
+
+    accumulated += tinted * depthAttenuation;
+  }
+
+  // Rim lighting from the screen-space normal. Edges facing away from the
+  // viewer catch a cool highlight, which is what lifts a character off its
+  // background without resorting to an outline.
+  float rimFactor = pow(1.0 - clamp(normal.z, 0.0, 1.0), 2.5);
+  vec3 rim = uRim.rgb * uRim.a * rimFactor * (1.0 - depthFlatten);
+
+  vec3 lit = albedo.rgb * accumulated + rim * albedo.a;
+
+  // Emissive surfaces ignore lighting entirely and drive the bloom pass.
+  lit += albedo.rgb * emissive * 3.0;
+
+  oLight = vec4(lit, albedo.a);
+}
+`;
