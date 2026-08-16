@@ -375,6 +375,36 @@ describe('Game — snapshots', () => {
   });
 });
 
+describe('Game — autoplay mode', () => {
+  it('clears a level hands-free with autoplay enabled (the ?autoplay=1 path)', () => {
+    // This exercises the real browser wiring: the caller passes only its own input and `Game` folds
+    // the autopilot in. A regression here means the demo/attract input is not being stepped.
+    const { game } = createGame({ startLevelIndex: 0, autoplay: true });
+    const input = new FakeInput();
+    for (let frame = 0; frame < 60 * 120; frame += 1) {
+      game.update(DT, input);
+      if (game.scene.name !== 'playing') break;
+    }
+    expect(game.scene.name).toBe('levelComplete');
+    expect(game.lastSummary?.deaths ?? 99).toBeLessThanOrEqual(1);
+  });
+
+  it('carries autoplay into the next level', () => {
+    const { game } = createGame({ startLevelIndex: 0, autoplay: true });
+    const input = new FakeInput();
+    for (let frame = 0; frame < 60 * 120 && game.scene.name === 'playing'; frame += 1) {
+      game.update(DT, input);
+    }
+    expect(game.scene.name).toBe('levelComplete');
+    menuTap(game, input, 'confirm');
+    expect(game.scene.name).toBe('playing');
+    expect(game.scene.levelIndex).toBe(1);
+    const startX = game.world?.player.body.x ?? 0;
+    step(game, input, 120);
+    expect(game.world?.player.body.x ?? 0).toBeGreaterThan(startX + 30);
+  });
+});
+
 describe('every campaign level is completable', () => {
   it.each(LEVELS.map((level, index) => [level.id, index] as const))(
     '%s can be finished by the autopilot',

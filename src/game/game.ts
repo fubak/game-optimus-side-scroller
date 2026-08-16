@@ -63,6 +63,9 @@ export class Game {
   private readonly autoplay: boolean;
   private readonly seed: number | undefined;
   private summary: LevelSummary | null = null;
+  /** Cached autopilot wrapper, so the wrapped input is the one whose frame gets consumed. */
+  private wrappedInput: Input | null = null;
+  private wrappedFor: Input | null = null;
   private sceneTime = 0;
   private introTimer = 0;
   /** Set while the player holds the key that opened a menu, to avoid instant double-actions. */
@@ -139,15 +142,28 @@ export class Game {
     this.hud.update(dtSec);
     this.audio.update(dtSec);
 
+    // With autoplay on, the autopilot is folded into the input *once* and the wrapper is what gets
+    // stepped. Wrapping per-call and then ending the frame on the bare input left the autopilot
+    // frozen on its first decision — it ran straight into the first pit, forever.
+    const source = this.wrapInput(input);
     try {
       if (isSimulating(this.sceneState.name)) {
-        this.updatePlaying(dtSec, input);
+        this.updatePlaying(dtSec, source);
       } else {
-        this.updateMenu(dtSec, input);
+        this.updateMenu(dtSec, source);
       }
     } finally {
-      input.endFrame();
+      source.endFrame();
     }
+  }
+
+  private wrapInput(input: Input): Input {
+    if (this.autopilot === null) return input;
+    if (this.wrappedInput === null || this.wrappedFor !== input) {
+      this.wrappedInput = new CompositeInput([input, this.autopilot]);
+      this.wrappedFor = input;
+    }
+    return this.wrappedInput;
   }
 
   /** JSON-safe snapshot for tests and the browser test hooks. */
@@ -217,6 +233,8 @@ export class Game {
   private enterTitle(): void {
     this.liveWorld = null;
     this.autopilot = null;
+    this.wrappedInput = null;
+    this.wrappedFor = null;
     this.summary = null;
     this.hud.clear();
     this.audio.setMusic(false);
@@ -248,6 +266,9 @@ export class Game {
       reducedMotion: this.saveData.settings.reducedMotion,
     });
     this.autopilot = this.autoplay ? new Autopilot(this.liveWorld) : null;
+    // The wrapper points at the previous world's autopilot; drop it so it is rebuilt.
+    this.wrappedInput = null;
+    this.wrappedFor = null;
     this.attract = null;
     this.summary = null;
     this.hud.clear();
