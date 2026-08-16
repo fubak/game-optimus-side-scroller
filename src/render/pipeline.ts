@@ -71,6 +71,13 @@ export interface Atmosphere {
   bloomKnee: number;
   bloomIntensity: number;
 
+  /**
+   * Multiplier on emissive surfaces. 1.0 means a fully-emissive surface renders
+   * at exactly its authored albedo. Values above 1 push emissives past the
+   * bloom threshold.
+   */
+  emissiveScale: number;
+
   exposure: number;
   contrast: number;
   saturation: number;
@@ -108,6 +115,7 @@ export const DEFAULT_ATMOSPHERE: Atmosphere = {
   bloomThreshold: 0.85,
   bloomKnee: 0.35,
   bloomIntensity: 0.7,
+  emissiveScale: 1.0,
 
   exposure: 1.15,
   contrast: 1.06,
@@ -574,6 +582,7 @@ export class Pipeline {
     program.setFloat('uTime', request.timeSeconds);
     // Aspect correction keeps a light's reach circular rather than elliptical.
     program.setVec2('uAspect', camera.aspect, 1);
+    program.setFloat('uEmissiveScale', atmosphere.emissiveScale);
 
     this.device.setBlend(BlendMode.None);
     this.fullscreen.draw();
@@ -621,6 +630,7 @@ export class Pipeline {
     program.setTexture('uScene', 0, this.lightTarget.texture.handle);
     program.setTexture('uDepth', 1, this.gbuffer.textures[3]!.handle);
     program.setTexture('uNoise', 2, this.fogNoise.handle);
+    program.setTexture('uMaterial', 3, this.gbuffer.textures[2]!.handle);
     program.setVec3(
       'uFogColor',
       atmosphere.fogColor[0],

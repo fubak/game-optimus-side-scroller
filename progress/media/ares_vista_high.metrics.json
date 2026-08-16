@@ -1,67 +1,68 @@
 {
   "scenario": "ares_vista_high",
   "image": {
-    "meanLuminance": 0.13903802999878848,
-    "luminanceP1": 0,
-    "luminanceP99": 0.7724972367286682,
-    "dynamicRange": 0.7724972367286682,
-    "clippedBlack": 0.28835648148148146,
-    "clippedWhite": 0.0019444444444444444,
-    "meanSaturation": 0.4686473427378442,
-    "highlightSaturation": 0.31826250627302755,
-    "localContrast": 0.10278349967464963,
-    "edgeDensity": 0.3024417660650721,
-    "bloomEnergy": 0.008572530864197531,
+    "meanLuminance": 0.4327799533647901,
+    "luminanceP1": 0.044927842915058136,
+    "luminanceP99": 0.7797741293907166,
+    "dynamicRange": 0.7348462864756584,
+    "clippedBlack": 0,
+    "clippedWhite": 0,
+    "meanSaturation": 0.39972496484332526,
+    "highlightSaturation": 0.21625544838849428,
+    "localContrast": 0.05389569548131598,
+    "edgeDensity": 0.05219977518266408,
+    "bloomEnergy": 0.00695216049382716,
     "bandContrast": [
-      0.047972433495880554,
-      0.11405525581993863,
-      0.12789028602955074
+      0.01774999584667038,
+      0.07863458974806549,
+      0.04667909727390755
     ],
     "bandSaturation": [
-      0.10870314642186618,
-      0.5960912418982008,
-      0.7007278596585592
+      0.20043055989959616,
+      0.2157628769154376,
+      0.7803552706414725
     ],
-    "cyanPresence": 0.00246141975308642,
-    "hueEntropy": 0.31907198821963983,
+    "cyanPresence": 0.00013117283950617284,
+    "hueEntropy": 0.4314915486988921,
     "dominantHues": [
       {
-        "hue": 25,
-        "share": 0.48953147797823976
-      },
-      {
         "hue": 15,
-        "share": 0.38458066808777747
+        "share": 0.5401788832846796
       },
       {
-        "hue": 35,
-        "share": 0.08768241523140934
-      },
-      {
-        "hue": 45,
-        "share": 0.013382327491582873
+        "hue": 25,
+        "share": 0.20589115302891012
       },
       {
         "hue": 5,
-        "share": 0.005398628254338727
+        "share": 0.08661534379360326
+      },
+      {
+        "hue": 275,
+        "share": 0.03548106096647318
+      },
+      {
+        "hue": 355,
+        "share": 0.021784439064616468
       }
     ],
     "width": 480,
     "height": 270
   },
   "stats": {
-    "drawCalls": 17,
-    "triangles": 1712,
-    "textureBinds": 28,
+    "drawCalls": 21,
+    "triangles": 400,
+    "textureBinds": 29,
     "fullscreenPasses": 14,
-    "lights": 4,
+    "lights": 5,
     "lightsCulled": 0,
-    "props": 339,
-    "motes": 260,
-    "renderWidth": 800,
-    "renderHeight": 450,
+    "props": 22,
+    "motes": 340,
+    "layers": 7,
+    "renderWidth": 640,
+    "renderHeight": 360,
     "simMs": 0,
-    "renderMs": 0.19999999972060323,
+    "renderMs": 0.2999999998137355,
     "frameMs": 0
   }
 }

@@ -60,6 +60,16 @@ uniform vec2 uResolution;
 uniform float uTime;
 /** Aspect correction so screen-space radii stay circular. */
 uniform vec2 uAspect;
+/**
+ * Multiplier on the emissive channel.
+ *
+ * Kept at 1.0 so that a fully-emissive surface renders at exactly its authored
+ * albedo — "unlit passthrough" rather than "glowing". Anything that should
+ * actually bloom is authored bright enough to cross the bloom threshold on its
+ * own. An earlier hardcoded 3.0 here drove the sky far past white and destroyed
+ * the frame's entire dynamic range.
+ */
+uniform float uEmissiveScale;
 
 out vec4 oLight;
 
@@ -82,8 +92,14 @@ float traceShadow(vec2 origin, vec2 lightPos, float jitter, float strength) {
 
   float occlusion = 0.0;
 
+  // Start the march a little away from the receiving surface. Without this
+  // bias a fragment that is itself in the occluder mask immediately samples
+  // its own coverage and shadows itself, which turns every lit surface a
+  // uniform grey instead of producing actual cast shadows.
+  const float START_BIAS = 0.045;
+
   for (int i = 1; i <= SHADOW_STEPS; i++) {
-    float t = (float(i) - jitter) / float(SHADOW_STEPS);
+    float t = mix(START_BIAS, 1.0, (float(i) - jitter) / float(SHADOW_STEPS));
     vec2 samplePos = origin + delta * t;
 
     // Samples that leave the screen cannot be evaluated; treating them as lit
@@ -238,10 +254,12 @@ void main() {
   float rimFactor = pow(1.0 - clamp(normal.z, 0.0, 1.0), 2.5);
   vec3 rim = uRim.rgb * uRim.a * rimFactor * (1.0 - depthFlatten);
 
-  vec3 lit = albedo.rgb * accumulated + rim * albedo.a;
-
-  // Emissive surfaces ignore lighting entirely and drive the bloom pass.
-  lit += albedo.rgb * emissive * 3.0;
+  // Emissive surfaces bypass lighting rather than adding on top of it.
+  // Blending toward the raw albedo keeps a fully-emissive surface at exactly
+  // its authored value, instead of stacking ambient light on top and pushing
+  // it past white.
+  vec3 lit = albedo.rgb * accumulated + rim * albedo.a * (1.0 - emissive);
+  lit = mix(lit, albedo.rgb * uEmissiveScale, emissive);
 
   oLight = vec4(lit, albedo.a);
 }

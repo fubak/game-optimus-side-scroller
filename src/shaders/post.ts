@@ -165,6 +165,8 @@ in vec2 vUV;
 uniform sampler2D uScene;
 uniform sampler2D uDepth;
 uniform sampler2D uNoise;
+/** Material buffer; only the emissive channel is read. */
+uniform sampler2D uMaterial;
 uniform vec3 uFogColor;
 uniform float uDensity;
 uniform float uHeightFalloff;
@@ -176,6 +178,7 @@ out vec4 oColor;
 void main() {
   vec3 scene = texture(uScene, vUV).rgb;
   float depth = texture(uDepth, vUV).r;
+  float emissive = texture(uMaterial, vUV).b;
 
   // Two octaves drifting at different rates so the pattern never obviously
   // repeats or moves as a single sheet.
@@ -189,6 +192,12 @@ void main() {
 
   float amount = 1.0 - exp(-depth * uDensity * height);
   amount *= mix(1.0, turbulence * 1.6, uNoiseStrength);
+
+  // Emissive surfaces are light sources, not lit geometry sitting at a
+  // distance. Fogging the sky would flatten it toward the fog colour and throw
+  // away the brightest values in the frame.
+  amount *= 1.0 - emissive;
+
   amount = clamp(amount, 0.0, 1.0);
 
   oColor = vec4(mix(scene, uFogColor, amount), 1.0);
