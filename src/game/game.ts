@@ -39,6 +39,10 @@ import { Trail, TRAIL_STYLES } from '../fx/trails.ts';
 import { Rng } from '../core/rng.ts';
 import { aabb } from '../core/math/aabb.ts';
 import { MOVEMENT } from './player/controller.ts';
+import { AudioEngine } from '../audio/engine.ts';
+import { Sfx } from '../audio/sfx.ts';
+import { Ambience } from '../audio/ambience.ts';
+import { DroneState as DS } from './enemies/drone.ts';
 import { clamp01 } from '../core/math/scalar.ts';
 
 const driftNoise = new NoiseField(0x4d51);
@@ -100,6 +104,23 @@ export class Game {
   private playerIFrames = 0;
   playerHealth = 100;
   private readonly enemyRng = new Rng(0xd40e);
+
+  // --- Audio ---------------------------------------------------------------
+  /**
+   * Audio is optional.
+   *
+   * Constructing an AudioContext throws in some headless configurations, and
+   * the capture harness has no audio device at all. A game that refuses to boot
+   * because it cannot make a sound is a worse outcome than a silent one, so
+   * every audio call is guarded.
+   */
+  private audio: AudioEngine | null = null;
+  private sfx: Sfx | null = null;
+  private ambience: Ambience | null = null;
+  /** Distance travelled since the last footstep, in metres. */
+  private stepDistance = 0;
+  /** Previous drone states, so transitions can be detected for audio cues. */
+  private readonly previousDroneStates = new Map<number, number>();
 
   /** Harness-only overrides. */
   private cameraOverride: { x: number; y: number; viewHeight: number } | null = null;
@@ -173,9 +194,35 @@ export class Game {
       this.combat.registerHurtbox(drone.hurtbox);
     }
 
+    this.initAudio();
+
     this.camera.setBounds(this.room.bounds);
     this.camera.viewHeightMetres = 9.6;
     this.camera.snapTo(this.player.feetX, this.player.feetY - 1.4);
+  }
+
+  /** Builds the audio graph, tolerating environments that have no audio. */
+  private initAudio(): void {
+    try {
+      this.audio = new AudioEngine();
+      this.sfx = new Sfx(this.audio);
+      this.ambience = new Ambience(this.audio);
+    } catch {
+      this.audio = null;
+      this.sfx = null;
+      this.ambience = null;
+    }
+  }
+
+  /** Resumes audio. Must be called from a user gesture. */
+  async unlockAudio(): Promise<void> {
+    if (!this.audio) return;
+    await this.audio.unlock();
+    this.ambience?.start();
+  }
+
+  get audioEngine(): AudioEngine | null {
+    return this.audio;
   }
 
   attachLoop(loop: GameLoop): void {
@@ -340,6 +387,7 @@ export class Game {
     if (this.player.landedThisStep > 3) {
       const strength = clamp01(this.player.landedThisStep / 22);
       this.camera.addTrauma(strength * 0.45);
+      this.sfx?.land(this.player.landedThisStep);
       // Dust kicked outward along the surface, plus chips of the surface
       // itself on a hard enough impact.
       this.particles.burstDust(this.player.feetX, this.player.feetY, strength, [1.0, 0.72, 0.46]);
@@ -348,6 +396,7 @@ export class Game {
       }
     }
     if (this.player.dashedThisStep) {
+      this.sfx?.dash();
       this.camera.addTrauma(0.12);
       // The dash vents along the character's own cyan.
       this.particles.burstSparks(
@@ -358,6 +407,46 @@ export class Game {
         0.55,
         [0.30, 0.95, 1.0],
       );
+    }
+
+    if (this.player.jumpedThisStep) this.sfx?.jump();
+    if (this.player.attackStartedThisStep >= 0) {
+      this.sfx?.attackSwing(this.player.attackStartedThisStep);
+    }
+
+    // Footsteps are driven by distance travelled, not by a timer, so the
+    // cadence automatically matches the gait at any speed.
+    if (this.player.grounded && this.player.speed > 0.6) {
+      this.stepDistance += this.player.speed * dt;
+      const stride = this.player.speed > 5 ? 1.45 : 1.05;
+      if (this.stepDistance >= stride) {
+        this.stepDistance = 0;
+        this.sfx?.footstep(this.player.speed);
+      }
+    } else {
+      this.stepDistance = 0;
+    }
+
+    // Drone state transitions drive their audio cues.
+    for (const drone of this.enemies) {
+      const previous = this.previousDroneStates.get(drone.id);
+      if (previous !== drone.state) {
+        if (drone.state === DS.Alert) this.sfx?.droneAlert();
+        else if (drone.state === DS.Lunge) this.sfx?.droneLunge();
+        this.previousDroneStates.set(drone.id, drone.state);
+      }
+    }
+
+    // Musical intensity follows how much danger is actually nearby.
+    if (this.ambience) {
+      let threat = 0;
+      for (const drone of this.enemies) {
+        if (drone.state === DS.Dying) continue;
+        const distance = Math.hypot(drone.x - this.player.feetX, drone.y - this.player.feetY);
+        threat = Math.max(threat, clamp01(1 - distance / 11));
+      }
+      this.ambience.setIntensity(threat);
+      this.ambience.update(dt);
     }
 
     // Running kicks a thin trail of dust off the surface.
@@ -439,6 +528,8 @@ export class Game {
         if (!drone) continue;
 
         const killed = drone.takeHit(event.damage, event.knockbackX, event.knockbackY);
+        this.sfx?.impact(event.damage);
+        if (killed) this.sfx?.enemyDeath();
 
         // Sparks fly along the direction force was transferred.
         this.particles.burstSparks(
@@ -462,6 +553,7 @@ export class Game {
         if (this.playerIFrames > 0) continue;
         this.playerHealth = Math.max(0, this.playerHealth - event.damage);
         this.playerIFrames = 0.85;
+        this.sfx?.playerHurt();
         this.player.interruptAttack();
         this.animator.triggerHitReact();
         this.particles.burstSparks(event.x, event.y, event.normalX, -0.5, 0.9, [1.0, 0.5, 0.35]);
@@ -488,6 +580,7 @@ export class Game {
 
       this.playerHealth = Math.max(0, this.playerHealth - DRONE.contactDamage);
       this.playerIFrames = 0.85;
+      this.sfx?.playerHurt();
       this.player.interruptAttack();
       this.animator.triggerHitReact();
       this.camera.addTrauma(0.3);

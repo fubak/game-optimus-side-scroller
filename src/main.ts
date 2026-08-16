@@ -71,7 +71,19 @@ async function boot(): Promise<void> {
   window.addEventListener('resize', resize);
   resize();
 
-  if (!harnessMode) input.attach();
+  if (!harnessMode) {
+    input.attach();
+
+    // Browsers refuse to start an AudioContext without a user gesture, so the
+    // game boots silent and unlocks on the first interaction of any kind.
+    const unlock = (): void => {
+      void game.unlockAudio();
+      window.removeEventListener('pointerdown', unlock);
+      window.removeEventListener('keydown', unlock);
+    };
+    window.addEventListener('pointerdown', unlock);
+    window.addEventListener('keydown', unlock);
+  }
 
   if (harnessMode) {
     installHarness({ game, pipeline, device, loop, clock: clock as VirtualClock, canvas });
