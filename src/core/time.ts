@@ -135,9 +135,22 @@ export class FrameStats {
     return sorted[idx]!;
   }
 
-  /** Frames per second implied by the 99th-percentile frame time. */
+  /**
+   * The "1% low" frame rate, as the term is used in game benchmarking: the
+   * *mean of the worst one percent* of frames, not the value at the 99th
+   * percentile.
+   *
+   * The distinction matters. Indexing at the 99th percentile of 100 samples
+   * returns the second-worst frame and so completely hides a single severe
+   * hitch — which is exactly the event this metric exists to expose.
+   */
   get percentile1Low(): number {
-    const ms = this.percentile(99);
+    if (this.count === 0) return 0;
+    const sorted = Array.from(this.samples.subarray(0, this.count)).sort((a, b) => b - a);
+    const worstCount = Math.max(1, Math.round(this.count * 0.01));
+    let sum = 0;
+    for (let i = 0; i < worstCount; i++) sum += sorted[i]!;
+    const ms = sum / worstCount;
     return ms > 0 ? 1000 / ms : 0;
   }
 

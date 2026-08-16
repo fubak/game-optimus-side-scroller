@@ -213,7 +213,9 @@ export class GameLoop {
    * machine that renders far slower than real time.
    */
   step(deltaSeconds: number): void {
-    this.lastTime += deltaSeconds;
-    this.tick(this.lastTime);
+    // `tick` derives its delta as `now - lastTime` and updates `lastTime`
+    // itself. Advancing `lastTime` here first made that subtraction zero, so
+    // every harness-driven frame ran with dt = 0 and nothing animated at all.
+    this.tick(this.lastTime + deltaSeconds);
   }
 }

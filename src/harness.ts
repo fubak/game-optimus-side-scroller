@@ -60,6 +60,10 @@ export interface HarnessApi {
   setQuality(quality: number): void;
   setResolution(width: number, height: number): void;
   setDebugView(view: number): void;
+  /** Frame the character at a given visible world height, in metres. */
+  setCamera(x: number, y: number, viewHeightMetres: number): void;
+  /** Freeze the placeholder locomotion at a fixed velocity. */
+  setPlayerVelocity(velocity: number | null): void;
   playTape(tape: TapeEntry[]): void;
   clearTape(): void;
   /** Advance exactly one frame of `dtSeconds` and render it. */
@@ -122,6 +126,14 @@ export function installHarness(context: HarnessContext): void {
 
     setDebugView(view: number): void {
       pipeline.debugView = view;
+    },
+
+    setCamera(x: number, y: number, viewHeightMetres: number): void {
+      game.setCameraOverride(x, y, viewHeightMetres);
+    },
+
+    setPlayerVelocity(velocity: number | null): void {
+      game.setVelocityOverride(velocity);
     },
 
     playTape(entries: TapeEntry[]): void {

@@ -1,57 +1,57 @@
 {
   "scenario": "ares_vista_high",
   "image": {
-    "meanLuminance": 0.4327799533647901,
-    "luminanceP1": 0.044927842915058136,
-    "luminanceP99": 0.7797741293907166,
-    "dynamicRange": 0.7348462864756584,
-    "clippedBlack": 0,
+    "meanLuminance": 0.43642021447589585,
+    "luminanceP1": 0.0016674509970471263,
+    "luminanceP99": 0.8357929587364197,
+    "dynamicRange": 0.8341255077393726,
+    "clippedBlack": 0.045285493827160496,
     "clippedWhite": 0,
-    "meanSaturation": 0.39972496484332526,
-    "highlightSaturation": 0.21625544838849428,
-    "localContrast": 0.05389569548131598,
-    "edgeDensity": 0.05219977518266408,
-    "bloomEnergy": 0.00695216049382716,
+    "meanSaturation": 0.3689715952562835,
+    "highlightSaturation": 0.2049383844207694,
+    "localContrast": 0.047490036861924295,
+    "edgeDensity": 0.03687628801598701,
+    "bloomEnergy": 0.0129320987654321,
     "bandContrast": [
-      0.01774999584667038,
-      0.07863458974806549,
-      0.04667909727390755
+      0.017656566119768975,
+      0.06360851375702993,
+      0.04886709308180876
     ],
     "bandSaturation": [
-      0.20043055989959616,
-      0.2157628769154376,
-      0.7803552706414725
+      0.1988518320759229,
+      0.21607596118934885,
+      0.6889620809046654
     ],
-    "cyanPresence": 0.00013117283950617284,
-    "hueEntropy": 0.4314915486988921,
+    "cyanPresence": 0.00008487654320987654,
+    "hueEntropy": 0.5740835165850128,
     "dominantHues": [
       {
-        "hue": 15,
-        "share": 0.5401788832846796
+        "hue": 25,
+        "share": 0.32426093850363624
       },
       {
-        "hue": 25,
-        "share": 0.20589115302891012
+        "hue": 15,
+        "share": 0.20207363067176007
       },
       {
         "hue": 5,
-        "share": 0.08661534379360326
+        "share": 0.15161353154177745
       },
       {
         "hue": 275,
-        "share": 0.03548106096647318
+        "share": 0.06273845218507033
       },
       {
-        "hue": 355,
-        "share": 0.021784439064616468
+        "hue": 35,
+        "share": 0.051630920237458244
       }
     ],
     "width": 480,
     "height": 270
   },
   "stats": {
-    "drawCalls": 21,
-    "triangles": 400,
+    "drawCalls": 22,
+    "triangles": 422,
     "textureBinds": 29,
     "fullscreenPasses": 14,
     "lights": 5,

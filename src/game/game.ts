@@ -19,6 +19,9 @@ import {
   ARES_SUN_WORLD,
 } from '../world/biomes/ares.ts';
 import { SpriteBatch, packColor, packMaterial } from '../gfx/batch.ts';
+import { buildOptimusAtlasSources } from '../art/optimus.ts';
+import { OptimusAnimator, type AnimationInput } from './player/animator.ts';
+import { OptimusRenderer } from './player/renderer.ts';
 import { fxRng } from '../core/rng.ts';
 import { Depth } from '../core/config.ts';
 import type { GameLoop } from '../core/loop.ts';
@@ -70,6 +73,14 @@ export class Game {
   private layers: ParallaxLayer[] = [];
   private loop: GameLoop | null = null;
 
+  animator!: OptimusAnimator;
+  private optimusRenderer!: OptimusRenderer;
+  /** Standing position of the character, at its feet. */
+  private playerX = 0;
+  private playerY = 0;
+  private playerFacing = 1;
+  private playerVelocityX = 0;
+
   private readonly props: Prop[] = [];
   private readonly motes: Mote[] = [];
   private readonly dynamicLights: Light[] = [];
@@ -85,11 +96,13 @@ export class Game {
   async load(): Promise<void> {
     this.atlas = new Atlas(
       this.device,
-      [...buildCoreAtlasSources(), ...buildAresAtlasSources()],
-      2048,
+      [...buildCoreAtlasSources(), ...buildAresAtlasSources(), ...buildOptimusAtlasSources()],
+      4096,
     );
     this.parallax = new ParallaxRenderer(this.atlas, this.camera);
     this.layers = buildAresLayers();
+    this.animator = new OptimusAnimator();
+    this.optimusRenderer = new OptimusRenderer(this.atlas, this.animator.skeleton);
     this.buildScene();
   }
 
@@ -226,15 +239,85 @@ export class Game {
       }),
     );
 
-    this.camera.snapTo(0, 0.5);
-    this.camera.viewHeightMetres = 11.25;
+    // Ground surface: the slab's top edge, where the character stands.
+    this.groundSurfaceY = groundY - 4;
+    this.playerX = 0;
+    this.playerY = this.groundSurfaceY;
+
+    this.camera.snapTo(0, this.groundSurfaceY - 1.4);
+    this.camera.viewHeightMetres = 7.2;
+  }
+
+  /** World Y of the walkable surface. */
+  private groundSurfaceY = 2.2;
+
+  /** Harness-only camera override, for close inspection of the character. */
+  private cameraOverride: { x: number; y: number; viewHeight: number } | null = null;
+  /** Harness-only fixed locomotion velocity. */
+  private velocityOverride: number | null = null;
+
+  setCameraOverride(x: number, y: number, viewHeightMetres: number): void {
+    this.cameraOverride = { x, y, viewHeight: viewHeightMetres };
+  }
+
+  setVelocityOverride(velocity: number | null): void {
+    this.velocityOverride = velocity;
   }
 
   fixedUpdate(dt: number, _simTime: number): void {
     this.time += dt;
+
+    // Placeholder locomotion: a slow patrol that exercises idle, walk, run,
+    // and the turnaround, so the rig and its transitions can be evaluated
+    // before the player controller lands.
+    const cycle = 14;
+    const phase = (this.time % cycle) / cycle;
+    let targetVelocity: number;
+    if (phase < 0.1) targetVelocity = 0;
+    else if (phase < 0.3) targetVelocity = 2.4;
+    else if (phase < 0.42) targetVelocity = 7.0;
+    else if (phase < 0.52) targetVelocity = 0;
+    else if (phase < 0.75) targetVelocity = -2.6;
+    else if (phase < 0.9) targetVelocity = -6.6;
+    else targetVelocity = 0;
+
+    if (this.velocityOverride !== null) targetVelocity = this.velocityOverride;
+    this.playerVelocityX += (targetVelocity - this.playerVelocityX) * Math.min(1, dt * 6);
+    this.playerX += this.playerVelocityX * dt;
+    if (Math.abs(this.playerVelocityX) > 0.4) {
+      this.playerFacing = this.playerVelocityX > 0 ? 1 : -1;
+    }
+    this.playerY = this.groundSurfaceY;
   }
 
   render(_alpha: number, _dt: number, unscaledDt: number): void {
+    const animationInput: AnimationInput = {
+      speed: Math.abs(this.playerVelocityX),
+      velocityX: this.playerVelocityX,
+      velocityY: 0,
+      grounded: true,
+      facing: this.playerFacing,
+      groundAngle: 0,
+      groundY: this.groundSurfaceY,
+    };
+    this.animator.update(animationInput, unscaledDt, this.playerX, this.playerY);
+
+    if (this.cameraOverride) {
+      this.camera.viewHeightMetres = this.cameraOverride.viewHeight;
+      this.camera.snapTo(
+        this.playerX + this.cameraOverride.x,
+        this.playerY + this.cameraOverride.y,
+      );
+    } else {
+      // Frame the character rather than the world origin.
+      this.camera.follow(
+        this.playerX,
+        this.playerY - 1.0,
+        this.playerVelocityX,
+        0,
+        unscaledDt,
+      );
+    }
     this.camera.update(unscaledDt);
 
     this.lights.clear();
@@ -304,6 +387,8 @@ export class Game {
         prop.rotation,
       );
     }
+
+    this.optimusRenderer.draw(batch, this.animator.skeleton, this.playerFacing);
 
     this.drawMotes(batch);
 
@@ -401,6 +486,11 @@ export class Game {
         prop.rotation,
       );
     }
+
+    // The player is the most important caster in the game: their own shadow
+    // falling across the environment is much of what makes them feel present
+    // in it rather than composited on top.
+    this.optimusRenderer.drawOccluder(batch, this.animator.skeleton, this.playerFacing);
 
     // The foreground silhouette is the main god-ray occluder: shafts breaking
     // over the top of it is the effect the whole layer exists to produce.
