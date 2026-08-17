@@ -81,6 +81,7 @@ import { DEFAULT_RENDER_SETTINGS } from '../settings';
 import type { QualityPreset, RenderSettings } from '../settings';
 import {
   buildCharacterAtlas,
+  dyingClipAnimTime,
   enemyCanonicalSize,
   enemyClipId,
   ENEMY_VISUAL_SCALE,
@@ -91,8 +92,6 @@ import {
   WORLD_DRAW_WIDTH,
 } from '../spritesheet';
 import type { CharacterAtlas, ClipId } from '../spritesheet';
-import { drawRigToGBuffer } from '../rig/drawRig';
-import { buildEnemyRig } from '../rig/enemyRigs';
 import type { WorldView } from '../view';
 import { BackgroundBatch } from './backgroundBatch';
 import { uploadCharacterAtlas } from './characterTextures';
@@ -860,8 +859,9 @@ export class GlWorldRenderer implements WorldView {
   }
 
   /**
-   * Spike tips + conveyor belt cleats drawn as G-buffer quads so hazards read as Classic silhouettes
-   * instead of flat material slabs. Visual only — collision stays on the tilemap.
+   * Spike tips, conveyor cleats, checkpoint lamps, and goal shafts drawn as G-buffer quads so
+   * tiles keep Classic silhouettes instead of flat material slabs. Visual only — collision stays
+   * on the tilemap.
    */
   private drawTileOverlays(world: World, cam: CameraOffset, view: ViewSize): void {
     const { map } = world;
@@ -873,6 +873,15 @@ export class GlWorldRenderer implements WorldView {
     const hazard = parseColor(palette.hazard);
     const hazardDark = parseColor(palette.hazardDark);
     const rust = parseColor(palette.rust);
+    const plateDark = parseColor(palette.plateDark);
+    const plateFace = parseColor(palette.plateFace);
+    const energy = parseColor(palette.energy);
+    const energyDim = parseColor(palette.energyDim);
+    const visorGlow = parseColor(palette.visorGlow);
+    const uiDim = parseColor(palette.uiDim);
+    const white = parseColor(palette.white);
+    const nearStructure = parseColor(palette.nearStructure);
+    const midStructure = parseColor(palette.midStructure);
 
     for (let ty = minTy; ty <= maxTy; ty += 1) {
       for (let tx = minTx; tx <= maxTx; tx += 1) {
@@ -936,12 +945,132 @@ export class GlWorldRenderer implements WorldView {
             }
             break;
           }
+          case TileKind.Checkpoint: {
+            const active = world.isCheckpointActive(tx, ty);
+            const pulse = 0.5 + 0.5 * Math.sin(world.elapsedSec * (active ? 6 : 2));
+            this.gbufferBatch.rect(x + 7, y + 2, 2, tileSize - 2, {
+              r: plateDark[0],
+              g: plateDark[1],
+              b: plateDark[2],
+              roughness: 0.45,
+              metallic: 0.7,
+            });
+            const lamp = active ? energy : uiDim;
+            this.gbufferBatch.rect(x + 5, y + 2, 6, 4, {
+              r: lamp[0],
+              g: lamp[1],
+              b: lamp[2],
+              roughness: 0.3,
+              metallic: 0.4,
+              emissiveR: active ? energy[0] * 0.85 : 0,
+              emissiveG: active ? energy[1] * 0.85 : 0,
+              emissiveB: active ? energy[2] * 0.85 : 0,
+            });
+            const core = active ? visorGlow : plateFace;
+            this.gbufferBatch.rect(x + 6, y + 3, Math.max(1, 4 * pulse), 2, {
+              r: core[0],
+              g: core[1],
+              b: core[2],
+              roughness: 0.25,
+              metallic: 0.2,
+              emissiveR: active ? visorGlow[0] : 0,
+              emissiveG: active ? visorGlow[1] : 0,
+              emissiveB: active ? visorGlow[2] : 0,
+            });
+            break;
+          }
+          case TileKind.Goal: {
+            const wobble = Math.sin(world.elapsedSec * 4) * 1.5;
+            this.gbufferBatch.rect(x + 2, y, tileSize - 4, tileSize, {
+              r: energyDim[0],
+              g: energyDim[1],
+              b: energyDim[2],
+              roughness: 0.35,
+              metallic: 0.15,
+              emissiveR: energyDim[0] * 0.55,
+              emissiveG: energyDim[1] * 0.55,
+              emissiveB: energyDim[2] * 0.55,
+            });
+            this.gbufferBatch.rect(x + 4, y, tileSize - 8, tileSize, {
+              r: energy[0],
+              g: energy[1],
+              b: energy[2],
+              roughness: 0.28,
+              metallic: 0.12,
+              emissiveR: energy[0] * 0.9,
+              emissiveG: energy[1] * 0.9,
+              emissiveB: energy[2] * 0.9,
+            });
+            this.gbufferBatch.rect(x + 6 + wobble * 0.4, y + 2, 3, tileSize - 4, {
+              r: visorGlow[0],
+              g: visorGlow[1],
+              b: visorGlow[2],
+              roughness: 0.2,
+              metallic: 0.1,
+              emissiveR: visorGlow[0],
+              emissiveG: visorGlow[1],
+              emissiveB: visorGlow[2],
+            });
+            this.gbufferBatch.rect(x + 7, y + 6 + wobble, 1, 4, {
+              r: white[0],
+              g: white[1],
+              b: white[2],
+              roughness: 0.15,
+              metallic: 0.05,
+              emissiveR: white[0],
+              emissiveG: white[1],
+              emissiveB: white[2],
+            });
+            break;
+          }
+          case TileKind.Scenery: {
+            const hash = tileVariation(tx, ty);
+            const horizontal = (hash & 1) === 0;
+            if (horizontal) {
+              this.gbufferBatch.rect(x, y + 6, tileSize, 4, {
+                r: nearStructure[0],
+                g: nearStructure[1],
+                b: nearStructure[2],
+                roughness: 0.7,
+                metallic: 0.55,
+              });
+              this.gbufferBatch.rect(x, y + 9, tileSize, 1, {
+                r: midStructure[0],
+                g: midStructure[1],
+                b: midStructure[2],
+                roughness: 0.75,
+                metallic: 0.5,
+              });
+              if ((hash & 6) === 0) {
+                this.gbufferBatch.rect(x + 6, y + 4, 3, 8, {
+                  r: nearStructure[0],
+                  g: nearStructure[1],
+                  b: nearStructure[2],
+                  roughness: 0.7,
+                  metallic: 0.55,
+                });
+              }
+            } else {
+              this.gbufferBatch.rect(x + 6, y, 4, tileSize, {
+                r: nearStructure[0],
+                g: nearStructure[1],
+                b: nearStructure[2],
+                roughness: 0.7,
+                metallic: 0.55,
+              });
+              this.gbufferBatch.rect(x + 9, y, 1, tileSize, {
+                r: midStructure[0],
+                g: midStructure[1],
+                b: midStructure[2],
+                roughness: 0.75,
+                metallic: 0.5,
+              });
+            }
+            break;
+          }
           case TileKind.Empty:
           case TileKind.Solid:
           case TileKind.OneWay:
-          case TileKind.Checkpoint:
-          case TileKind.Goal:
-          case TileKind.Scenery:
             break;
           default: {
             const exhaustive: never = kind;
@@ -1109,8 +1238,7 @@ export class GlWorldRenderer implements WorldView {
 
   /**
    * Draws one enemy from its procedural sprite sheet (baked from {@link buildEnemyRig} poses
-   * with soft edges + ink outline). Dying enemies switch to the live rig so fade/drop still play;
-   * telegraph / sealed-core states select alternate baked clips.
+   * with soft edges + ink outline). Telegraph / sealed-core / dying states select alternate clips.
    */
   private drawEnemy(world: World, enemy: Enemy): void {
     const dyingProgress = enemy.state === 'dying' ? 1 - enemy.deathTimer / ENEMY_DEATH_TIME : 0;
@@ -1119,29 +1247,21 @@ export class GlWorldRenderer implements WorldView {
     const { x, y, width, height } = enemy.body;
     const telegraphing = isEnhancedEnemyTelegraphing(world, enemy);
     const vulnerable = enemy.kind === 'overseer' ? world.isBossVulnerable(enemy) : false;
-
-    if (dyingProgress > 0) {
-      const parts = buildEnemyRig({
-        kind: enemy.kind,
-        x,
-        y,
-        width,
-        height,
-        facing: enemy.direction,
-        animTime: enemy.animTime,
-        dying: dyingProgress,
-        telegraph: telegraphing,
-        vulnerable,
-        hitPoints: enemy.hitPoints,
-      });
-      drawRigToGBuffer(this.gbufferBatch, parts);
-      return;
-    }
+    const clipId = enemyClipId(enemy.kind, {
+      telegraph: telegraphing,
+      vulnerable,
+      dying: dyingProgress > 0,
+    });
+    const clip = this.characterAtlas.clips.get(clipId);
+    const animTime =
+      dyingProgress > 0 && clip !== undefined
+        ? dyingClipAnimTime(clip, dyingProgress)
+        : enemy.animTime;
 
     const canonical = enemyCanonicalSize(enemy.kind);
     this.queueCharacterSprite(
-      enemyClipId(enemy.kind, { telegraph: telegraphing, vulnerable }),
-      enemy.animTime,
+      clipId,
+      animTime,
       x,
       y,
       width,

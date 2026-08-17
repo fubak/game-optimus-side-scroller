@@ -13,10 +13,10 @@ import { parseColor } from '../color';
 import { buildEnemyRig } from '../rig/enemyRigs';
 import { buildOptimusRig } from '../rig/optimusRig';
 import type { RigParts } from '../rig/types';
-import { outlineMask, softEdgeAlpha } from './style';
+import { applyHatchStrokes, applyPanelWear, outlineMask, softEdgeAlpha } from './style';
 import type { AtlasRect, CharacterAtlas, ClipDesc, ClipId, OptimusClipId } from './types';
 import { frameKey } from './types';
-import { enemyKindFromClipId } from './playback';
+import { enemyKindFromClipId, isEnemyDyingClip } from './playback';
 
 /** Cell pixel size — high enough for Tesla polymer detail at Enhanced supersampling. */
 export const CELL_WIDTH = 144;
@@ -52,13 +52,18 @@ export const OPTIMUS_CLIPS: readonly ClipDesc[] = [
 
 export const ENEMY_CLIPS: readonly ClipDesc[] = [
   { id: 'enemy:walker', frameCount: 14, fps: 16, loop: true },
+  { id: 'enemy:walkerDying', frameCount: 8, fps: 20, loop: false },
   { id: 'enemy:drone', frameCount: 14, fps: 18, loop: true },
+  { id: 'enemy:droneDying', frameCount: 8, fps: 20, loop: false },
   { id: 'enemy:turret', frameCount: 12, fps: 14, loop: true },
   { id: 'enemy:turretTelegraph', frameCount: 10, fps: 18, loop: true },
+  { id: 'enemy:turretDying', frameCount: 8, fps: 20, loop: false },
   { id: 'enemy:crusher', frameCount: 12, fps: 14, loop: true },
   { id: 'enemy:crusherTelegraph', frameCount: 10, fps: 20, loop: true },
+  { id: 'enemy:crusherDying', frameCount: 8, fps: 18, loop: false },
   { id: 'enemy:overseer', frameCount: 14, fps: 14, loop: true },
   { id: 'enemy:overseerSealed', frameCount: 12, fps: 12, loop: true },
+  { id: 'enemy:overseerDying', frameCount: 10, fps: 16, loop: false },
 ];
 
 const INK: readonly [number, number, number] = [28, 32, 40];
@@ -98,6 +103,11 @@ function bakeEnemyPose(clipId: ClipId): { telegraph: boolean; vulnerable: boolea
     case 'enemy:drone':
     case 'enemy:turret':
     case 'enemy:crusher':
+    case 'enemy:walkerDying':
+    case 'enemy:droneDying':
+    case 'enemy:turretDying':
+    case 'enemy:crusherDying':
+    case 'enemy:overseerDying':
       return { telegraph: false, vulnerable: false };
     case 'optimus:idle':
     case 'optimus:run':
@@ -121,6 +131,7 @@ function bakeEnemyFrame(
   frame: number,
   fps: number,
   pose: { telegraph: boolean; vulnerable: boolean },
+  dyingProgress: number,
 ): {
   albedo: Uint8Array;
   emissive: Uint8Array;
@@ -141,6 +152,7 @@ function bakeEnemyFrame(
     height,
     facing: 1,
     animTime,
+    dying: dyingProgress,
     telegraph: pose.telegraph,
     vulnerable: pose.vulnerable,
     hitPoints: 3,
@@ -300,6 +312,9 @@ function rasterizeParts(
     fill(hard, rgb, emissive, CELL_WIDTH, CELL_HEIGHT, x0, y0, w, h, color, alpha, part.emissive ?? 0);
   }
 
+  applyPanelWear(rgb, hard, CELL_WIDTH, CELL_HEIGHT);
+  applyHatchStrokes(rgb, hard, CELL_WIDTH, CELL_HEIGHT);
+
   // Softer fringe + lighter ink — polymer silhouette, not comic-ink armour.
   const soft = softEdgeAlpha(hard, CELL_WIDTH, CELL_HEIGHT, 2.25);
   const outline = outlineMask(hard, CELL_WIDTH, CELL_HEIGHT, 1);
@@ -309,9 +324,11 @@ function rasterizeParts(
     const o = i * 4;
     const a = soft[i] ?? 0;
     if ((outline[i] ?? 0) > 0 && (hard[i] ?? 0) === 0) {
-      albedo[o] = INK[0];
-      albedo[o + 1] = INK[1];
-      albedo[o + 2] = INK[2];
+      // Slight ink weight variation so the outline feels brushed, not stamped.
+      const inkMul = 0.85 + ((i * 17) % 40) / 200;
+      albedo[o] = Math.min(255, Math.round(INK[0] * inkMul));
+      albedo[o + 1] = Math.min(255, Math.round(INK[1] * inkMul));
+      albedo[o + 2] = Math.min(255, Math.round(INK[2] * inkMul));
       albedo[o + 3] = Math.min(255, Math.round(a * 0.55));
     } else {
       albedo[o] = rgb[o] ?? 0;
@@ -399,11 +416,17 @@ export function buildCharacterAtlas(): CharacterAtlas {
           drawSizes.set(clip.id, { width: WORLD_DRAW_WIDTH, height: WORLD_DRAW_HEIGHT });
         }
       } else {
+        const dyingProgress = isEnemyDyingClip(clip.id)
+          ? clip.frameCount <= 1
+            ? 1
+            : frame / (clip.frameCount - 1)
+          : 0;
         const baked = bakeEnemyFrame(
           enemyKindFromClipId(clip.id),
           frame,
           clip.fps,
           bakeEnemyPose(clip.id),
+          dyingProgress,
         );
         blitCell(albedo, emissive, width, baked.albedo, baked.emissive, destX, destY);
         if (frame === 0) {

@@ -31,6 +31,20 @@ This script is **not** part of `npm run ci`. If Chromium is not installed, `dist
 built, or the preview server fails to start, it prints a `[bench] Skipping — ...` message and exits
 `0` rather than failing the caller — frame-time numbers are a development aid, not a merge gate.
 
+## CI / cloud VM vs a real GPU
+
+Cloud agents and many CI runners use **software WebGL** (SwiftShader / llvmpipe). Absolute FPS and
+p95 frame times there are not comparable to a discrete GPU at 4K — treat committed
+[`results.json`](./results.json) as a **relative** baseline across quality presets on that machine
+class. For the ≤12 ms @4K budget called out in `docs/gauntlet/README.md`, re-run `npm run bench` on
+hardware with a real GPU after renderer changes.
+
+```bash
+# On a discrete-GPU machine:
+npm run build && npm run bench
+# Compare p50/p95 against the previous local run, not against CI software-GL numbers.
+```
+
 ## Reading results.json
 
 ```json

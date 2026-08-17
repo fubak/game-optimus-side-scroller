@@ -44,10 +44,30 @@ export interface EnemyClipOptions {
   readonly telegraph?: boolean;
   /** Overseer only — false selects the sealed-core sheet. */
   readonly vulnerable?: boolean;
+  /** Death collapse one-shot — takes priority over telegraph / sealed. */
+  readonly dying?: boolean;
 }
 
 /** Resolve a clip id for an enemy kind + combat state. */
 export function enemyClipId(kind: EnemyKind, options: EnemyClipOptions = {}): ClipId {
+  if (options.dying === true) {
+    switch (kind) {
+      case 'walker':
+        return 'enemy:walkerDying';
+      case 'drone':
+        return 'enemy:droneDying';
+      case 'turret':
+        return 'enemy:turretDying';
+      case 'crusher':
+        return 'enemy:crusherDying';
+      case 'overseer':
+        return 'enemy:overseerDying';
+      default: {
+        const exhaustive: never = kind;
+        throw new Error(`Unhandled enemy kind in enemyClipId(dying): ${String(exhaustive)}`);
+      }
+    }
+  }
   const telegraph = options.telegraph === true;
   switch (kind) {
     case 'walker':
@@ -72,7 +92,22 @@ export function enemyKindFromClipId(clipId: ClipId): EnemyKind {
   if (clipId.startsWith('enemy:turret')) return 'turret';
   if (clipId.startsWith('enemy:crusher')) return 'crusher';
   if (clipId.startsWith('enemy:overseer')) return 'overseer';
-  if (clipId === 'enemy:walker') return 'walker';
-  if (clipId === 'enemy:drone') return 'drone';
+  if (clipId.startsWith('enemy:walker')) return 'walker';
+  if (clipId.startsWith('enemy:drone')) return 'drone';
   throw new Error(`Not an enemy clip id: ${clipId}`);
+}
+
+/** True when the clip is a one-shot death collapse. */
+export function isEnemyDyingClip(clipId: ClipId): boolean {
+  return clipId.endsWith('Dying');
+}
+
+/**
+ * Map death progress 0..1 onto a one-shot dying clip's animTime so frame 0 is intact and the
+ * last frame is fully collapsed.
+ */
+export function dyingClipAnimTime(clip: ClipDesc, dyingProgress: number): number {
+  if (clip.frameCount <= 1) return 0;
+  const progress = Math.max(0, Math.min(1, dyingProgress));
+  return (progress * (clip.frameCount - 1)) / clip.fps;
 }

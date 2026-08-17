@@ -57,6 +57,8 @@ the Enhanced-only changes above touch it.
 | Skeletal bake source poses | `src/render/rig/optimusRig.ts`, `enemyRigs.ts` |
 | Full-res Enhanced HUD/menus | `src/render/uiSpace.ts`, `src/main.ts` |
 | Softened tile grid (Enhanced) | `GlWorldRenderer` tile UV bleed + quad overlap |
+| Tile silhouette overlays | `GlWorldRenderer.drawTileOverlays` (spikes, conveyors, CP/goal, scenery) |
+| Sheet paint wear / hatch | `spritesheet/style.ts` (`applyPanelWear`, `applyHatchStrokes`) |
 
 ## Character animation (Enhanced)
 
@@ -72,9 +74,10 @@ Previews: `npm run generate:spritesheets` → `public/generated/spritesheets/`.
 ## Other Enhanced props
 
 Enemies bake from elliptical factory rigs (wheels, eyes, rotors, cores) and draw ~1.35× hitbox.
-Telegraph / sealed-core combat states select alternate sheet clips; only dying enemies fall back to
-the live rig for fade/drop. Spike tips and scrolling conveyor cleats are drawn as G-buffer overlays
-so hazards keep Classic silhouettes. Pickups restore Classic's canister / hex-nut / cross shapes with
+Telegraph / sealed-core / dying combat states select alternate sheet clips (no live-rig fallback).
+Spike tips, conveyor cleats, checkpoint lamps, goal shafts, and scenery pipes are G-buffer overlays
+so hazards and props keep Classic silhouettes. Sheet bake adds procedural panel wear + hatch strokes
+under the soft ink fringe. Pickups restore Classic's canister / hex-nut / cross shapes with
 emissive accents. Projectiles use a core+halo stack; dash ghosts and jetpack plume match Optimus's
 larger visual footprint. Menus/epilogue paint the Tesla polymer Optimus rig on Enhanced
 (`drawOptimusEnhanced.ts`); Classic keeps brick sprites.

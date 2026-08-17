@@ -1,6 +1,11 @@
 import { describe, expect, it } from 'vitest';
 import type { ClipDesc } from '../../src/render/spritesheet';
-import { enemyClipId, optimusClipId, sampleClipFrame } from '../../src/render/spritesheet';
+import {
+  dyingClipAnimTime,
+  enemyClipId,
+  optimusClipId,
+  sampleClipFrame,
+} from '../../src/render/spritesheet';
 
 describe('sampleClipFrame', () => {
   const loopClip: ClipDesc = { id: 'optimus:run', frameCount: 20, fps: 20, loop: true };
@@ -39,5 +44,20 @@ describe('optimusClipId / enemyClipId', () => {
     expect(enemyClipId('crusher', { telegraph: true })).toBe('enemy:crusherTelegraph');
     expect(enemyClipId('overseer', { vulnerable: false })).toBe('enemy:overseerSealed');
     expect(enemyClipId('overseer', { vulnerable: true })).toBe('enemy:overseer');
+  });
+
+  it('selects dying clips over telegraph state', () => {
+    expect(enemyClipId('walker', { dying: true })).toBe('enemy:walkerDying');
+    expect(enemyClipId('turret', { dying: true, telegraph: true })).toBe('enemy:turretDying');
+    expect(enemyClipId('overseer', { dying: true, vulnerable: false })).toBe('enemy:overseerDying');
+  });
+});
+
+describe('dyingClipAnimTime', () => {
+  it('maps progress 0..1 across a one-shot clip', () => {
+    const clip: ClipDesc = { id: 'enemy:walkerDying', frameCount: 8, fps: 20, loop: false };
+    expect(dyingClipAnimTime(clip, 0)).toBe(0);
+    expect(dyingClipAnimTime(clip, 1)).toBeCloseTo(7 / 20, 5);
+    expect(sampleClipFrame(clip, dyingClipAnimTime(clip, 1))).toBe(7);
   });
 });

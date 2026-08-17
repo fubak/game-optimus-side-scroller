@@ -37,4 +37,6 @@ Force a 4K-class backbuffer with a 1920×1080 CSS viewport and `deviceScaleFacto
 
 ## Known limits on CI / cloud VMs
 
-`npm run bench` on software WebGL reports low absolute FPS. Treat those numbers as **relative** across quality presets; re-run on discrete GPU hardware for the ≤12 ms @4K budget.
+`npm run bench` on software WebGL reports low absolute FPS. Treat those numbers as **relative**
+across quality presets; re-run on discrete GPU hardware for the ≤12 ms @4K budget. See
+`docs/bench/README.md` for how to interpret CI vs real-GPU results.
