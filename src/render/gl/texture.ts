@@ -175,6 +175,22 @@ export class Texture {
     this.upload(data, width, height);
   }
 
+  /**
+   * Upload directly from a canvas/image/bitmap source (e.g. a procedurally-painted parallax
+   * layer), skipping the `ArrayBufferView` staging step. Always uploads without a Y flip: texture
+   * `v = 0` ends up at the source's first (top) row, which is what every GL-rendered pass in this
+   * codebase already assumes for its own render targets — see `src/render/gl/backgroundBatch.ts`.
+   */
+  uploadImage(source: TexImageSource, width: number, height: number): void {
+    const { gl } = this;
+    const info = formatInfo(gl, this.format);
+    gl.bindTexture(gl.TEXTURE_2D, this.handle);
+    gl.pixelStorei(gl.UNPACK_FLIP_Y_WEBGL, false);
+    gl.texImage2D(gl.TEXTURE_2D, 0, info.internalFormat, info.format, info.type, source);
+    this.texWidth = width;
+    this.texHeight = height;
+  }
+
   /** Bind this texture to a texture unit for sampling. */
   bind(unit: number): void {
     const { gl } = this;

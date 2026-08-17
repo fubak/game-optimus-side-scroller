@@ -27,6 +27,26 @@ interface Particle {
   color: string;
 }
 
+/**
+ * Read-only view of one pool slot, for renderers that cannot draw through {@link ParticleSystem.draw}
+ * (e.g. the WebGL2 backend, which batches particles as GPU quads instead of Canvas2D calls).
+ * {@link ParticleSystem.particleAt} returns the pool's own object typed as this interface — no
+ * per-call allocation — so callers must treat it as a snapshot valid only until the next
+ * `update()`.
+ */
+export interface ParticleView {
+  readonly active: boolean;
+  readonly kind: ParticleKind;
+  readonly x: number;
+  readonly y: number;
+  readonly vx: number;
+  readonly vy: number;
+  readonly life: number;
+  readonly maxLife: number;
+  readonly size: number;
+  readonly color: string;
+}
+
 export interface SpawnOptions {
   readonly kind: ParticleKind;
   readonly x: number;
@@ -85,6 +105,13 @@ export class ParticleSystem {
 
   get activeCount(): number {
     return this.pool.reduce((count, particle) => count + (particle.active ? 1 : 0), 0);
+  }
+
+  /** Read-only view of pool slot `index`, or `null` if it is out of range or inactive. */
+  particleAt(index: number): ParticleView | null {
+    const particle = this.pool[index];
+    if (particle?.active !== true) return null;
+    return particle;
   }
 
   clear(): void {

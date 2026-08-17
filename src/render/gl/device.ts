@@ -16,6 +16,8 @@ export interface GlCaps {
   readonly floatColorBufferSupported: boolean;
   /** Whether an `RGBA16F` texture can actually be attached to a complete framebuffer. */
   readonly hdrSupported: boolean;
+  /** Whether `EXT_disjoint_timer_query_webgl2` is available for approximate GPU frame timing. */
+  readonly timerQuerySupported: boolean;
 }
 
 /**
@@ -72,6 +74,7 @@ function probeCaps(gl: WebGL2RenderingContext): GlCaps {
     maxDrawBuffers: gl.getParameter(gl.MAX_DRAW_BUFFERS) as number,
     floatColorBufferSupported,
     hdrSupported: floatColorBufferSupported && probeHdrSupport(gl),
+    timerQuerySupported: gl.getExtension('EXT_disjoint_timer_query_webgl2') !== null,
   };
 }
 

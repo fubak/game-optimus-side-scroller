@@ -182,10 +182,8 @@ window.addEventListener('keydown', (event) => {
 function draw(alpha = 0): void {
   const { ctx } = display;
   const world = game.showsWorldBehind ? game.world : game.attractWorld;
-  // Touch settings so a future quality-driven path can read them without unused warnings.
-  void effectiveRenderSettings();
   if (world !== null) {
-    renderer.draw(ctx, world, alpha);
+    renderer.draw(ctx, world, alpha, effectiveRenderSettings(), game.save.settings.reducedMotion);
     if (game.showsWorldBehind) {
       game.hud.draw(ctx, world, INTERNAL_WIDTH);
     }
@@ -212,9 +210,10 @@ function drawDebugPanel(ctx: CanvasRenderingContext2D): void {
   const { fps, frameTimeMs, updateMs, renderMs, droppedSteps } = loop.metrics;
   const world = game.world ?? game.attractWorld;
   const player = world?.player;
+  const gpuMs = renderer.lastGpuMs;
   const lines = [
     `FPS ${fps.toFixed(1)} FRAME ${frameTimeMs.toFixed(2)}MS`,
-    `UPD ${updateMs.toFixed(2)}MS REN ${renderMs.toFixed(2)}MS`,
+    `UPD ${updateMs.toFixed(2)}MS REN ${renderMs.toFixed(2)}MS GPU ${gpuMs === null || gpuMs === undefined ? 'N/A' : `${gpuMs.toFixed(2)}MS`}`,
     `ALPHA ${lastRenderAlpha.toFixed(2)}`,
     `REN ${renderer.backend.toUpperCase()} (${display.mode.toUpperCase()}) Q ${renderSettings.quality.toUpperCase()}`,
     `BUF ${String(display.bufferWidth)}x${String(display.bufferHeight)}`,

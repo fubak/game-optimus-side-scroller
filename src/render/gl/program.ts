@@ -116,6 +116,24 @@ export class Program {
     if (location !== null) this.gl.uniform1i(location, x);
   }
 
+  /** Upload a flat array of floats to a `float[]` uniform. */
+  setUniform1fv(name: string, values: Float32Array | readonly number[]): void {
+    const location = this.uniformLocation(name);
+    if (location !== null) this.gl.uniform1fv(location, values as Float32Array);
+  }
+
+  /** Upload a flat (3 floats per element) array to a `vec3[]` uniform. */
+  setUniform3fv(name: string, values: Float32Array | readonly number[]): void {
+    const location = this.uniformLocation(name);
+    if (location !== null) this.gl.uniform3fv(location, values as Float32Array);
+  }
+
+  /** Upload a flat (4 floats per element) array to a `vec4[]` uniform — used for packed light data. */
+  setUniform4fv(name: string, values: Float32Array | readonly number[]): void {
+    const location = this.uniformLocation(name);
+    if (location !== null) this.gl.uniform4fv(location, values as Float32Array);
+  }
+
   /** Upload a column-major 3x3 matrix (9 floats). */
   matrix3fv(name: string, value: Float32Array | readonly number[]): void {
     const location = this.uniformLocation(name);
