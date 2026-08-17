@@ -54,6 +54,8 @@ const SOLID_VARIANTS: readonly MaterialId[] = [
   MaterialId.PaintedSteel,
   MaterialId.RustedPlate,
   MaterialId.Grating,
+  MaterialId.WarningChevrons,
+  MaterialId.Concrete,
 ];
 
 /**
