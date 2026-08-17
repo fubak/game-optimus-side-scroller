@@ -19,9 +19,10 @@
  *  2. **Occluder pass** — {@link occluderTarget} (a single-channel mask) is stamped with a white
  *     quad per visible solid tile and the player's AABB, feeding the lighting pass's soft-shadow
  *     ray march.
- *  3. **Background pass** — {@link backgroundTarget} gets the sky gradient, parallax layers and
- *     atmospheric scrim, unlit. Kept separate from the G-buffer so it is cheap and never needs a
- *     normal/material of its own.
+ *  3. **Background pass** — {@link backgroundTarget} gets the sky gradient, hi-res "enhanced"
+ *     parallax layers (`parallaxEnhanced.ts`), a few cheap analytic volumetric light shafts, and
+ *     the atmospheric scrim, unlit. Kept separate from the G-buffer so it is cheap and never needs
+ *     a normal/material of its own.
  *  4. **Lighting pass** — {@link lightingPass} combines G-buffer + occluder + background + the
  *     frame's {@link LightList} (from {@link collectLights}) into {@link accumTarget}.
  *  5. **Bloom** (Stage 7, `post/bloom.ts`) — {@link bloomPass} thresholds the emissive G-buffer
@@ -38,9 +39,18 @@
  *     (sized to the device, not 480×270 — see {@link resize}). The backbuffer is then blitted into
  *     the game's Canvas2D display surface so HUD/screens/e2e keep working unchanged.
  *
- * All render targets run at the fixed 480×270 world-view resolution (matching gameplay's own
- * coordinate space and Classic's pixel-art look); only the final tonemap present upscales to the
- * device's real buffer size, exactly like the Stage 1/2 blit it replaces.
+ * Sizing: gameplay coordinates always stay in the fixed 480×270 world-view space ({@link
+ * INTERNAL_WIDTH}×{@link INTERNAL_HEIGHT}, matching Classic) — every vertex shader maps world
+ * position to clip space through a `u_view` uniform holding that constant, never the target's
+ * actual pixel size, so the same draw calls are resolution-independent. Every render target in the
+ * list above (G-buffer, occluder, background, accumulation, bloom's mip chain) is instead sized to
+ * {@link internalTargetWidth}×{@link internalTargetHeight}, which tracks the real backbuffer
+ * (device pixels, set by {@link resize}) — rasterizing the *same* 480×270-unit geometry into a
+ * larger framebuffer is simply supersampling: edges and lighting gradients come out anti-aliased
+ * for free, instead of the old fixed-480×270-then-GPU-upscale path that made Enhanced look like
+ * blown-up pixel art. `internalTargetWidth/Height` can drop below the backbuffer size under
+ * sustained GPU load (see {@link updateDynamicResolution}); the final composite pass always
+ * fills the full backbuffer regardless, so a throttled frame reads as softer, not smaller.
  *
  * HDR: {@link accumTarget} uses `RGBA16F` when {@link GlCaps.hdrSupported}, so stacked emissives
  * and lights can exceed 1.0 before the tonemap curve compresses them; it falls back to plain
@@ -70,7 +80,7 @@ import { drawRigToGBuffer } from '../rig/drawRig';
 import { buildEnemyRig } from '../rig/enemyRigs';
 import { buildOptimusRig } from '../rig/optimusRig';
 import { DEFAULT_RENDER_SETTINGS } from '../settings';
-import type { RenderSettings } from '../settings';
+import type { QualityPreset, RenderSettings } from '../settings';
 import type { WorldView } from '../view';
 import { BackgroundBatch } from './backgroundBatch';
 import { GlDevice, tryCreateWebGL2 } from './device';
@@ -90,7 +100,7 @@ import { TileBatch } from './tileBatch';
 import type { UvRect } from './tileBatch';
 import { TonemapPass } from './tonemap';
 import type { Texture } from './texture';
-import { TexFormat } from './texture';
+import { Filter, TexFormat } from './texture';
 
 /** Soft-threshold cutoff and overall strength for Stage 7's emissive-only bloom (`post/bloom.ts`). */
 const BLOOM_THRESHOLD = 0.35;
@@ -98,6 +108,35 @@ const BLOOM_INTENSITY = 1.15;
 
 /** Bound on the internal grain-hash time counter (seconds); wraps so long sessions keep float precision. */
 const TIME_WRAP_SEC = 1000;
+
+/**
+ * Once the render target is supersampled past this multiple of the internal world-view size, the
+ * material atlas switches from crisp nearest sampling to linear — a 64px atlas tile magnified many
+ * times over reads as visibly blocky otherwise. Below the threshold nearest keeps plates/grating
+ * crisp exactly like Classic. See {@link GlWorldRenderer.updateTileFilter}.
+ */
+const TILE_LINEAR_FILTER_RATIO = 2;
+
+/**
+ * Dynamic-resolution ladder for {@link GlWorldRenderer.updateDynamicResolution}: the fraction of
+ * the real backbuffer the deferred pipeline's render targets actually use. Index 0 (no reduction)
+ * is preferred; higher indices trade sharpness for GPU headroom under sustained load.
+ */
+const DYNAMIC_RES_SCALE_STEPS: readonly number[] = [1, 0.85, 0.7, 0.6];
+/** Sustained GPU frame time (ms) above which dynamic resolution drops a step. */
+const DYNAMIC_RES_HIGH_MS = 14;
+/** Sustained GPU frame time (ms) below which dynamic resolution recovers a step. */
+const DYNAMIC_RES_LOW_MS = 8;
+/** Smoothing factor for the GPU-time EMA — small, so single-frame spikes do not trigger a resize. */
+const DYNAMIC_RES_EMA_ALPHA = 0.15;
+/** Minimum frames between dynamic-resolution steps, so the ladder cannot thrash every frame. */
+const DYNAMIC_RES_COOLDOWN_FRAMES = 45;
+/**
+ * Dynamic resolution only engages once the backbuffer is at least this multiple of the internal
+ * world-view's pixel area — a Classic-sized buffer is already cheap enough that throttling it
+ * would only cost sharpness for no headroom gained.
+ */
+const DYNAMIC_RES_MIN_AREA_RATIO = 2;
 
 interface Point {
   readonly x: number;
@@ -135,6 +174,28 @@ function uvRectFromAtlasRect(rect: AtlasRect, atlasWidth: number, atlasHeight: n
     u1: (rect.x + rect.width) / atlasWidth,
     v1: (rect.y + rect.height) / atlasHeight,
   };
+}
+
+/**
+ * Overall brightness multiplier for {@link BackgroundBatch.drawLightShafts}, derived from the
+ * quality preset the same way bloom/grain/etc. scale back at lower presets (`settings.lightShafts`
+ * and reduced motion are applied on top of this by the caller, see `drawBackgroundPass`).
+ */
+function lightShaftIntensity(quality: QualityPreset): number {
+  switch (quality) {
+    case 'low':
+      return 0;
+    case 'medium':
+      return 0.5;
+    case 'high':
+      return 0.85;
+    case 'ultra':
+      return 1;
+    default: {
+      const exhaustive: never = quality;
+      throw new Error(`Unhandled quality preset in GlWorldRenderer: ${String(exhaustive)}`);
+    }
+  }
 }
 
 /** Per-tile-kind emissive scalar fed into {@link TileBatch.tile}; multiplies the tile's albedo. */
@@ -205,6 +266,21 @@ export class GlWorldRenderer implements WorldView {
   /** Real backbuffer size (device pixels); defaults to the world view until {@link resize}. */
   private backbufferWidth = INTERNAL_WIDTH;
   private backbufferHeight = INTERNAL_HEIGHT;
+  /**
+   * Actual pixel size of the deferred pipeline's render targets (G-buffer, occluder, background,
+   * accumulation, bloom). Tracks {@link backbufferWidth}/{@link backbufferHeight} 1:1 unless
+   * {@link updateDynamicResolution} has throttled it back under sustained GPU load.
+   */
+  private internalTargetWidth = INTERNAL_WIDTH;
+  private internalTargetHeight = INTERNAL_HEIGHT;
+  /** Current step into {@link DYNAMIC_RES_SCALE_STEPS}; 0 is full resolution. */
+  private dynamicResStep = 0;
+  /** Frames left before {@link updateDynamicResolution} may change {@link dynamicResStep} again. */
+  private dynamicResCooldown = 0;
+  /** Exponential moving average of {@link gpuTimer}'s per-frame reading, in milliseconds. */
+  private renderMsEma: number | null = null;
+  /** Current sampling filter on the material atlas textures — see {@link updateTileFilter}. */
+  private tileFilter: Filter = Filter.Nearest;
 
   private levelId: string;
   private ghosts: DashGhost[] = [];
@@ -282,7 +358,12 @@ export class GlWorldRenderer implements WorldView {
     this.levelId = world?.level.id ?? '';
     if (world !== null) {
       this.backgroundBatch.setLayers(
-        createParallaxLayers({ seed: world.level.seed, viewWidth: INTERNAL_WIDTH, viewHeight: INTERNAL_HEIGHT }),
+        createParallaxLayers({
+          seed: world.level.seed,
+          viewWidth: INTERNAL_WIDTH,
+          viewHeight: INTERNAL_HEIGHT,
+          quality: 'enhanced',
+        }),
       );
     }
 
@@ -317,8 +398,10 @@ export class GlWorldRenderer implements WorldView {
   }
 
   /**
-   * Resize the GL backbuffer to match the display's real buffer (device pixels). Every internal
-   * render target stays pinned at 480×270 — only the final tonemap present targets this size.
+   * Resize the GL backbuffer to match the display's real buffer (device pixels). The deferred
+   * pipeline's render targets follow suit (see {@link applyInternalTargetSize}) — world-view
+   * coordinates ({@link INTERNAL_WIDTH}×{@link INTERNAL_HEIGHT}, fed to every `u_view` uniform)
+   * never change, so this simply supersamples the same draw calls into a bigger framebuffer.
    */
   resize(bufferWidth: number, bufferHeight: number): void {
     const width = Math.max(1, Math.round(bufferWidth));
@@ -328,6 +411,96 @@ export class GlWorldRenderer implements WorldView {
     this.backbufferHeight = height;
     this.canvas.width = width;
     this.canvas.height = height;
+    // A real backbuffer resize invalidates any throttling decision made for the old size — start
+    // back at full resolution and let updateDynamicResolution re-derive a step for the new size.
+    this.dynamicResStep = 0;
+    this.dynamicResCooldown = 0;
+    this.renderMsEma = null;
+    this.applyInternalTargetSize();
+  }
+
+  /**
+   * Recompute {@link internalTargetWidth}/{@link internalTargetHeight} from
+   * {@link backbufferWidth}/{@link backbufferHeight} and {@link dynamicResStep}, and — only if
+   * that actually changed — reallocate every deferred render target (G-buffer, occluder,
+   * background, accumulation, bloom's mip chain) at the new size. No-op otherwise, so this is
+   * safe to call every frame without thrashing GPU memory.
+   */
+  private applyInternalTargetSize(): void {
+    const scale = DYNAMIC_RES_SCALE_STEPS[this.dynamicResStep] ?? 1;
+    const width = Math.max(1, Math.round(this.backbufferWidth * scale));
+    const height = Math.max(1, Math.round(this.backbufferHeight * scale));
+    if (width === this.internalTargetWidth && height === this.internalTargetHeight) return;
+    this.internalTargetWidth = width;
+    this.internalTargetHeight = height;
+    this.gBuffer.resize(width, height);
+    this.backgroundTarget.resize(width, height);
+    this.occluderTarget.resize(width, height);
+    this.accumTarget.resize(width, height);
+    this.bloomPass.resize(width, height);
+    this.updateTileFilter();
+  }
+
+  /**
+   * Switch the material atlas between crisp nearest sampling and linear once the deferred
+   * pipeline's render targets are supersampled far enough past the 480×270 world view that
+   * nearest starts reading as blocky (see {@link TILE_LINEAR_FILTER_RATIO}). Atlas tiles are
+   * padded with a wrapped border (`materials/generate.ts`) precisely so this switch never bleeds
+   * one material into its neighbour. No-op if the filter is already what it should be, so this is
+   * cheap to call on every {@link applyInternalTargetSize}.
+   */
+  private updateTileFilter(): void {
+    const ratio = Math.min(this.internalTargetWidth / INTERNAL_WIDTH, this.internalTargetHeight / INTERNAL_HEIGHT);
+    const nextFilter = ratio >= TILE_LINEAR_FILTER_RATIO ? Filter.Linear : Filter.Nearest;
+    if (nextFilter === this.tileFilter) return;
+    this.tileFilter = nextFilter;
+    this.materialTextures.setFilter(nextFilter);
+  }
+
+  /**
+   * Discrete-step, hysteresis-guarded dynamic resolution: smooths {@link gpuTimer}'s per-frame
+   * reading into {@link renderMsEma}, and — after {@link DYNAMIC_RES_COOLDOWN_FRAMES} frames of
+   * headroom to avoid thrashing — drops a step (see {@link DYNAMIC_RES_SCALE_STEPS}) under
+   * sustained GPU load or recovers one once load eases. Only engages when
+   * `settings.dynamicResolution` is on and the backbuffer is large enough that throttling it
+   * actually buys back meaningful GPU time (see {@link DYNAMIC_RES_MIN_AREA_RATIO}); otherwise
+   * this always resets back to full resolution.
+   */
+  private updateDynamicResolution(settings: RenderSettings): void {
+    const backbufferArea = this.backbufferWidth * this.backbufferHeight;
+    const worldViewArea = INTERNAL_WIDTH * INTERNAL_HEIGHT;
+    const eligible = settings.dynamicResolution && backbufferArea >= worldViewArea * DYNAMIC_RES_MIN_AREA_RATIO;
+    if (!eligible) {
+      this.renderMsEma = null;
+      this.dynamicResCooldown = 0;
+      if (this.dynamicResStep !== 0) {
+        this.dynamicResStep = 0;
+        this.applyInternalTargetSize();
+      }
+      return;
+    }
+
+    const sample = this.gpuTimer.lastMs;
+    if (sample !== null) {
+      this.renderMsEma = this.renderMsEma === null ? sample : lerp(this.renderMsEma, sample, DYNAMIC_RES_EMA_ALPHA);
+    }
+
+    if (this.dynamicResCooldown > 0) {
+      this.dynamicResCooldown -= 1;
+      return;
+    }
+    if (this.renderMsEma === null) return;
+
+    const maxStep = DYNAMIC_RES_SCALE_STEPS.length - 1;
+    if (this.renderMsEma > DYNAMIC_RES_HIGH_MS && this.dynamicResStep < maxStep) {
+      this.dynamicResStep += 1;
+      this.dynamicResCooldown = DYNAMIC_RES_COOLDOWN_FRAMES;
+      this.applyInternalTargetSize();
+    } else if (this.renderMsEma < DYNAMIC_RES_LOW_MS && this.dynamicResStep > 0) {
+      this.dynamicResStep -= 1;
+      this.dynamicResCooldown = DYNAMIC_RES_COOLDOWN_FRAMES;
+      this.applyInternalTargetSize();
+    }
   }
 
   draw(
@@ -389,7 +562,12 @@ export class GlWorldRenderer implements WorldView {
     this.prevPlayer = null;
     this.currPlayer = null;
     this.backgroundBatch.setLayers(
-      createParallaxLayers({ seed: world.level.seed, viewWidth: INTERNAL_WIDTH, viewHeight: INTERNAL_HEIGHT }),
+      createParallaxLayers({
+        seed: world.level.seed,
+        viewWidth: INTERNAL_WIDTH,
+        viewHeight: INTERNAL_HEIGHT,
+        quality: 'enhanced',
+      }),
     );
   }
 
@@ -422,6 +600,9 @@ export class GlWorldRenderer implements WorldView {
   ): void {
     const { gl } = this.device;
     this.ensureLevel(world);
+    // Reacts to *last* frame's resolved GPU time (see GpuTimer's read-back latency), so any step
+    // change here takes effect on this frame's own render targets before anything draws into them.
+    this.updateDynamicResolution(settings);
 
     const view: ViewSize = { width: INTERNAL_WIDTH, height: INTERNAL_HEIGHT };
     const cam: CameraOffset = this.interpolatedCamera(world, alpha);
@@ -431,7 +612,7 @@ export class GlWorldRenderer implements WorldView {
 
     this.drawGeometryPass(world, view, cam, player);
     this.drawOccluderPass(world, view, cam, player);
-    this.drawBackgroundPass(view, cam);
+    this.drawBackgroundPass(view, cam, settings, reducedMotion);
 
     // Debugging aid (`?gdbg=albedo|normal|emissive|occluder`): short-circuit before the lighting
     // pass and present a raw G-buffer/occluder channel instead of the lit scene.
@@ -731,8 +912,11 @@ export class GlWorldRenderer implements WorldView {
     this.occluderBatch.flush();
   }
 
-  /** Fills {@link backgroundTarget}: sky gradient, parallax layers, atmospheric scrim. Unlit. */
-  private drawBackgroundPass(view: ViewSize, cam: CameraOffset): void {
+  /**
+   * Fills {@link backgroundTarget}: sky gradient, parallax layers, volumetric light shafts and
+   * atmospheric scrim. Unlit.
+   */
+  private drawBackgroundPass(view: ViewSize, cam: CameraOffset, settings: RenderSettings, reducedMotion: boolean): void {
     const { gl } = this.device;
     this.backgroundTarget.bind();
     gl.disable(gl.BLEND);
@@ -748,6 +932,11 @@ export class GlWorldRenderer implements WorldView {
     this.backgroundBatch.drawLayers(view.width, view.height, cam.x, cam.y);
     const scrim = parseColor('rgb(9 12 20 / 0.45)');
     this.backgroundBatch.drawScrim(view.width, view.height, scrim[0], scrim[1], scrim[2], scrim[3]);
+
+    const shaftIntensity = reducedMotion ? 0 : lightShaftIntensity(settings.quality) * (settings.lightShafts ? 1 : 0);
+    const cool = parseColor(palette.visor);
+    const warm = parseColor(palette.flame);
+    this.backgroundBatch.drawLightShafts([cool[0], cool[1], cool[2]], [warm[0], warm[1], warm[2]], shaftIntensity, this.frameTimeSec);
   }
 
   /** Post-lighting forward FX drawn straight into {@link accumTarget}: ghosts, flame, particles. */

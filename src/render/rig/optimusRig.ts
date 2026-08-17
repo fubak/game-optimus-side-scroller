@@ -81,6 +81,8 @@ interface Pose {
   readonly hipSway: number;
   /** Secondary motion on the antenna, phase-shifted from `headTilt` so it visibly lags/whips. */
   readonly antennaSway: number;
+  /** Torso counter-rotation, out of phase with the hips — reads as the chest twisting against the stride. */
+  readonly torsoTwist: number;
 }
 
 const POSE_NEUTRAL: Pose = {
@@ -102,6 +104,7 @@ const POSE_NEUTRAL: Pose = {
   elbowBackBend: 0,
   hipSway: 0,
   antennaSway: 0,
+  torsoTwist: 0,
 };
 
 function smoothstep(t: number): number {
@@ -125,9 +128,9 @@ function rawPoseFor(state: PlayerState, animTime: number, speedRatio: number): P
     case 'run': {
       const cadence = 12 + speedRatio * 6;
       const rawPhase = animTime * cadence;
-      // Quantised to a fixed number of steps per cycle so the cycle reads as a chunky 8–12 frame
+      // Quantised to a fixed number of steps per cycle so the cycle reads as a chunky 10–12 frame
       // run rather than a perfectly smooth sinusoid, while remaining a pure function of animTime.
-      const stepsPerCycle = 10;
+      const stepsPerCycle = 12;
       const phase = (Math.round((rawPhase / (Math.PI * 2)) * stepsPerCycle) / stepsPerCycle) * (Math.PI * 2);
       const swing = Math.sin(phase);
       const lift = Math.abs(Math.cos(phase));
@@ -150,6 +153,9 @@ function rawPoseFor(state: PlayerState, animTime: number, speedRatio: number): P
         hipSway: Math.sin(phase * 0.5) * 0.6 * Math.min(1, speedRatio + 0.4),
         antennaSway: Math.sin(rawPhase * 0.5 + 0.8) * 0.6,
         headTilt: 0.4,
+        // Chest counter-rotates against the hip/leg swing — the classic run "wring" that keeps
+        // the shoulders reading as independent mass from the pelvis.
+        torsoTwist: -swing * 0.9,
       };
     }
     case 'jump':
@@ -304,6 +310,7 @@ function blendFromNeutral(raw: Pose, animTime: number): Pose {
     elbowBackBend: raw.elbowBackBend * t,
     hipSway: raw.hipSway * t,
     antennaSway: raw.antennaSway * t,
+    torsoTwist: raw.torsoTwist * t,
   };
 }
 
@@ -387,8 +394,13 @@ function legParts(
   const knee = hipY + 5;
   return [
     seg(originX, originY, facing, x - 1.5, hipY, 3, 5, thighColor),
+    // Knee seam: a 1px darker line right at the thigh/shin joint, so the two segments read as
+    // separate plates instead of one continuous limb even when the knee bend is near zero.
+    seg(originX, originY, facing, x - 1.5 + kneeBend * 0.3, knee - 1, 3, 1, palette.plateShadow),
     seg(originX, originY, facing, x - 1.5 + kneeBend * 0.6, knee, 3, 4, palette.shellDark),
     seg(originX, originY, facing, x - 1.5 + kneeBend, knee + 4, 3, 2, bootColor),
+    // Boot sole: a thin tread strip beneath the boot, distinct from the boot shell colour.
+    seg(originX, originY, facing, x - 1.5 + kneeBend, knee + 6, 3, 1, palette.joint),
   ];
 }
 
@@ -416,16 +428,25 @@ function torsoParts(
   shoulderY: number,
   hipY: number,
   lean: number,
+  torsoTwist: number,
   energyRatio: number,
 ): RigRect[] {
-  const torsoX = -4.5 + lean * 0.4;
+  const torsoX = -4.5 + lean * 0.4 + torsoTwist * 0.3;
   const torsoH = hipY - shoulderY;
   const coreColor = energyRatio > 0.25 ? palette.energy : palette.uiWarn;
+  const seamY1 = shoulderY + torsoH * 0.38;
+  const seamY2 = shoulderY + torsoH * 0.72;
   return [
     seg(originX, originY, facing, torsoX - 1, shoulderY, 11, 2, palette.shellDark),
     seg(originX, originY, facing, torsoX, shoulderY, 9, torsoH, palette.shell),
     seg(originX, originY, facing, torsoX, shoulderY, 9, 1, palette.shellLight),
+    // Left/right flank plates — a matching pair (the original only had the right one), so the
+    // chassis reads as three riveted plates rather than a flat block from either facing direction.
+    seg(originX, originY, facing, torsoX - 1 + torsoTwist * 0.1, shoulderY + 1, 2, torsoH - 1, palette.shellDark),
     seg(originX, originY, facing, torsoX + 7, shoulderY + 1, 2, torsoH - 1, palette.shellDark),
+    // Chest plate seams: two horizontal seam lines splitting the torso into plate segments.
+    seg(originX, originY, facing, torsoX + 1, seamY1, 7, 1, palette.plateShadow),
+    seg(originX, originY, facing, torsoX + 1, seamY2, 7, 1, palette.plateShadow),
     seg(originX, originY, facing, torsoX + 3, shoulderY + 3, 3, 3, palette.joint),
     seg(originX, originY, facing, torsoX + 3.5, shoulderY + 3.5, 2, 2, coreColor, { emissive: 0.6 }),
   ];
@@ -444,8 +465,17 @@ function headParts(
 ): RigRect[] {
   const headX = -3.5 + lean * 0.8 + headTilt;
   const visorLit = state !== 'dead';
+  const antennaBaseX = headX + 3 + antennaSway * 0.3;
+  const antennaTipX = headX + 3 + antennaSway;
   const parts: RigRect[] = [
-    seg(originX, originY, facing, headX + 3 + antennaSway * 0.5, headY - 1 - Math.abs(antennaSway) * 0.5, 1, 1, palette.joint),
+    // Helmet crest: a raised ridge along the top-centre of the head, giving the silhouette a
+    // peak instead of a flat dome — reads clearly even at 4K where the flat top used to vanish.
+    seg(originX, originY, facing, headX + 2, headY - 2, 3, 2, palette.shellDark),
+    seg(originX, originY, facing, headX + 2.5, headY - 3, 2, 1, palette.shellLight),
+    // Antenna: two segments (mast + tip node) instead of one pixel, so the sway reads as a
+    // hinged rod rather than a single floating dot.
+    seg(originX, originY, facing, antennaBaseX, headY - 2 - Math.abs(antennaSway) * 0.3, 1, 2, palette.joint),
+    seg(originX, originY, facing, antennaTipX, headY - 3 - Math.abs(antennaSway) * 0.5, 1, 1, palette.visorGlow, { emissive: 0.4 }),
     seg(originX, originY, facing, headX, headY, 7, 6, palette.shellLight),
     seg(originX, originY, facing, headX, headY, 7, 1, palette.white),
     seg(originX, originY, facing, headX + 5, headY + 1, 2, 5, palette.shellDark),
@@ -514,7 +544,7 @@ export function buildOptimusRig(options: OptimusRigOptions): RigParts {
   );
   parts.push(...armParts(originX, originY, facing, -ARM_BASE_X + pose.armBackX, shoulderY + pose.armBackY, pose.elbowBackBend, palette.shellDark));
 
-  parts.push(...torsoParts(originX, originY, facing, shoulderY, hipY, pose.lean, energyRatio));
+  parts.push(...torsoParts(originX, originY, facing, shoulderY, hipY, pose.lean, pose.torsoTwist, energyRatio));
   parts.push(seg(originX, originY, facing, -3.5 + pose.lean * 0.3 + pose.hipSway, hipY - 1, 7, 2, palette.joint));
 
   parts.push(

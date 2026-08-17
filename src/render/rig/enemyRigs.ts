@@ -61,10 +61,17 @@ function buildWalkerRig(options: EnemyRigOptions): RigParts {
   const wobble = Math.sin(animTime * 10) * 0.5;
 
   const parts: RigRect[] = [rect(x, dropY + height - 4, width, 4, palette.joint, { alpha })];
+  // Idler wheels: two small hubs riding under the tread frame, giving the belt a visible axle
+  // to wrap around instead of floating over a flat plate.
+  parts.push(rect(x + width * 0.22, dropY + height - 3, 2, 2, palette.plateShadow, { alpha }));
+  parts.push(rect(x + width * 0.68, dropY + height - 3, 2, 2, palette.plateShadow, { alpha }));
   // Tread deformation: each track block flexes independently (a small height pulse riding the
-  // belt scroll), so the tracks read as flexible rather than a single painted-on strip.
-  for (let i = 0; i < 4; i += 1) {
-    const offset = (animTime * 40 * facing + i * 4) % width;
+  // belt scroll), so the tracks read as flexible rather than a single painted-on strip. More
+  // segments than the chassis is wide keeps the belt reading as continuous at any zoom.
+  const treadSegments = 6;
+  const segmentSpacing = width / treadSegments;
+  for (let i = 0; i < treadSegments; i += 1) {
+    const offset = (animTime * 40 * facing + i * segmentSpacing) % width;
     const flex = 1 + Math.sin(animTime * 14 + i * 1.7) * 0.35;
     const blockX = dropY + height - 3;
     parts.push(rect(x + ((offset + width) % width), blockX, 2, Math.max(1, 2 * flex), palette.plateLight, { alpha }));
@@ -86,9 +93,15 @@ function buildDroneRig(options: EnemyRigOptions): RigParts {
   const bank = Math.sin(animTime * 3.4) * 1.2;
   const rotor = Math.sin(animTime * 30) * 2;
   const rotorBlurWidth = width - 2 + Math.abs(Math.sin(animTime * 60)) * 1.5;
+  // A second blur blade 90° out of phase (cosine instead of sine) reads as the same disc seen
+  // from a slightly different angle each frame — two overlapping streaks instead of one bar,
+  // which is enough for the eye to fill in a spinning rotor disc rather than a single wing.
+  const rotor2 = Math.cos(animTime * 30) * 2;
+  const rotor2BlurWidth = width - 4 + Math.abs(Math.cos(animTime * 60)) * 1.5;
 
   const parts: RigRect[] = [
     rect(x + 1 + rotor + bank, dropY, rotorBlurWidth, 1, palette.plateLight, { alpha, emissive: 0.15 }),
+    rect(x + 2 + rotor2 + bank, dropY, rotor2BlurWidth, 1, palette.plateLight, { alpha, emissive: 0.1 }),
     rect(x + width / 2 - 1 + bank, dropY + 1, 2, 2, palette.joint, { alpha }),
     rect(x + 1 + bank * 0.5, dropY + 3, width - 2, height - 4, palette.plateFace, { alpha }),
     rect(x + 1 + bank * 0.5, dropY + 3, width - 2, 1, palette.plateLight, { alpha }),
@@ -116,8 +129,17 @@ function buildTurretRig(options: EnemyRigOptions): RigParts {
     rect(x + 2, dropY + 3, width - 4, height - 7, palette.grate, { alpha }),
     rect(x + 3, dropY + 3, width - 6, 1, palette.plateLight, { alpha }),
   ];
+  // Barrel: three segments (mount, tube, muzzle) instead of one flat rect, so the heat glow can
+  // localise to the muzzle tip rather than washing over the whole barrel.
   const barrelX = (facing === 1 ? x + width - 3 : x - 3) + recoil * facing;
-  parts.push(rect(barrelX, dropY + 6, 6, 3, palette.plateDark, { alpha }));
+  parts.push(rect(barrelX, dropY + 6, 2, 3, palette.plateDark, { alpha }));
+  parts.push(rect(barrelX + 2, dropY + 6, 2, 3, palette.plateFace, { alpha }));
+  parts.push(
+    rect(barrelX + 4, dropY + 6, 2, 3, charge > 0.6 ? palette.hazard : palette.plateShadow, {
+      alpha,
+      emissive: charge * 0.7,
+    }),
+  );
   parts.push(
     rect(x + width / 2 - 1, dropY + 5, 2, 2, charge > 0.8 ? palette.hazard : palette.hazardDark, {
       alpha,
@@ -167,6 +189,11 @@ function buildOverseerRig(options: EnemyRigOptions): RigParts {
     rect(x + shake, dropY, width, 3, palette.plateLight, { alpha }),
     rect(x + shake, dropY + height - 5, width, 5, palette.joint, { alpha }),
     rect(x + 3 + shake, dropY + 4, width - 6, height - 11, palette.plateDark, { alpha }),
+    // Plating seam and corner rivets: mechanical detail on the flat chassis face so it reads as
+    // riveted armour plate rather than a solid block, even where the core cover hides the iris.
+    rect(x + 3 + shake, dropY + height / 2, width - 6, 1, palette.plateShadow, { alpha }),
+    rect(x + 2 + shake, dropY + 2, 2, 2, palette.joint, { alpha }),
+    rect(x + width - 4 + shake, dropY + 2, 2, 2, palette.joint, { alpha }),
   ];
 
   for (let i = 0; i < width - 6; i += 8) {

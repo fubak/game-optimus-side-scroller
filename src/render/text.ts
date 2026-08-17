@@ -167,6 +167,19 @@ export function glyphRows(character: string): string[] {
   });
 }
 
+/**
+ * Shared signature for `drawText` and its MSDF counterpart (`drawTextMsdf` in `./msdfFont`), so
+ * callers that want to pick a renderer per display mode can hold one function reference instead
+ * of branching at every call site.
+ */
+export type DrawTextFn = (
+  ctx: CanvasRenderingContext2D,
+  text: string,
+  x: number,
+  y: number,
+  options?: TextOptions,
+) => void;
+
 export function drawText(
   ctx: CanvasRenderingContext2D,
   text: string,

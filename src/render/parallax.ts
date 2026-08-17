@@ -1,4 +1,5 @@
 import { createRng } from '../core/rng';
+import { createEnhancedParallaxLayers } from './parallaxEnhanced';
 import { palette } from './palette';
 
 /**
@@ -7,10 +8,27 @@ import { palette } from './palette';
  * Three layers of factory silhouettes are generated once into offscreen canvases from the level's
  * seed, then blitted with wrapping offsets. Generating them up front keeps the per-frame cost to a
  * couple of `drawImage` calls, and seeding them means a level's skyline is always the same.
+ *
+ * Two quality tiers share this module's {@link ParallaxLayer} contract:
+ *  - `'classic'` (the default) is this file's original low-res Canvas2D paint — chunky, pixel-art
+ *    silhouettes at 1 texel per screen pixel. `ClassicWorldRenderer` always uses this tier so its
+ *    look (and the Playwright visual snapshots pinned to it) never regresses.
+ *  - `'enhanced'` delegates to {@link createEnhancedParallaxLayers} (`parallaxEnhanced.ts`): a much
+ *    denser, more detailed factory skyline painted at several texels per screen pixel and uploaded
+ *    with linear filtering, used only by `GlWorldRenderer`'s WebGL2 path.
+ *
+ * A layer's `canvas` may therefore be higher resolution than the screen-space rect it is drawn
+ * into — {@link ParallaxLayer.width}/{@link ParallaxLayer.height} are always the logical,
+ * screen-space size (what scroll wrapping and on-screen placement use); `canvas.width`/`height`
+ * are the actual texel resolution, which only differs from the logical size for `'enhanced'`.
  */
 
 export interface ParallaxLayer {
   readonly canvas: HTMLCanvasElement;
+  /** Logical/screen-space width. May be smaller than `canvas.width` for a hi-res `'enhanced'` layer. */
+  readonly width: number;
+  /** Logical/screen-space height. May be smaller than `canvas.height` for a hi-res `'enhanced'` layer. */
+  readonly height: number;
   /** Fraction of camera movement applied to this layer (0 = static, 1 = locked to the world). */
   readonly factor: number;
   /** Vertical placement inside the view, in pixels from the top. */
@@ -18,10 +36,14 @@ export interface ParallaxLayer {
   readonly verticalFactor: number;
 }
 
+export type ParallaxQuality = 'classic' | 'enhanced';
+
 export interface ParallaxOptions {
   readonly seed: number;
   readonly viewWidth: number;
   readonly viewHeight: number;
+  /** Defaults to `'classic'`. Only `GlWorldRenderer` should ever request `'enhanced'`. */
+  readonly quality?: ParallaxQuality;
 }
 
 function createLayerCanvas(
@@ -40,7 +62,23 @@ function createLayerCanvas(
   return { canvas, ctx };
 }
 
+/** Dispatches to the requested quality tier. See the module doc for what each tier means. */
 export function createParallaxLayers(options: ParallaxOptions): ParallaxLayer[] {
+  const quality = options.quality ?? 'classic';
+  switch (quality) {
+    case 'classic':
+      return createClassicParallaxLayers(options);
+    case 'enhanced':
+      return createEnhancedParallaxLayers(options);
+    default: {
+      const exhaustive: never = quality;
+      throw new Error(`Unhandled parallax quality: ${String(exhaustive)}`);
+    }
+  }
+}
+
+/** The original low-res Canvas2D generator, unchanged — Classic's pixel output never regresses. */
+function createClassicParallaxLayers(options: ParallaxOptions): ParallaxLayer[] {
   const { seed, viewWidth, viewHeight } = options;
   // Layers are two views wide so a single wrap-around blit covers the screen.
   const width = viewWidth * 2;
@@ -69,9 +107,23 @@ export function createParallaxLayers(options: ParallaxOptions): ParallaxLayer[] 
   paintPipes(near.ctx, width, near.canvas.height, createRng(seed ^ 0x77d1));
 
   return [
-    { canvas: far.canvas, factor: 0.15, offsetY: 8, verticalFactor: 0.05 },
-    { canvas: mid.canvas, factor: 0.32, offsetY: Math.round(viewHeight * 0.22), verticalFactor: 0.1 },
-    { canvas: near.canvas, factor: 0.55, offsetY: Math.round(viewHeight * 0.55), verticalFactor: 0.18 },
+    { canvas: far.canvas, width: far.canvas.width, height: far.canvas.height, factor: 0.15, offsetY: 8, verticalFactor: 0.05 },
+    {
+      canvas: mid.canvas,
+      width: mid.canvas.width,
+      height: mid.canvas.height,
+      factor: 0.32,
+      offsetY: Math.round(viewHeight * 0.22),
+      verticalFactor: 0.1,
+    },
+    {
+      canvas: near.canvas,
+      width: near.canvas.width,
+      height: near.canvas.height,
+      factor: 0.55,
+      offsetY: Math.round(viewHeight * 0.55),
+      verticalFactor: 0.18,
+    },
   ];
 }
 
@@ -157,7 +209,13 @@ function paintPipes(
   }
 }
 
-/** Blit the layers, wrapping horizontally so the backdrop never runs out. */
+/**
+ * Blit the layers, wrapping horizontally so the backdrop never runs out.
+ *
+ * Uses the 9-argument `drawImage` so a layer's texel resolution (`canvas.width`/`height`) can
+ * differ from its logical on-screen size (`layer.width`/`height`) — for `'classic'` layers the two
+ * are always equal, so this draws pixel-identically to the old 3-argument call.
+ */
 export function drawParallax(
   ctx: CanvasRenderingContext2D,
   layers: readonly ParallaxLayer[],
@@ -165,10 +223,12 @@ export function drawParallax(
   cameraY: number,
 ): void {
   for (const layer of layers) {
-    const layerWidth = layer.canvas.width;
+    const layerWidth = layer.width;
     const scrolled = (((cameraX * layer.factor) % layerWidth) + layerWidth) % layerWidth;
     const y = Math.round(layer.offsetY - cameraY * layer.verticalFactor);
-    ctx.drawImage(layer.canvas, -Math.round(scrolled), y);
-    ctx.drawImage(layer.canvas, -Math.round(scrolled) + layerWidth, y);
+    const sw = layer.canvas.width;
+    const sh = layer.canvas.height;
+    ctx.drawImage(layer.canvas, 0, 0, sw, sh, -Math.round(scrolled), y, layerWidth, layer.height);
+    ctx.drawImage(layer.canvas, 0, 0, sw, sh, -Math.round(scrolled) + layerWidth, y, layerWidth, layer.height);
   }
 }

@@ -198,6 +198,20 @@ export class Texture {
     gl.bindTexture(gl.TEXTURE_2D, this.handle);
   }
 
+  /**
+   * Change min/mag filtering in place, without touching stored pixel data. Used to switch the
+   * material atlas between crisp nearest sampling and smoother linear sampling as the render
+   * target resolution changes (see `GlWorldRenderer`'s tile-filter logic) — far cheaper than
+   * recreating the texture.
+   */
+  setFilter(filter: Filter): void {
+    const { gl } = this;
+    const value = filterEnum(gl, filter);
+    gl.bindTexture(gl.TEXTURE_2D, this.handle);
+    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, value);
+    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, value);
+  }
+
   /** Reallocate storage at a new size, discarding existing pixel data. */
   resize(width: number, height: number): void {
     if (width === this.texWidth && height === this.texHeight) return;

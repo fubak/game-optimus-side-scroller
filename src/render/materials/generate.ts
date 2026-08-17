@@ -12,7 +12,10 @@
  *  1. Paint every texel to a {@link MaterialSample} (albedo, height, roughness, ao, metallic).
  *  2. Derive the normal map from the whole material's height field via central differences
  *     (wrapping at the tile edges, since the underlying noise is already seamlessly tileable).
- *  3. Pack albedo/normal/params into their shared atlas byte buffers at this material's rect.
+ *  3. Pack albedo/normal/params into their shared atlas byte buffers at this material's rect, plus
+ *     a small wrapped border around it (see {@link ATLAS_PADDING}) so linear-filtered sampling at
+ *     high render-target resolutions (the 4K overhaul's supersampled deferred pipeline) does not
+ *     bleed into the next material over.
  */
 
 import type { Rng } from '../../core/rng';
@@ -28,15 +31,27 @@ export const DEFAULT_MATERIAL_SEED = 0x0b71c0de;
 
 const ATLAS_COLUMNS = 4;
 
+/**
+ * Border (in texels) painted around every material's logical tile, wrapped from its own opposite
+ * edge (see {@link wrapCoord}). The 4K overhaul samples this atlas with linear filtering once the
+ * render target is supersampled well past 480×270 (see `GlWorldRenderer`'s tile-filter logic); a
+ * bilinear tap right at a tile's UV edge would otherwise blend in whichever unrelated material
+ * sits in the neighbouring atlas cell. Padding with a wrapped copy of the tile's own far edge
+ * instead reproduces exactly what sampling *another instance of the same material* placed next to
+ * it would look like — seamless, since every painter's noise already tiles at this period.
+ */
+const ATLAS_PADDING = 2;
+
 function buildLayout(): AtlasLayout {
   const rows = Math.ceil(ALL_MATERIAL_IDS.length / ATLAS_COLUMNS);
+  const cellSize = MATERIAL_TILE_PX + ATLAS_PADDING * 2;
   const rects: Partial<Record<MaterialId, AtlasRect>> = {};
   ALL_MATERIAL_IDS.forEach((id, index) => {
     const column = index % ATLAS_COLUMNS;
     const row = Math.floor(index / ATLAS_COLUMNS);
     rects[id] = {
-      x: column * MATERIAL_TILE_PX,
-      y: row * MATERIAL_TILE_PX,
+      x: column * cellSize + ATLAS_PADDING,
+      y: row * cellSize + ATLAS_PADDING,
       width: MATERIAL_TILE_PX,
       height: MATERIAL_TILE_PX,
     };
@@ -45,10 +60,15 @@ function buildLayout(): AtlasLayout {
     tileSize: MATERIAL_TILE_PX,
     columns: ATLAS_COLUMNS,
     rows,
-    width: ATLAS_COLUMNS * MATERIAL_TILE_PX,
-    height: rows * MATERIAL_TILE_PX,
+    width: ATLAS_COLUMNS * cellSize,
+    height: rows * cellSize,
     rects: rects as Record<MaterialId, AtlasRect>,
   };
+}
+
+/** Wraps a padded-region coordinate back into `[0, size)` — see {@link ATLAS_PADDING}. */
+function wrapCoord(value: number, size: number): number {
+  return ((value % size) + size) % size;
 }
 
 /** A material's paint function: pure in (x, y) once its factory has captured the seed. */
@@ -492,11 +512,19 @@ function paintMaterialInto(
 
   for (let y = 0; y < size; y += 1) {
     for (let x = 0; x < size; x += 1) {
-      const sample = painter(x, y);
-      const local = y * size + x;
-      height[local] = sample.height;
+      height[y * size + x] = painter(x, y).height;
+    }
+  }
 
-      const atlasIndex = ((rect.y + y) * layout.width + (rect.x + x)) * 4;
+  // Paint the logical tile plus its wrapped padding border in one sweep (see ATLAS_PADDING) —
+  // every coordinate is wrapped into [0, size) first, so the border repeats this material's own
+  // opposite edge instead of whatever sits in the next atlas cell.
+  for (let ly = -ATLAS_PADDING; ly < size + ATLAS_PADDING; ly += 1) {
+    for (let lx = -ATLAS_PADDING; lx < size + ATLAS_PADDING; lx += 1) {
+      const wx = wrapCoord(lx, size);
+      const wy = wrapCoord(ly, size);
+      const sample = painter(wx, wy);
+      const atlasIndex = ((rect.y + ly) * layout.width + (rect.x + lx)) * 4;
       albedo[atlasIndex] = toByte(sample.albedo[0]);
       albedo[atlasIndex + 1] = toByte(sample.albedo[1]);
       albedo[atlasIndex + 2] = toByte(sample.albedo[2]);
@@ -510,10 +538,12 @@ function paintMaterialInto(
   }
 
   const strength = NORMAL_STRENGTH[id];
-  for (let y = 0; y < size; y += 1) {
-    for (let x = 0; x < size; x += 1) {
-      const [nx, ny, nz] = sampleNormalRgb(height, size, x, y, strength);
-      const atlasIndex = ((rect.y + y) * layout.width + (rect.x + x)) * 4;
+  for (let ly = -ATLAS_PADDING; ly < size + ATLAS_PADDING; ly += 1) {
+    for (let lx = -ATLAS_PADDING; lx < size + ATLAS_PADDING; lx += 1) {
+      const wx = wrapCoord(lx, size);
+      const wy = wrapCoord(ly, size);
+      const [nx, ny, nz] = sampleNormalRgb(height, size, wx, wy, strength);
+      const atlasIndex = ((rect.y + ly) * layout.width + (rect.x + lx)) * 4;
       normalOut[atlasIndex] = nx;
       normalOut[atlasIndex + 1] = ny;
       normalOut[atlasIndex + 2] = nz;

@@ -10,9 +10,9 @@
  * buffer instead of a bright-pass of the final lit image also means terrain grazed by a point light
  * never blooms — only things that are actually self-lit do.
  *
- * Pipeline per {@link draw} call, all at fixed sizes set up once in the constructor (no per-frame
- * allocation, and no resize support: the deferred pipeline's internal targets are pinned to
- * `INTERNAL_WIDTH`x`INTERNAL_HEIGHT`, see `GlWorldRenderer`):
+ * Pipeline per {@link draw} call (no per-frame allocation — the mip chain is only reallocated by
+ * {@link BloomPass.resize}, which `GlWorldRenderer` calls whenever its G-buffer's actual pixel
+ * size changes, e.g. supersampling a larger backbuffer, not on every frame):
  *
  *  1. threshold + downsample the emissive texture into `mips[0]` (half the source size)
  *  2. downsample `mips[i]` into `mips[i+1]` for the rest of the chain (each half the previous)
@@ -126,9 +126,13 @@ export class BloomPass {
   private readonly vao: WebGLVertexArrayObject;
   private readonly vbo: WebGLBuffer;
   private readonly mips: RenderTarget[] = [];
+  private baseWidth: number;
+  private baseHeight: number;
 
   constructor(gl: WebGL2RenderingContext, baseWidth: number, baseHeight: number) {
     this.gl = gl;
+    this.baseWidth = baseWidth;
+    this.baseHeight = baseHeight;
     this.thresholdProgram = new Program(gl, VERTEX_SHADER, THRESHOLD_DOWN_FRAGMENT);
     this.downProgram = new Program(gl, VERTEX_SHADER, DOWN_FRAGMENT);
     this.upProgram = new Program(gl, VERTEX_SHADER, UP_FRAGMENT);
@@ -158,6 +162,24 @@ export class BloomPass {
       ]);
       target.resize(width, height);
       this.mips.push(target);
+    }
+  }
+
+  /**
+   * Reallocate every mip in the chain for a new emissive source size (e.g. the G-buffer growing to
+   * match a resized backbuffer). No-op if the base size is unchanged, so `GlWorldRenderer` can call
+   * this unconditionally on every resize without thrashing GPU memory.
+   */
+  resize(baseWidth: number, baseHeight: number): void {
+    if (baseWidth === this.baseWidth && baseHeight === this.baseHeight) return;
+    this.baseWidth = baseWidth;
+    this.baseHeight = baseHeight;
+    let width = baseWidth;
+    let height = baseHeight;
+    for (const mip of this.mips) {
+      width = Math.max(1, Math.round(width / 2));
+      height = Math.max(1, Math.round(height / 2));
+      mip.resize(width, height);
     }
   }
 

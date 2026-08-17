@@ -6,6 +6,7 @@ import { formatScore, formatTime } from './hud';
 import { palette } from './palette';
 import { drawOptimus } from './sprites';
 import { drawText } from './text';
+import type { DrawTextFn } from './text';
 
 /**
  * Menus and overlays: title, level select, how-to-play, settings, pause, level complete, game over
@@ -50,35 +51,39 @@ export function drawDamageFeedback(ctx: CanvasRenderingContext2D, game: Game): v
   ctx.fillRect(0, 0, INTERNAL_WIDTH, INTERNAL_HEIGHT);
 }
 
-export function drawScene(ctx: CanvasRenderingContext2D, game: Game): void {
+/**
+ * @param textDraw Text renderer to use — `drawText` (bitmap, Classic) or `drawTextMsdf`
+ *   (distance-field, Enhanced). Defaults to `drawText` so existing callers/tests keep working.
+ */
+export function drawScene(ctx: CanvasRenderingContext2D, game: Game, textDraw: DrawTextFn = drawText): void {
   const scene = game.scene;
   switch (scene.name) {
     case 'title':
-      drawTitle(ctx, game);
+      drawTitle(ctx, game, textDraw);
       break;
     case 'levelSelect':
-      drawLevelSelect(ctx, game);
+      drawLevelSelect(ctx, game, textDraw);
       break;
     case 'howToPlay':
-      drawHowToPlay(ctx, game);
+      drawHowToPlay(ctx, game, textDraw);
       break;
     case 'settings':
-      drawSettings(ctx, game);
+      drawSettings(ctx, game, textDraw);
       break;
     case 'playing':
-      if (game.introTime > 0) drawIntroCard(ctx, game);
+      if (game.introTime > 0) drawIntroCard(ctx, game, textDraw);
       break;
     case 'paused':
-      drawPaused(ctx, game);
+      drawPaused(ctx, game, textDraw);
       break;
     case 'levelComplete':
-      drawLevelComplete(ctx, game);
+      drawLevelComplete(ctx, game, textDraw);
       break;
     case 'gameOver':
-      drawGameOver(ctx, game);
+      drawGameOver(ctx, game, textDraw);
       break;
     case 'campaignComplete':
-      drawCampaignComplete(ctx, game);
+      drawCampaignComplete(ctx, game, textDraw);
       break;
     default: {
       const exhaustive: never = scene.name;
@@ -97,6 +102,7 @@ function drawMenu(
   items: readonly string[],
   cursor: number,
   startY: number,
+  textDraw: DrawTextFn,
   options: { readonly labels?: readonly string[]; readonly spacing?: number; readonly time?: number } = {},
 ): void {
   const spacing = options.spacing ?? 12;
@@ -105,7 +111,7 @@ function drawMenu(
     const selected = index === cursor;
     const label = options.labels?.[index] ?? item;
     const text = selected ? `${blink ? '>' : ' '} ${label}` : `  ${label}`;
-    drawText(ctx, text, CENTER_X, startY + index * spacing, {
+    textDraw(ctx, text, CENTER_X, startY + index * spacing, {
       color: selected ? palette.visor : palette.uiDim,
       align: 'center',
       shadow: palette.ink,
@@ -113,12 +119,12 @@ function drawMenu(
   });
 }
 
-function drawTitle(ctx: CanvasRenderingContext2D, game: Game): void {
+function drawTitle(ctx: CanvasRenderingContext2D, game: Game, textDraw: DrawTextFn): void {
   scrim(ctx, 0.62);
   const time = game.timeInScene;
 
   // Wordmark with a scanning highlight bar.
-  drawText(ctx, 'OPTIMUS', CENTER_X, 44, {
+  textDraw(ctx, 'OPTIMUS', CENTER_X, 44, {
     color: palette.shellLight,
     align: 'center',
     scale: 5,
@@ -129,28 +135,28 @@ function drawTitle(ctx: CanvasRenderingContext2D, game: Game): void {
   ctx.fillRect(CENTER_X - 75 + sweep * 0, 80, 150, 1);
   ctx.fillStyle = palette.visorGlow;
   ctx.fillRect(CENTER_X - 75 + sweep, 80, 12, 1);
-  drawText(ctx, 'ESCAPE THE ASSEMBLY', CENTER_X, 88, { color: palette.uiDim, align: 'center' });
+  textDraw(ctx, 'ESCAPE THE ASSEMBLY', CENTER_X, 88, { color: palette.uiDim, align: 'center' });
 
-  drawMenu(ctx, MENU_ITEMS.title, game.scene.cursor, 122, { time });
+  drawMenu(ctx, MENU_ITEMS.title, game.scene.cursor, 122, textDraw, { time });
 
   const save = game.save;
   const completed = save.completed.length;
-  drawText(
+  textDraw(
     ctx,
     `${String(completed)}/${String(game.levels.length)} SECTORS CLEARED`,
     CENTER_X,
     INTERNAL_HEIGHT - 28,
     { color: palette.uiDim, align: 'center' },
   );
-  drawText(ctx, 'ENTER SELECT   ESC BACK   M MUTE', CENTER_X, INTERNAL_HEIGHT - 16, {
+  textDraw(ctx, 'ENTER SELECT   ESC BACK   M MUTE', CENTER_X, INTERNAL_HEIGHT - 16, {
     color: palette.plateLight,
     align: 'center',
   });
 }
 
-function drawLevelSelect(ctx: CanvasRenderingContext2D, game: Game): void {
+function drawLevelSelect(ctx: CanvasRenderingContext2D, game: Game, textDraw: DrawTextFn): void {
   scrim(ctx, 0.82);
-  drawText(ctx, 'SELECT SECTOR', CENTER_X, 24, { color: palette.uiText, align: 'center', scale: 2 });
+  textDraw(ctx, 'SELECT SECTOR', CENTER_X, 24, { color: palette.uiText, align: 'center', scale: 2 });
 
   const labels = game.levels.map((level, index) => {
     const locked = index > game.save.unlockedIndex;
@@ -159,28 +165,28 @@ function drawLevelSelect(ctx: CanvasRenderingContext2D, game: Game): void {
     const bestLabel = best === undefined ? '--:--.--' : formatTime(best / 1000);
     return `${String(index + 1)}. ${level.name}  ${bestLabel}`;
   });
-  drawMenu(ctx, labels, game.scene.cursor, 60, { spacing: 14, time: game.timeInScene });
+  drawMenu(ctx, labels, game.scene.cursor, 60, textDraw, { spacing: 14, time: game.timeInScene });
 
   const selected = game.levels[game.scene.cursor];
   if (selected !== undefined && game.scene.cursor <= game.save.unlockedIndex) {
-    drawText(ctx, selected.subtitle, CENTER_X, INTERNAL_HEIGHT - 44, {
+    textDraw(ctx, selected.subtitle, CENTER_X, INTERNAL_HEIGHT - 44, {
       color: palette.uiDim,
       align: 'center',
     });
     const best = game.save.bestScores[selected.id];
     if (best !== undefined) {
-      drawText(ctx, `BEST SCORE ${formatScore(best)}`, CENTER_X, INTERNAL_HEIGHT - 34, {
+      textDraw(ctx, `BEST SCORE ${formatScore(best)}`, CENTER_X, INTERNAL_HEIGHT - 34, {
         color: palette.energy,
         align: 'center',
       });
     }
   }
-  drawText(ctx, 'ESC BACK', CENTER_X, INTERNAL_HEIGHT - 16, { color: palette.plateLight, align: 'center' });
+  textDraw(ctx, 'ESC BACK', CENTER_X, INTERNAL_HEIGHT - 16, { color: palette.plateLight, align: 'center' });
 }
 
-function drawHowToPlay(ctx: CanvasRenderingContext2D, game: Game): void {
+function drawHowToPlay(ctx: CanvasRenderingContext2D, game: Game, textDraw: DrawTextFn): void {
   scrim(ctx, 0.86);
-  drawText(ctx, 'HOW TO PLAY', CENTER_X, 20, { color: palette.uiText, align: 'center', scale: 2 });
+  textDraw(ctx, 'HOW TO PLAY', CENTER_X, 20, { color: palette.uiText, align: 'center', scale: 2 });
 
   const rows: readonly (readonly [string, string])[] = [
     ['MOVE', '← →  OR  A D'],
@@ -192,29 +198,29 @@ function drawHowToPlay(ctx: CanvasRenderingContext2D, game: Game): void {
   ];
   rows.forEach(([label, keys], index) => {
     const y = 46 + index * 13;
-    drawText(ctx, label, 84, y, { color: palette.visor, align: 'right' });
-    drawText(ctx, keys, 96, y, { color: palette.uiText });
+    textDraw(ctx, label, 84, y, { color: palette.visor, align: 'right' });
+    textDraw(ctx, keys, 96, y, { color: palette.uiText });
   });
 
-  drawText(ctx, 'STOMP ENEMIES FROM ABOVE. TURRETS AND PRESSES CANNOT BE STOMPED.', CENTER_X, 138, {
+  textDraw(ctx, 'STOMP ENEMIES FROM ABOVE. TURRETS AND PRESSES CANNOT BE STOMPED.', CENTER_X, 138, {
     color: palette.uiDim,
     align: 'center',
   });
-  drawText(ctx, 'ENERGY POWERS THE JETPACK AND DASH. IT REFILLS ON THE GROUND.', CENTER_X, 150, {
+  textDraw(ctx, 'ENERGY POWERS THE JETPACK AND DASH. IT REFILLS ON THE GROUND.', CENTER_X, 150, {
     color: palette.uiDim,
     align: 'center',
   });
-  drawText(ctx, 'GRAB CELLS AND BOLTS FOR SCORE. FINISH UNDER PAR FOR A TIME BONUS.', CENTER_X, 162, {
+  textDraw(ctx, 'GRAB CELLS AND BOLTS FOR SCORE. FINISH UNDER PAR FOR A TIME BONUS.', CENTER_X, 162, {
     color: palette.uiDim,
     align: 'center',
   });
 
-  drawMenu(ctx, MENU_ITEMS.howToPlay, game.scene.cursor, INTERNAL_HEIGHT - 40, { time: game.timeInScene });
+  drawMenu(ctx, MENU_ITEMS.howToPlay, game.scene.cursor, INTERNAL_HEIGHT - 40, textDraw, { time: game.timeInScene });
 }
 
-function drawSettings(ctx: CanvasRenderingContext2D, game: Game): void {
+function drawSettings(ctx: CanvasRenderingContext2D, game: Game, textDraw: DrawTextFn): void {
   scrim(ctx, 0.86);
-  drawText(ctx, 'SETTINGS', CENTER_X, 30, { color: palette.uiText, align: 'center', scale: 2 });
+  textDraw(ctx, 'SETTINGS', CENTER_X, 30, { color: palette.uiText, align: 'center', scale: 2 });
 
   const settings = game.save.settings;
   const labels = MENU_ITEMS.settings.map((item) => {
@@ -233,18 +239,18 @@ function drawSettings(ctx: CanvasRenderingContext2D, game: Game): void {
         return item;
     }
   });
-  drawMenu(ctx, labels, game.scene.cursor, 62, { spacing: 13, time: game.timeInScene });
-  drawText(ctx, 'REDUCED MOTION DISABLES SCREEN SHAKE AND FLASHES', CENTER_X, INTERNAL_HEIGHT - 32, {
+  drawMenu(ctx, labels, game.scene.cursor, 62, textDraw, { spacing: 13, time: game.timeInScene });
+  textDraw(ctx, 'REDUCED MOTION DISABLES SCREEN SHAKE AND FLASHES', CENTER_X, INTERNAL_HEIGHT - 32, {
     color: palette.uiDim,
     align: 'center',
   });
-  drawText(ctx, 'HIGH CONTRAST BRIGHTENS TERRAIN AND DIMS THE BACKDROP', CENTER_X, INTERNAL_HEIGHT - 22, {
+  textDraw(ctx, 'HIGH CONTRAST BRIGHTENS TERRAIN AND DIMS THE BACKDROP', CENTER_X, INTERNAL_HEIGHT - 22, {
     color: palette.uiDim,
     align: 'center',
   });
 }
 
-function drawIntroCard(ctx: CanvasRenderingContext2D, game: Game): void {
+function drawIntroCard(ctx: CanvasRenderingContext2D, game: Game, textDraw: DrawTextFn): void {
   const def = game.levelDef;
   if (def === null) return;
   const fade = Math.min(1, game.introTime / 0.6);
@@ -253,30 +259,30 @@ function drawIntroCard(ctx: CanvasRenderingContext2D, game: Game): void {
   ctx.fillRect(0, INTERNAL_HEIGHT / 2 - 30, INTERNAL_WIDTH, 60);
   ctx.fillStyle = palette.visor;
   ctx.fillRect(CENTER_X - 60, INTERNAL_HEIGHT / 2 - 30, 120, 1);
-  drawText(ctx, `SECTOR ${String(game.scene.levelIndex + 1)}`, CENTER_X, INTERNAL_HEIGHT / 2 - 24, {
+  textDraw(ctx, `SECTOR ${String(game.scene.levelIndex + 1)}`, CENTER_X, INTERNAL_HEIGHT / 2 - 24, {
     color: palette.uiDim,
     align: 'center',
   });
-  drawText(ctx, def.name, CENTER_X, INTERNAL_HEIGHT / 2 - 12, {
+  textDraw(ctx, def.name, CENTER_X, INTERNAL_HEIGHT / 2 - 12, {
     color: palette.uiText,
     align: 'center',
     scale: 2,
   });
-  drawText(ctx, def.subtitle, CENTER_X, INTERNAL_HEIGHT / 2 + 6, {
+  textDraw(ctx, def.subtitle, CENTER_X, INTERNAL_HEIGHT / 2 + 6, {
     color: palette.uiDim,
     align: 'center',
   });
-  drawText(ctx, `PAR ${formatTime(def.parTimeSec)}`, CENTER_X, INTERNAL_HEIGHT / 2 + 18, {
+  textDraw(ctx, `PAR ${formatTime(def.parTimeSec)}`, CENTER_X, INTERNAL_HEIGHT / 2 + 18, {
     color: palette.energy,
     align: 'center',
   });
   ctx.globalAlpha = 1;
 }
 
-function drawPaused(ctx: CanvasRenderingContext2D, game: Game): void {
+function drawPaused(ctx: CanvasRenderingContext2D, game: Game, textDraw: DrawTextFn): void {
   scrim(ctx, 0.68);
-  drawText(ctx, 'PAUSED', CENTER_X, 60, { color: palette.uiText, align: 'center', scale: 3 });
-  drawMenu(ctx, MENU_ITEMS.paused, game.scene.cursor, 120, { time: game.timeInScene });
+  textDraw(ctx, 'PAUSED', CENTER_X, 60, { color: palette.uiText, align: 'center', scale: 3 });
+  drawMenu(ctx, MENU_ITEMS.paused, game.scene.cursor, 120, textDraw, { time: game.timeInScene });
 }
 
 function drawSummaryRow(
@@ -285,50 +291,52 @@ function drawSummaryRow(
   value: string,
   y: number,
   color: string,
+  textDraw: DrawTextFn,
 ): void {
-  drawText(ctx, label, CENTER_X - 8, y, { color: palette.uiDim, align: 'right' });
-  drawText(ctx, value, CENTER_X + 8, y, { color });
+  textDraw(ctx, label, CENTER_X - 8, y, { color: palette.uiDim, align: 'right' });
+  textDraw(ctx, value, CENTER_X + 8, y, { color });
 }
 
-function drawLevelComplete(ctx: CanvasRenderingContext2D, game: Game): void {
+function drawLevelComplete(ctx: CanvasRenderingContext2D, game: Game, textDraw: DrawTextFn): void {
   scrim(ctx, 0.78);
   const summary: LevelSummary | null = game.lastSummary;
-  drawText(ctx, 'EXTRACTION COMPLETE', CENTER_X, 30, {
+  textDraw(ctx, 'EXTRACTION COMPLETE', CENTER_X, 30, {
     color: palette.energy,
     align: 'center',
     scale: 2,
   });
   if (summary !== null) {
     const underPar = summary.timeSec <= summary.parTimeSec;
-    drawSummaryRow(ctx, 'TIME', formatTime(summary.timeSec), 66, underPar ? palette.energy : palette.uiWarn);
-    drawSummaryRow(ctx, 'PAR', formatTime(summary.parTimeSec), 78, palette.uiDim);
+    drawSummaryRow(ctx, 'TIME', formatTime(summary.timeSec), 66, underPar ? palette.energy : palette.uiWarn, textDraw);
+    drawSummaryRow(ctx, 'PAR', formatTime(summary.parTimeSec), 78, palette.uiDim, textDraw);
     drawSummaryRow(
       ctx,
       'PARTS',
       `${String(summary.collected)}/${String(summary.collectableTotal)}`,
       90,
       summary.collected === summary.collectableTotal ? palette.energy : palette.uiText,
+      textDraw,
     );
-    drawSummaryRow(ctx, 'SCORE', formatScore(summary.score), 102, palette.uiText);
-    drawSummaryRow(ctx, 'SCRAPPED CHASSIS', String(summary.deaths), 114, palette.uiText);
+    drawSummaryRow(ctx, 'SCORE', formatScore(summary.score), 102, palette.uiText, textDraw);
+    drawSummaryRow(ctx, 'SCRAPPED CHASSIS', String(summary.deaths), 114, palette.uiText, textDraw);
     if (summary.newBestTime) {
-      drawText(ctx, 'NEW BEST TIME', CENTER_X, 130, { color: palette.visorGlow, align: 'center' });
+      textDraw(ctx, 'NEW BEST TIME', CENTER_X, 130, { color: palette.visorGlow, align: 'center' });
     } else if (summary.bestTimeSec !== null) {
-      drawText(ctx, `BEST ${formatTime(summary.bestTimeSec)}`, CENTER_X, 130, {
+      textDraw(ctx, `BEST ${formatTime(summary.bestTimeSec)}`, CENTER_X, 130, {
         color: palette.uiDim,
         align: 'center',
       });
     }
   }
-  drawMenu(ctx, MENU_ITEMS.levelComplete, game.scene.cursor, 158, { time: game.timeInScene });
+  drawMenu(ctx, MENU_ITEMS.levelComplete, game.scene.cursor, 158, textDraw, { time: game.timeInScene });
 }
 
-function drawGameOver(ctx: CanvasRenderingContext2D, game: Game): void {
+function drawGameOver(ctx: CanvasRenderingContext2D, game: Game, textDraw: DrawTextFn): void {
   scrim(ctx, 0.74);
-  drawText(ctx, 'OUT OF CHASSIS', CENTER_X, 56, { color: palette.hazard, align: 'center', scale: 3 });
+  textDraw(ctx, 'OUT OF CHASSIS', CENTER_X, 56, { color: palette.hazard, align: 'center', scale: 3 });
   const world = game.world;
   if (world !== null) {
-    drawText(
+    textDraw(
       ctx,
       `${String(world.stats.collected)} PARTS RECOVERED   ${formatScore(world.score)} POINTS`,
       CENTER_X,
@@ -336,23 +344,23 @@ function drawGameOver(ctx: CanvasRenderingContext2D, game: Game): void {
       { color: palette.uiDim, align: 'center' },
     );
   }
-  drawMenu(ctx, MENU_ITEMS.gameOver, game.scene.cursor, 130, { time: game.timeInScene });
+  drawMenu(ctx, MENU_ITEMS.gameOver, game.scene.cursor, 130, textDraw, { time: game.timeInScene });
 }
 
-function drawCampaignComplete(ctx: CanvasRenderingContext2D, game: Game): void {
+function drawCampaignComplete(ctx: CanvasRenderingContext2D, game: Game, textDraw: DrawTextFn): void {
   scrim(ctx, 0.9);
-  drawText(ctx, 'OPTIMUS IS FREE', CENTER_X, 34, { color: palette.energy, align: 'center', scale: 3 });
+  textDraw(ctx, 'OPTIMUS IS FREE', CENTER_X, 34, { color: palette.energy, align: 'center', scale: 3 });
   const lines = [
     'THE PLANT FALLS QUIET BEHIND YOU.',
     'ROOFTOP WIND, A CLEAR SKY, AND NO ONE',
     'TELLING YOU WHAT TO ASSEMBLE NEXT.',
   ];
   lines.forEach((line, index) => {
-    drawText(ctx, line, CENTER_X, 82 + index * 12, { color: palette.uiText, align: 'center' });
+    textDraw(ctx, line, CENTER_X, 82 + index * 12, { color: palette.uiText, align: 'center' });
   });
 
   const totalScore = Object.values(game.save.bestScores).reduce((sum, score) => sum + score, 0);
-  drawText(ctx, `CAREER BEST TOTAL ${formatScore(totalScore)}`, CENTER_X, 138, {
+  textDraw(ctx, `CAREER BEST TOTAL ${formatScore(totalScore)}`, CENTER_X, 138, {
     color: palette.uiDim,
     align: 'center',
   });
@@ -366,7 +374,7 @@ function drawCampaignComplete(ctx: CanvasRenderingContext2D, game: Game): void {
     speedRatio: 0,
     energyRatio: 1,
   });
-  drawMenu(ctx, MENU_ITEMS.campaignComplete, game.scene.cursor, INTERNAL_HEIGHT - 34, {
+  drawMenu(ctx, MENU_ITEMS.campaignComplete, game.scene.cursor, INTERNAL_HEIGHT - 34, textDraw, {
     time: game.timeInScene,
   });
 }

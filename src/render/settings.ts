@@ -31,6 +31,8 @@ export interface RenderSettings {
   motionBlur: boolean;
   shadows: boolean;
   particles: boolean;
+  /** Volumetric-looking background light shafts (WebGL2 only; see `BackgroundBatch.drawLightShafts`). */
+  lightShafts: boolean;
 }
 
 export const RENDER_SETTINGS_KEY = 'optimus.render.v1';
@@ -48,6 +50,7 @@ export const DEFAULT_RENDER_SETTINGS: RenderSettings = {
   motionBlur: true,
   shadows: true,
   particles: true,
+  lightShafts: true,
 };
 
 /** Per-preset feature toggles. Individual flags in {@link RenderSettings} still win when set. */
@@ -64,6 +67,7 @@ export const QUALITY_PRESETS: Record<
     | 'motionBlur'
     | 'shadows'
     | 'particles'
+    | 'lightShafts'
   >
 > = {
   low: {
@@ -76,6 +80,7 @@ export const QUALITY_PRESETS: Record<
     motionBlur: false,
     shadows: false,
     particles: true,
+    lightShafts: false,
   },
   medium: {
     renderScale: 1,
@@ -87,6 +92,7 @@ export const QUALITY_PRESETS: Record<
     motionBlur: false,
     shadows: true,
     particles: true,
+    lightShafts: true,
   },
   high: {
     renderScale: 1,
@@ -98,6 +104,7 @@ export const QUALITY_PRESETS: Record<
     motionBlur: true,
     shadows: true,
     particles: true,
+    lightShafts: true,
   },
   ultra: {
     renderScale: 1.5,
@@ -109,6 +116,7 @@ export const QUALITY_PRESETS: Record<
     motionBlur: true,
     shadows: true,
     particles: true,
+    lightShafts: true,
   },
 };
 
@@ -175,6 +183,7 @@ export function parseRenderSettings(value: unknown): RenderSettings {
     motionBlur: parseBool(value.motionBlur, preset.motionBlur),
     shadows: parseBool(value.shadows, preset.shadows),
     particles: parseBool(value.particles, preset.particles),
+    lightShafts: parseBool(value.lightShafts, preset.lightShafts),
   };
 }
 
@@ -227,6 +236,7 @@ export function withReducedMotion(settings: RenderSettings): RenderSettings {
     grain: false,
     chromaticAberration: false,
     motionBlur: false,
+    lightShafts: false,
   };
 }
 

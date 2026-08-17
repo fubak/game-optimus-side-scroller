@@ -1,17 +1,71 @@
 /**
- * Unlit backdrop: sky gradient, parallax layers, and the atmospheric scrim over them.
+ * Unlit backdrop: sky gradient, parallax layers, volumetric light shafts, and the atmospheric
+ * scrim over them.
  *
  * None of this is lit by the deferred pass — it is scenery behind the playfield, drawn straight
  * into the background target that the lighting pass later composites underneath the lit G-buffer
- * (see `GlWorldRenderer`). Layer canvases come from `src/render/parallax.ts` (the same procedural
- * generator Classic uses) and are uploaded once per level as textures; per-frame work is just a
- * handful of small textured-quad draws, matching `drawParallax`'s wrap-around blit exactly but on
- * the GPU instead of through `CanvasRenderingContext2D.drawImage`.
+ * (see `GlWorldRenderer`). Layer canvases come from `src/render/parallax.ts`'s `'enhanced'`
+ * generator (`parallaxEnhanced.ts`) and are uploaded once per level as textures; per-frame work is
+ * just a handful of small textured-quad draws, matching `drawParallax`'s wrap-around blit exactly
+ * but on the GPU instead of through `CanvasRenderingContext2D.drawImage`. A layer's texture may be
+ * higher resolution than the screen-space rect it is drawn into (`ParallaxLayer.width`/`height` vs
+ * `canvas.width`/`height`) — that hi-res texture is uploaded with linear filtering so the extra
+ * detail reads as smooth instead of blocky.
  */
 
 import type { ParallaxLayer } from '../parallax';
 import { Program } from './program';
 import { Filter, TexFormat, Texture, Wrap } from './texture';
+
+const SHAFT_VERTEX_SHADER = `#version 300 es
+in vec2 a_unit;
+out vec2 v_local;
+void main() {
+  v_local = a_unit;
+  vec2 clip = vec2(a_unit.x * 2.0 - 1.0, 1.0 - a_unit.y * 2.0);
+  gl_Position = vec4(clip, 0.0, 1.0);
+}
+`;
+
+/**
+ * A handful of soft, angular god-ray beams fanning down from fixed points near the top of the
+ * screen. Each beam is an analytic distance-from-centreline falloff (cheap: no samples, no loop
+ * over occluders) — "volumetric" in look only, not simulation. Colours alternate cool
+ * cyan/tech-light and warm sodium so the shafts read as industrial floodlights, not an anime sunbeam.
+ */
+const SHAFT_FRAGMENT_SHADER = `#version 300 es
+precision highp float;
+in vec2 v_local;
+uniform float u_intensity;
+uniform float u_time;
+uniform vec3 u_coolColor;
+uniform vec3 u_warmColor;
+out vec4 outColor;
+
+float beam(vec2 uv, float originX, float angle, float halfWidth, float falloff) {
+  vec2 dir = vec2(sin(angle), cos(angle));
+  vec2 toP = uv - vec2(originX, 0.0);
+  float along = dot(toP, dir);
+  if (along < 0.0) return 0.0;
+  vec2 perp = toP - dir * along;
+  float dist = length(perp);
+  float band = smoothstep(halfWidth, 0.0, dist);
+  return band * exp(-along * falloff);
+}
+
+void main() {
+  // A very slow drift (a full cycle takes minutes) keeps the shafts from looking static without
+  // ever approaching flashing/strobing territory — this uniform is forced to a constant by the
+  // caller under reduced motion, so the drift itself is skipped rather than merely slowed.
+  float t = u_time * 0.015;
+  float b0 = beam(v_local, 0.18 + 0.015 * sin(t), 0.18, 0.05, 1.7);
+  float b1 = beam(v_local, 0.52 + 0.02 * sin(t * 0.7 + 1.4), -0.12, 0.045, 1.9);
+  float b2 = beam(v_local, 0.83 + 0.015 * sin(t * 1.2 + 2.7), 0.09, 0.04, 2.1);
+
+  vec3 color = b0 * u_coolColor + b1 * u_warmColor + b2 * u_coolColor;
+  outColor = vec4(color * u_intensity, 1.0);
+}
+`;
 
 const SKY_VERTEX_SHADER = `#version 300 es
 in vec2 a_unit;
@@ -105,10 +159,12 @@ export class BackgroundBatch {
   private readonly skyProgram: Program;
   private readonly layerProgram: Program;
   private readonly solidProgram: Program;
+  private readonly shaftProgram: Program;
   private readonly quadBuffer: WebGLBuffer;
   private readonly skyVao: WebGLVertexArrayObject;
   private readonly layerVao: WebGLVertexArrayObject;
   private readonly solidVao: WebGLVertexArrayObject;
+  private readonly shaftVao: WebGLVertexArrayObject;
 
   private layers: UploadedLayer[] = [];
 
@@ -117,6 +173,7 @@ export class BackgroundBatch {
     this.skyProgram = new Program(gl, SKY_VERTEX_SHADER, SKY_FRAGMENT_SHADER);
     this.layerProgram = new Program(gl, LAYER_VERTEX_SHADER, LAYER_FRAGMENT_SHADER);
     this.solidProgram = new Program(gl, LAYER_VERTEX_SHADER, SOLID_FRAGMENT_SHADER);
+    this.shaftProgram = new Program(gl, SHAFT_VERTEX_SHADER, SHAFT_FRAGMENT_SHADER);
 
     this.quadBuffer = gl.createBuffer();
     gl.bindBuffer(gl.ARRAY_BUFFER, this.quadBuffer);
@@ -126,18 +183,29 @@ export class BackgroundBatch {
     this.skyVao = makeQuadVao(gl, this.skyProgram, this.quadBuffer);
     this.layerVao = makeQuadVao(gl, this.layerProgram, this.quadBuffer);
     this.solidVao = makeQuadVao(gl, this.solidProgram, this.quadBuffer);
+    this.shaftVao = makeQuadVao(gl, this.shaftProgram, this.quadBuffer);
   }
 
-  /** Replace the uploaded parallax layers (called once per level, not per frame). */
+  /**
+   * Replace the uploaded parallax layers (called once per level, not per frame). A layer's
+   * on-screen size comes from {@link ParallaxLayer.width}/{@link ParallaxLayer.height} (logical,
+   * screen-space units — see `parallax.ts`), which may be smaller than its `canvas.width`/`height`
+   * texel resolution; when it is, the texture is hi-res, so it is uploaded with linear filtering
+   * instead of Classic's nearest-neighbour so the extra detail reads as smooth, not blocky.
+   */
   setLayers(layers: readonly ParallaxLayer[]): void {
     for (const layer of this.layers) layer.texture.dispose();
     this.layers = layers.map((layer) => {
-      const texture = new Texture(this.gl, TexFormat.RGBA8, { filter: Filter.Nearest, wrap: Wrap.Clamp });
+      const hiRes = layer.canvas.width > layer.width || layer.canvas.height > layer.height;
+      const texture = new Texture(this.gl, TexFormat.RGBA8, {
+        filter: hiRes ? Filter.Linear : Filter.Nearest,
+        wrap: Wrap.Clamp,
+      });
       texture.uploadImage(layer.canvas, layer.canvas.width, layer.canvas.height);
       return {
         texture,
-        width: layer.canvas.width,
-        height: layer.canvas.height,
+        width: layer.width,
+        height: layer.height,
         factor: layer.factor,
         offsetY: layer.offsetY,
         verticalFactor: layer.verticalFactor,
@@ -196,6 +264,33 @@ export class BackgroundBatch {
     gl.disable(gl.BLEND);
   }
 
+  /**
+   * A few soft volumetric-looking light shafts, additively composited over the backdrop so far.
+   * `intensity` should already fold in quality/settings and be `0` under reduced motion — this
+   * method still runs the (cheap) draw call at `0` rather than special-casing the skip, keeping the
+   * caller simple; skip calling it entirely if the caller wants to avoid even that.
+   */
+  drawLightShafts(
+    coolColor: readonly [number, number, number],
+    warmColor: readonly [number, number, number],
+    intensity: number,
+    timeSec: number,
+  ): void {
+    if (intensity <= 0) return;
+    const { gl } = this;
+    gl.enable(gl.BLEND);
+    gl.blendFunc(gl.ONE, gl.ONE);
+    this.shaftProgram.use();
+    this.shaftProgram.setUniform3f('u_coolColor', coolColor[0], coolColor[1], coolColor[2]);
+    this.shaftProgram.setUniform3f('u_warmColor', warmColor[0], warmColor[1], warmColor[2]);
+    this.shaftProgram.setUniform1f('u_intensity', intensity);
+    this.shaftProgram.setUniform1f('u_time', timeSec);
+    gl.bindVertexArray(this.shaftVao);
+    gl.drawArrays(gl.TRIANGLE_STRIP, 0, 4);
+    gl.bindVertexArray(null);
+    gl.disable(gl.BLEND);
+  }
+
   dispose(): void {
     const { gl } = this;
     for (const layer of this.layers) layer.texture.dispose();
@@ -203,9 +298,11 @@ export class BackgroundBatch {
     gl.deleteVertexArray(this.skyVao);
     gl.deleteVertexArray(this.layerVao);
     gl.deleteVertexArray(this.solidVao);
+    gl.deleteVertexArray(this.shaftVao);
     gl.deleteBuffer(this.quadBuffer);
     this.skyProgram.dispose();
     this.layerProgram.dispose();
     this.solidProgram.dispose();
+    this.shaftProgram.dispose();
   }
 }

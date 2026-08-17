@@ -15,6 +15,8 @@ export interface MaterialTextureSet {
   readonly albedo: Texture;
   readonly normal: Texture;
   readonly params: Texture;
+  /** Switch every channel's sampling filter together (see `GlWorldRenderer`'s tile-filter logic). */
+  setFilter(filter: Filter): void;
   dispose(): void;
 }
 
@@ -36,6 +38,11 @@ export function uploadMaterialAtlas(gl: WebGL2RenderingContext, atlas: MaterialA
     albedo,
     normal,
     params,
+    setFilter(filter: Filter): void {
+      albedo.setFilter(filter);
+      normal.setFilter(filter);
+      params.setFilter(filter);
+    },
     dispose(): void {
       albedo.dispose();
       normal.dispose();

@@ -10,6 +10,7 @@ import { Game } from './game/game';
 import { ALL_LEVELS, LEVELS } from './game/levels/index';
 import { createWorldRenderer } from './render/createWorldRenderer';
 import { drawTouchControls } from './render/hud';
+import { drawTextMsdf } from './render/msdfFont';
 import { palette } from './render/palette';
 import { drawDamageFeedback, drawScene, drawSceneTransition } from './render/screens';
 import {
@@ -22,6 +23,7 @@ import {
   type RenderSettings,
 } from './render/settings';
 import { drawText } from './render/text';
+import type { DrawTextFn } from './render/text';
 import type { WorldView } from './render/view';
 
 /**
@@ -226,13 +228,24 @@ window.addEventListener('keydown', (event) => {
   }
 });
 
+/**
+ * Text renderer for the HUD and screens: razor-sharp MSDF on the Enhanced (WebGL2) backend, the
+ * original bitmap font on Classic — matching each backend's own upscaling story. Read from
+ * `renderer.backend` (not `display.mode`) so a runtime backend swap (Shift+F5) picks the right
+ * renderer immediately, without needing to recreate the display.
+ */
+function hudTextDraw(): DrawTextFn {
+  return renderer.backend === 'webgl2' ? drawTextMsdf : drawText;
+}
+
 function draw(alpha = 0): void {
   const { ctx } = display;
+  const textDraw = hudTextDraw();
   const world = game.showsWorldBehind ? game.world : game.attractWorld;
   if (world !== null) {
     renderer.draw(ctx, world, alpha, effectiveRenderSettings(), game.save.settings.reducedMotion);
     if (game.showsWorldBehind) {
-      game.hud.draw(ctx, world, INTERNAL_WIDTH);
+      game.hud.draw(ctx, world, INTERNAL_WIDTH, textDraw);
     }
   } else {
     ctx.fillStyle = palette.skyTop;
@@ -240,11 +253,11 @@ function draw(alpha = 0): void {
   }
 
   drawDamageFeedback(ctx, game);
-  drawScene(ctx, game);
+  drawScene(ctx, game, textDraw);
   drawSceneTransition(ctx, game);
 
   if (touch !== null) {
-    drawTouchControls(ctx, touchButtons, touch.activeActions);
+    drawTouchControls(ctx, touchButtons, touch.activeActions, textDraw);
   }
 
   if (debugVisible) {

@@ -5,6 +5,7 @@ import type { World } from '../game/world';
 import type { TouchButton } from '../core/touch';
 import { palette } from './palette';
 import { drawText } from './text';
+import type { DrawTextFn } from './text';
 
 /**
  * Heads-up display: health, energy, dash charge, score, timer and transient toasts.
@@ -40,7 +41,16 @@ export class Hud {
     this.toasts.length = 0;
   }
 
-  draw(ctx: CanvasRenderingContext2D, world: World, viewWidth: number): void {
+  /**
+   * @param textDraw Text renderer to use — `drawText` (bitmap, Classic) or `drawTextMsdf`
+   *   (distance-field, Enhanced). Defaults to `drawText` so existing callers/tests keep working.
+   */
+  draw(
+    ctx: CanvasRenderingContext2D,
+    world: World,
+    viewWidth: number,
+    textDraw: DrawTextFn = drawText,
+  ): void {
     const { player } = world;
 
     // ── Health pips ────────────────────────────────────────────────────────────────────────────
@@ -70,20 +80,20 @@ export class Hud {
     const dashReady = player.dashCharge >= 1;
     ctx.fillStyle = dashReady ? palette.visor : palette.plateDark;
     ctx.fillRect(6, 23, Math.round(20 * player.dashCharge), 2);
-    drawText(ctx, 'DASH', 30, 22, { color: dashReady ? palette.visor : palette.uiDim, tracking: 0 });
+    textDraw(ctx, 'DASH', 30, 22, { color: dashReady ? palette.visor : palette.uiDim, tracking: 0 });
 
     // ── Lives ─────────────────────────────────────────────────────────────────────────────────
-    drawText(ctx, `×${String(world.livesLeft)}`, 6 + HEALTH_MAX * 9 + 4, 6, { color: palette.uiText });
+    textDraw(ctx, `×${String(world.livesLeft)}`, 6 + HEALTH_MAX * 9 + 4, 6, { color: palette.uiText });
 
     // ── Score, collectables and timer ─────────────────────────────────────────────────────────
     const stats = world.stats;
-    drawText(ctx, formatScore(stats.score), viewWidth - 6, 6, { color: palette.uiText, align: 'right' });
-    drawText(ctx, `${String(stats.collected)}/${String(stats.collectableTotal)} PARTS`, viewWidth - 6, 15, {
+    textDraw(ctx, formatScore(stats.score), viewWidth - 6, 6, { color: palette.uiText, align: 'right' });
+    textDraw(ctx, `${String(stats.collected)}/${String(stats.collectableTotal)} PARTS`, viewWidth - 6, 15, {
       color: palette.uiDim,
       align: 'right',
     });
     const overPar = stats.timeSec > stats.parTimeSec;
-    drawText(ctx, formatTime(stats.timeSec), viewWidth - 6, 24, {
+    textDraw(ctx, formatTime(stats.timeSec), viewWidth - 6, 24, {
       color: overPar ? palette.uiWarn : palette.uiDim,
       align: 'right',
     });
@@ -93,7 +103,7 @@ export class Hud {
     if (boss !== null) {
       const barWidth = 120;
       const x = Math.round(viewWidth / 2 - barWidth / 2);
-      drawText(ctx, 'OVERSEER', viewWidth / 2, 6, { color: palette.hazard, align: 'center' });
+      textDraw(ctx, 'OVERSEER', viewWidth / 2, 6, { color: palette.hazard, align: 'center' });
       ctx.fillStyle = palette.plateShadow;
       ctx.fillRect(x - 1, 15, barWidth + 2, 6);
       ctx.fillStyle = palette.hazardDark;
@@ -101,7 +111,7 @@ export class Hud {
       ctx.fillStyle = world.isBossVulnerable(boss) ? palette.visorGlow : palette.hazard;
       ctx.fillRect(x, 16, Math.round((barWidth * Math.max(0, boss.hitPoints)) / OVERSEER_HIT_POINTS), 4);
       if (world.isBossVulnerable(boss)) {
-        drawText(ctx, 'CORE EXPOSED — STOMP IT', viewWidth / 2, 24, {
+        textDraw(ctx, 'CORE EXPOSED — STOMP IT', viewWidth / 2, 24, {
           color: palette.visorGlow,
           align: 'center',
         });
@@ -112,7 +122,7 @@ export class Hud {
     this.toasts.forEach((toast, index) => {
       const fade = clamp(toast.life / Math.min(0.4, toast.maxLife), 0, 1);
       ctx.globalAlpha = fade;
-      drawText(ctx, toast.text, 6, 34 + index * 9, { color: toast.color });
+      textDraw(ctx, toast.text, 6, 34 + index * 9, { color: toast.color });
       ctx.globalAlpha = 1;
     });
   }
@@ -123,6 +133,7 @@ export function drawTouchControls(
   ctx: CanvasRenderingContext2D,
   buttons: readonly TouchButton[],
   active: readonly string[],
+  textDraw: DrawTextFn = drawText,
 ): void {
   for (const button of buttons) {
     // The invisible "tap anywhere to confirm" region has no label and is never drawn.
@@ -140,7 +151,7 @@ export function drawTouchControls(
       ctx.fillRect(button.x, button.y, button.width, button.height);
     }
     ctx.globalAlpha = pressed ? 1 : 0.8;
-    drawText(ctx, button.label, button.x + button.width / 2, button.y + button.height / 2 - 3, {
+    textDraw(ctx, button.label, button.x + button.width / 2, button.y + button.height / 2 - 3, {
       color: pressed ? palette.ink : palette.uiText,
       align: 'center',
     });

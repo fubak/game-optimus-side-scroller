@@ -8,13 +8,17 @@
  * (blending support for floating-point targets is not guaranteed everywhere `EXT_color_buffer_float`
  * is), and it keeps `GlWorldRenderer` from needing a separate blend step.
  *
- * Lighting model: ambient hemisphere tint from `normal.y` (sky above, ground below), plus up to
- * {@link MAX_LIGHTS} half-Lambert point lights with quadratic falloff to their radius. Each light
- * assumes a fixed height above the 2D plane (see {@link LightList.add}) so the dot product with a
- * flat-ish "pillow" normal is never degenerate. Shadows are a coarse ray-march against a low-detail
- * occluder mask — a handful of fixed steps from the fragment toward the light, sampling a binary
- * "is there solid geometry here" texture — which reads as soft-edged rather than a hard silhouette
- * because so few steps are taken.
+ * Lighting model: ambient hemisphere tint from `normal.y` (sky above, ground below), a fixed "sun"
+ * key light with a short directional shadow march of its own (see `keyShadow` below), plus up to
+ * {@link MAX_LIGHTS} half-Lambert point lights with quadratic falloff to their radius. Each point
+ * light assumes a fixed height above the 2D plane (see {@link LightList.add}) so the dot product
+ * with a flat-ish "pillow" normal is never degenerate. Shadows are a coarse ray-march against a
+ * low-detail occluder mask — a handful of fixed steps from the fragment toward the light, sampling
+ * a binary "is there solid geometry here" texture — which reads as soft-edged rather than a hard
+ * silhouette because so few steps are taken. The key light reuses the exact same ray march over a
+ * short fixed distance, which reads as a cheap contact/crevice shadow: surfaces tucked under an
+ * overhang or into an inside corner (relative to the key light's fixed direction) darken right at
+ * the boundary, while an unobstructed flat face stays fully lit.
  */
 
 import { Program } from './program';
@@ -44,7 +48,17 @@ precision highp float;
 // camera" (the conventional key light placement) is (+x-ish, -y, +z).
 const vec3 KEY_LIGHT_DIR = vec3(0.350219, -0.525328, 0.775485); // normalize(vec3(0.35, -0.525, 0.775))
 const vec3 KEY_LIGHT_COLOR = vec3(1.0, 0.98, 0.94);
-const float KEY_LIGHT_INTENSITY = 0.85;
+const float KEY_LIGHT_INTENSITY = 0.95;
+// Gain applied to the key light's raw Lambert term before clamping — a cheap "make the relief
+// read more clearly" contrast boost: bevels/rivets that were only weakly lit now push closer to
+// fully lit, without touching ambient (so open, unlit areas do not brighten/wash out).
+const float KEY_LIGHT_GAIN = 1.2;
+// Short directional shadow march for the key light only, reusing shadowFactor's occluder ray
+// march (see below) over a small fixed world-space distance instead of a per-light radius — reads
+// as a cheap contact/crevice shadow under overhangs and inside corners. XY of KEY_LIGHT_DIR,
+// normalized and pre-computed the same way KEY_LIGHT_DIR itself is.
+const vec2 KEY_LIGHT_DIR_XY = vec2(0.554700, -0.832053); // normalize(KEY_LIGHT_DIR.xy)
+const float KEY_SHADOW_DISTANCE = 10.0;
 
 in vec2 v_uv;
 
@@ -85,6 +99,11 @@ float shadowFactor(vec2 fragScreen, vec2 toLight) {
   return 1.0 - clamp((blocked / float(SHADOW_STEPS)) * 1.7, 0.0, 1.0);
 }
 
+/** Key light's own short-range shadow — see {@link KEY_SHADOW_DISTANCE}'s doc comment above. */
+float keyShadowFactor(vec2 fragScreen) {
+  return shadowFactor(fragScreen, KEY_LIGHT_DIR_XY * KEY_SHADOW_DISTANCE);
+}
+
 void main() {
   vec4 albedoSample = texture(u_albedo, v_uv);
   vec3 normal = normalize(texture(u_normal, v_uv).rgb * 2.0 - 1.0);
@@ -96,16 +115,21 @@ void main() {
   float coverage = albedoSample.a;
   float ao = material.g;
 
+  vec2 fragScreen = fragScreenPos();
+
   // World Y is down, so a normal pointing up (toward the sky, negative Y) should sample the sky
   // tint, and one pointing down (toward the ground/floor bounce) should sample the ground tint —
   // i.e. the mix factor is how "down-facing" the normal is, not the raw normal.y sign.
   float downFacing = normal.y * 0.5 + 0.5;
   vec3 ambient = mix(u_ambientSky, u_ambientGround, downFacing) * u_ambientIntensity * ao;
-  float keyLambert = max(dot(normal, KEY_LIGHT_DIR), 0.0);
-  vec3 key = KEY_LIGHT_COLOR * KEY_LIGHT_INTENSITY * keyLambert * ao;
+  float keyLambert = clamp(dot(normal, KEY_LIGHT_DIR) * KEY_LIGHT_GAIN, 0.0, 1.0);
+  float keyShadow = 1.0;
+  if (u_shadowsEnabled == 1) {
+    keyShadow = keyShadowFactor(fragScreen);
+  }
+  vec3 key = KEY_LIGHT_COLOR * KEY_LIGHT_INTENSITY * keyLambert * ao * keyShadow;
   vec3 lit = (ambient + key) * albedo;
 
-  vec2 fragScreen = fragScreenPos();
   for (int i = 0; i < MAX_LIGHTS; i += 1) {
     if (i >= u_lightCount) break;
     vec4 posRadius = u_lightPosRadius[i];

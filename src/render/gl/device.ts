@@ -25,8 +25,11 @@ export interface GlCaps {
  *
  * - `alpha: false` — the canvas is always fully opaque; skipping the alpha channel avoids an
  *   extra blend step the compositor would otherwise perform on every frame.
- * - `antialias: false` — the game renders at a fixed low internal resolution and upscales with
- *   nearest-neighbour sampling, so MSAA would just blur pixel art for no benefit.
+ * - `antialias: false` — the default framebuffer is never drawn to directly (every deferred pass
+ *   targets its own {@link RenderTarget}, see `GlWorldRenderer`), so MSAA on the canvas itself
+ *   would do nothing; edge smoothing instead comes from supersampling the whole deferred pipeline
+ *   at the real backbuffer resolution and, on Enhanced displays well past 480×270, linear-filtered
+ *   tile sampling (see `GlWorldRenderer`'s tile-filter logic).
  * - `premultipliedAlpha: true` — matches the browser compositor's expected format so blits stay
  *   correct.
  * - `preserveDrawingBuffer: true` — required so the drawing buffer can be blitted onto a 2D
