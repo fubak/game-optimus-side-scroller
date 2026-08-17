@@ -104,8 +104,11 @@ void main() {
 
 const FULLSCREEN_POS = new Float32Array([-1, -1, 1, -1, -1, 1, 1, 1]);
 
-/** Mip chain depth. Four halvings of a 480x270 source lands the smallest level at ~30x17. */
-const MIP_LEVELS = 4;
+/**
+ * Mip chain depth. Five halvings give a wider Dead Cells-style halo at full-res deferred
+ * targets (4K backbuffer) while still landing a tiny smallest mip (~15×8 from 480×270).
+ */
+const MIP_LEVELS = 5;
 
 export interface BloomInputs {
   /** G-buffer emissive texture (see `GlWorldRenderer`); the only thing this pass reads from. */

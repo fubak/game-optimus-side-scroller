@@ -102,20 +102,17 @@ import { TonemapPass } from './tonemap';
 import type { Texture } from './texture';
 import { Filter, TexFormat } from './texture';
 
-/** Soft-threshold cutoff and overall strength for Stage 7's emissive-only bloom (`post/bloom.ts`). */
-const BLOOM_THRESHOLD = 0.35;
-const BLOOM_INTENSITY = 1.15;
+/**
+ * Soft-threshold cutoff and overall strength for Stage 7's emissive-only bloom (`post/bloom.ts`).
+ * Tuned for a Dead Cells-style glow (see `docs/art-direction.md`) — a lower threshold catches more
+ * of the emissive channel's mid-brightness detail (goal, visor, light shafts), and a higher
+ * intensity makes the resulting halo read as a punchy pickup/beacon glow rather than a faint hint.
+ */
+const BLOOM_THRESHOLD = 0.18;
+const BLOOM_INTENSITY = 1.6;
 
 /** Bound on the internal grain-hash time counter (seconds); wraps so long sessions keep float precision. */
 const TIME_WRAP_SEC = 1000;
-
-/**
- * Once the render target is supersampled past this multiple of the internal world-view size, the
- * material atlas switches from crisp nearest sampling to linear — a 64px atlas tile magnified many
- * times over reads as visibly blocky otherwise. Below the threshold nearest keeps plates/grating
- * crisp exactly like Classic. See {@link GlWorldRenderer.updateTileFilter}.
- */
-const TILE_LINEAR_FILTER_RATIO = 2;
 
 /**
  * Dynamic-resolution ladder for {@link GlWorldRenderer.updateDynamicResolution}: the fraction of
@@ -188,9 +185,9 @@ function lightShaftIntensity(quality: QualityPreset): number {
     case 'medium':
       return 0.5;
     case 'high':
-      return 0.85;
+      return 0.95;
     case 'ultra':
-      return 1;
+      return 1.1;
     default: {
       const exhaustive: never = quality;
       throw new Error(`Unhandled quality preset in GlWorldRenderer: ${String(exhaustive)}`);
@@ -279,9 +276,6 @@ export class GlWorldRenderer implements WorldView {
   private dynamicResCooldown = 0;
   /** Exponential moving average of {@link gpuTimer}'s per-frame reading, in milliseconds. */
   private renderMsEma: number | null = null;
-  /** Current sampling filter on the material atlas textures — see {@link updateTileFilter}. */
-  private tileFilter: Filter = Filter.Nearest;
-
   private levelId: string;
   private ghosts: DashGhost[] = [];
   private prevCamera: Point | null = null;
@@ -337,6 +331,13 @@ export class GlWorldRenderer implements WorldView {
 
     const materialAtlas = generateMaterialAtlas();
     this.materialTextures = uploadMaterialAtlas(gl, materialAtlas);
+    // Enhanced always samples the material atlas with linear filtering, regardless of
+    // supersampling ratio — smooth-shaded HD-2D materials, not Classic's crisp nearest-neighbour
+    // pixel look (see `docs/art-direction.md`). Atlas tiles are padded with a wrapped border
+    // (`materials/generate.ts`) precisely so linear sampling never bleeds one material into its
+    // neighbour. Classic (`ClassicWorldRenderer`) is a separate Canvas2D painter untouched by
+    // this and stays nearest-only.
+    this.materialTextures.setFilter(Filter.Linear);
     const uvRects = new Map<MaterialId, UvRect>();
     for (const id of ALL_MATERIAL_IDS) {
       uvRects.set(id, uvRectFromAtlasRect(materialAtlas.layout.rects[id], materialAtlas.layout.width, materialAtlas.layout.height));
@@ -438,23 +439,6 @@ export class GlWorldRenderer implements WorldView {
     this.occluderTarget.resize(width, height);
     this.accumTarget.resize(width, height);
     this.bloomPass.resize(width, height);
-    this.updateTileFilter();
-  }
-
-  /**
-   * Switch the material atlas between crisp nearest sampling and linear once the deferred
-   * pipeline's render targets are supersampled far enough past the 480×270 world view that
-   * nearest starts reading as blocky (see {@link TILE_LINEAR_FILTER_RATIO}). Atlas tiles are
-   * padded with a wrapped border (`materials/generate.ts`) precisely so this switch never bleeds
-   * one material into its neighbour. No-op if the filter is already what it should be, so this is
-   * cheap to call on every {@link applyInternalTargetSize}.
-   */
-  private updateTileFilter(): void {
-    const ratio = Math.min(this.internalTargetWidth / INTERNAL_WIDTH, this.internalTargetHeight / INTERNAL_HEIGHT);
-    const nextFilter = ratio >= TILE_LINEAR_FILTER_RATIO ? Filter.Linear : Filter.Nearest;
-    if (nextFilter === this.tileFilter) return;
-    this.tileFilter = nextFilter;
-    this.materialTextures.setFilter(nextFilter);
   }
 
   /**
@@ -1005,14 +989,25 @@ export class GlWorldRenderer implements WorldView {
       switch (particle.kind) {
         case 'spark':
         case 'debris': {
-          const size = Math.max(1, Math.round(particle.size * progress + 0.4));
-          const alpha = clamp(progress * 1.4, 0, 1);
-          this.particleBatch.particle(particle.x, particle.y, size, size, color[0], color[1], color[2], alpha);
+          // Slightly oversized soft quads so additive sparks read as glowing motes (Dead Cells),
+          // not 1px flecks once the deferred target is supersampled.
+          const size = Math.max(1.5, particle.size * progress * 1.35 + 0.6);
+          const alpha = clamp(progress * 1.65, 0, 1);
+          this.particleBatch.particle(
+            particle.x - size * 0.15,
+            particle.y - size * 0.15,
+            size,
+            size,
+            color[0],
+            color[1],
+            color[2],
+            alpha,
+          );
           break;
         }
         case 'dust':
         case 'exhaust': {
-          const size = Math.max(1, Math.round(particle.size + (1 - progress) * 2));
+          const size = Math.max(1.5, particle.size + (1 - progress) * 2.6);
           this.particleBatch.particle(
             particle.x - size / 2,
             particle.y - size / 2,
@@ -1021,17 +1016,17 @@ export class GlWorldRenderer implements WorldView {
             color[0],
             color[1],
             color[2],
-            progress * 0.55,
+            progress * (particle.kind === 'exhaust' ? 0.75 : 0.5),
           );
           break;
         }
         case 'pickup': {
-          const height = Math.max(1, Math.round(1 + progress * 2));
-          this.particleBatch.particle(particle.x, particle.y, 1, height, color[0], color[1], color[2], progress);
+          const height = Math.max(1.5, 1.5 + progress * 2.5);
+          this.particleBatch.particle(particle.x - 0.5, particle.y, 2, height, color[0], color[1], color[2], progress);
           break;
         }
         case 'ring': {
-          const radius = Math.max(0.5, (1 - progress) * particle.size * 8);
+          const radius = Math.max(0.75, (1 - progress) * particle.size * 9);
           this.particleBatch.particle(
             particle.x - radius,
             particle.y - radius,
@@ -1040,7 +1035,7 @@ export class GlWorldRenderer implements WorldView {
             color[0],
             color[1],
             color[2],
-            progress * 0.7,
+            progress * 0.85,
             'ring',
           );
           break;

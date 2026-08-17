@@ -7,15 +7,18 @@
  * reads is a primitive uniform, and the fullscreen quad's VAO/VBO are created once in the
  * constructor, mirroring `TonemapPass`.
  *
- * Effect notes:
+ * Effect notes (tuned for the Dead Cells-style Enhanced look — see `docs/art-direction.md` — which
+ * both default off; see `settings.ts`):
  * - **Chromatic aberration** samples the source texture's R/G/B channels at slightly different UVs,
- *   offset by distance from screen centre, so the shift is negligible in the middle and only
- *   noticeable right at the edges.
+ *   offset by distance from screen centre, so the shift is negligible in the middle and barely
+ *   perceptible even right at the edges — a hint of lens separation, not a heavy film-camera
+ *   artifact.
  * - **Grain** is a per-pixel, per-frame luminance hash — high spatial frequency, animated at the
- *   frame rate, and low amplitude. That reads as film texture, not as the kind of low-frequency
- *   full-screen brightness flashing photosensitivity guidance warns about, so it is safe to leave
- *   animated even though it changes every frame; it is still fully disabled under reduced motion
- *   (see `settings.withReducedMotion`) for players who would rather not have any of it.
+ *   frame rate, and very low amplitude (barely-there texture, not a visible CRT/film-noise
+ *   overlay). That reads as film texture, not as the kind of low-frequency full-screen brightness
+ *   flashing photosensitivity guidance warns about, so it is safe to leave animated even though it
+ *   changes every frame; it is still fully disabled under reduced motion (see
+ *   `settings.withReducedMotion`) for players who would rather not have any of it.
  * - **Dither** (an interleaved-gradient-noise offset applied just before quantisation) is always on
  *   regardless of quality/settings — it exists purely to break up 8-bit banding in the tonemapped
  *   output and is imperceptible on its own.
@@ -108,7 +111,9 @@ void main() {
   vec3 hdr;
   if (u_chromaticAberration == 1) {
     vec2 dir = uv - 0.5;
-    vec2 offset = dir * 0.006 * dot(dir, dir) * 4.0;
+    // Dead Cells has almost no visible fringing — this offset is a quarter of the previous
+    // heavier film-camera look, only noticeable right at the screen corners.
+    vec2 offset = dir * 0.0015 * dot(dir, dir) * 4.0;
     hdr = vec3(
       texture(u_tex, uv - offset).r,
       texture(u_tex, uv).g,
@@ -121,14 +126,17 @@ void main() {
   vec3 mapped = u_tonemap == 1 ? agxFilm(hdr) : acesFilm(hdr);
 
   if (u_vignette == 1) {
+    // Mild frame-the-viewport darkening, not a heavy CRT-style crush: starts later and bottoms
+    // out much higher than the previous film-vignette look.
     float dist = length(uv - 0.5);
-    float vignette = smoothstep(0.85, 0.35, dist);
-    mapped *= mix(0.72, 1.0, vignette);
+    float vignette = smoothstep(0.9, 0.4, dist);
+    mapped *= mix(0.88, 1.0, vignette);
   }
 
   if (u_grain == 1) {
+    // Barely-there texture, not visible film/CRT noise — a third of the previous amplitude.
     float grain = hash12(gl_FragCoord.xy + u_time * 97.0) - 0.5;
-    mapped += grain * 0.035;
+    mapped += grain * 0.012;
   }
 
   float dither = (interleavedGradientNoise(gl_FragCoord.xy) - 0.5) / 255.0;

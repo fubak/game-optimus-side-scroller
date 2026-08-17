@@ -178,11 +178,12 @@ function addPlayerLights(params: CollectLightsParams, out: LightList, budget: nu
   if (!player.isAlive) return;
   const centerX = player.body.x + PLAYER_WIDTH / 2;
 
-  // Small radii relative to the 10x22 player box: these are meant to accent the visor/core as
-  // bright details, not wash the whole silhouette in colour (the shell's own light grey albedo —
-  // see `drawPlayer` — needs to stay legible under them).
+  // Radii relative to the 10x22 player box: these accent the visor/core as bright Dead
+  // Cells-style beacon details (see `docs/art-direction.md`) without washing the whole silhouette
+  // in colour — the shell's own light grey albedo (see `drawPlayer`) still needs to stay legible
+  // just outside the glow's falloff.
   const visor = parseColor(palette.visor);
-  out.add(centerX, player.body.y + 4, 18, 8, visor[0], visor[1], visor[2], 1.1);
+  out.add(centerX, player.body.y + 4, 24, 8, visor[0], visor[1], visor[2], 1.4);
   if (out.count >= budget) return;
 
   const coreColor = parseColor(player.energyRatio > 0.25 ? palette.energy : palette.uiWarn);
@@ -191,7 +192,7 @@ function addPlayerLights(params: CollectLightsParams, out: LightList, budget: nu
 
   if (player.state === 'thrust') {
     const flame = parseColor(palette.flame);
-    out.add(centerX, player.body.y + PLAYER_HEIGHT + 6, 56, 16, flame[0], flame[1], flame[2], 1.8);
+    out.add(centerX, player.body.y + PLAYER_HEIGHT + 6, 70, 16, flame[0], flame[1], flame[2], 2.2);
     if (out.count >= budget) return;
   }
 
@@ -238,7 +239,9 @@ function addTileLights(params: CollectLightsParams, out: LightList, budget: numb
       const cy = ty * tileSize + tileSize / 2;
       switch (kind) {
         case TileKind.Goal:
-          out.add(cx, cy, 34, 12, goalColor[0], goalColor[1], goalColor[2], 1);
+          // Wider, brighter beacon glow — the goal should read from across the room like a Dead
+          // Cells exit/pickup light, not a faint accent (see `docs/art-direction.md`).
+          out.add(cx, cy, 46, 12, goalColor[0], goalColor[1], goalColor[2], 1.5);
           break;
         case TileKind.Checkpoint:
           if (world.isCheckpointActive(tx, ty)) {

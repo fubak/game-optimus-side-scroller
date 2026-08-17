@@ -37,6 +37,12 @@ export interface RenderSettings {
 
 export const RENDER_SETTINGS_KEY = 'optimus.render.v1';
 
+/**
+ * Dead Cells is the visual reference for Enhanced (see `docs/art-direction.md`): smooth HD-2D
+ * shading with strong emissive bloom, not a film/CRT look. Grain and chromatic aberration read as
+ * "old camera/scanline" filters rather than lighting, so both default off; vignette stays on but
+ * mild (see `post/composite.ts`) purely to frame the viewport, not to darken it noticeably.
+ */
 export const DEFAULT_RENDER_SETTINGS: RenderSettings = {
   backend: 'auto',
   quality: 'high',
@@ -45,8 +51,8 @@ export const DEFAULT_RENDER_SETTINGS: RenderSettings = {
   tonemap: 'aces',
   bloom: true,
   vignette: true,
-  grain: true,
-  chromaticAberration: true,
+  grain: false,
+  chromaticAberration: false,
   motionBlur: true,
   shadows: true,
   particles: true,
@@ -99,8 +105,8 @@ export const QUALITY_PRESETS: Record<
     dynamicResolution: true,
     bloom: true,
     vignette: true,
-    grain: true,
-    chromaticAberration: true,
+    grain: false,
+    chromaticAberration: false,
     motionBlur: true,
     shadows: true,
     particles: true,
@@ -111,8 +117,8 @@ export const QUALITY_PRESETS: Record<
     dynamicResolution: false,
     bloom: true,
     vignette: true,
-    grain: true,
-    chromaticAberration: true,
+    grain: false,
+    chromaticAberration: false,
     motionBlur: true,
     shadows: true,
     particles: true,

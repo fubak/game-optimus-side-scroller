@@ -93,17 +93,6 @@ function plotBlend(layer: PixelLayer, x: number, y: number, color: Rgb, alpha: n
   layer.data[i + 3] = outA * 255;
 }
 
-function fillRect(layer: PixelLayer, x: number, y: number, w: number, h: number, color: Rgb): void {
-  if (w <= 0 || h <= 0) return;
-  const x0 = Math.max(0, Math.floor(x));
-  const y0 = Math.max(0, Math.floor(y));
-  const x1 = Math.min(layer.width, Math.ceil(x + w));
-  const y1 = Math.min(layer.height, Math.ceil(y + h));
-  for (let yy = y0; yy < y1; yy += 1) {
-    for (let xx = x0; xx < x1; xx += 1) plot(layer, xx, yy, color);
-  }
-}
-
 function blendRect(layer: PixelLayer, x: number, y: number, w: number, h: number, color: Rgb, alpha: number): void {
   if (w <= 0 || h <= 0 || alpha <= 0) return;
   const x0 = Math.max(0, Math.floor(x));
@@ -115,22 +104,54 @@ function blendRect(layer: PixelLayer, x: number, y: number, w: number, h: number
   }
 }
 
-/** A ring (valve wheel rim), `thickness` texels wide. */
+function clamp01(value: number): number {
+  return value < 0 ? 0 : value > 1 ? 1 : value;
+}
+
+/**
+ * Fractional-coverage rect fill: edge texels are alpha-blended by how much of that texel the rect
+ * actually covers, instead of rounding to the nearest whole texel. Painting at
+ * {@link ENHANCED_SCALE} texels per screen pixel already gives edges room to be soft; this is what
+ * spends that room — building/pipe/window silhouettes end up anti-aliased rather than the hard
+ * "stair-stepped" edges Classic's 1:1 pixel-art painter has to live with.
+ */
+function fillRectAA(layer: PixelLayer, x: number, y: number, w: number, h: number, color: Rgb): void {
+  if (w <= 0 || h <= 0) return;
+  const x0 = Math.max(0, Math.floor(x));
+  const y0 = Math.max(0, Math.floor(y));
+  const x1 = Math.min(layer.width, Math.ceil(x + w));
+  const y1 = Math.min(layer.height, Math.ceil(y + h));
+  for (let yy = y0; yy < y1; yy += 1) {
+    const coverY = Math.min(yy + 1, y + h) - Math.max(yy, y);
+    if (coverY <= 0) continue;
+    for (let xx = x0; xx < x1; xx += 1) {
+      const coverX = Math.min(xx + 1, x + w) - Math.max(xx, x);
+      if (coverX <= 0) continue;
+      const coverage = coverX * coverY;
+      if (coverage >= 0.999) plot(layer, xx, yy, color);
+      else plotBlend(layer, xx, yy, color, coverage);
+    }
+  }
+}
+
+/** A ring (valve wheel rim), `thickness` texels wide, with a soft one-texel anti-aliased edge. */
 function strokeCircle(layer: PixelLayer, cx: number, cy: number, radius: number, thickness: number, color: Rgb): void {
   const outer = radius;
   const inner = Math.max(0, radius - thickness);
-  const outer2 = outer * outer;
-  const inner2 = inner * inner;
-  const x0 = Math.floor(cx - outer);
-  const x1 = Math.ceil(cx + outer);
-  const y0 = Math.floor(cy - outer);
-  const y1 = Math.ceil(cy + outer);
+  const x0 = Math.floor(cx - outer - 1);
+  const x1 = Math.ceil(cx + outer + 1);
+  const y0 = Math.floor(cy - outer - 1);
+  const y1 = Math.ceil(cy + outer + 1);
   for (let yy = y0; yy <= y1; yy += 1) {
     const dy = yy + 0.5 - cy;
     for (let xx = x0; xx <= x1; xx += 1) {
       const dx = xx + 0.5 - cx;
-      const d2 = dx * dx + dy * dy;
-      if (d2 <= outer2 && d2 >= inner2) plot(layer, xx, yy, color);
+      const dist = Math.hypot(dx, dy);
+      // Soft coverage on both the outer and inner edge of the ring, one texel wide each.
+      const outerCoverage = clamp01(outer - dist + 0.5);
+      const innerCoverage = clamp01(dist - inner + 0.5);
+      const coverage = Math.min(outerCoverage, innerCoverage);
+      if (coverage > 0) plotBlend(layer, xx, yy, color, coverage);
     }
   }
 }
@@ -245,7 +266,7 @@ function paintSmokestack(layer: PixelLayer, rng: Rng, x: number, roofY: number, 
   const stackHeight = rng.int(6, 18) * scale;
   const stackX = x + rng.int(1, Math.max(1, towerWidth - stackWidth - 1));
   const stackTop = roofY - stackHeight;
-  fillRect(layer, stackX, stackTop, stackWidth, stackHeight, style.body);
+  fillRectAA(layer, stackX, stackTop, stackWidth, stackHeight, style.body);
   blendRect(layer, stackX - 1, stackTop, stackWidth + 2, Math.max(1, scale), style.trim, 0.5);
   // Soft smoke puff, translucent so it reads as haze rather than a solid cap.
   const puffRadius = stackWidth * rng.range(0.9, 1.4);
@@ -276,23 +297,27 @@ function paintLink(layer: PixelLayer, rng: Rng, x0: number, gapWidth: number, y0
     const t = i / steps;
     const px = x0 + t * gapWidth;
     const py = diagonal ? y0 + t * (y1 - y0) : Math.min(y0, y1);
-    fillRect(layer, px, py, gapWidth / steps + scale, beamThickness, style.trim);
+    fillRectAA(layer, px, py, gapWidth / steps + scale, beamThickness, style.trim);
     if (i % 3 === 0) {
       blendRect(layer, px, py + beamThickness, Math.max(1, scale), scale * 2, style.trim, 0.4);
     }
   }
 }
 
-/** A hyperboloid-ish cooling tower silhouette: stacked bands that narrow toward the middle. */
+/**
+ * A hyperboloid-ish cooling tower silhouette: stacked bands that narrow toward the middle. Rows
+ * overlap slightly and are drawn with fractional-coverage edges so the waist curve reads as one
+ * continuous soft silhouette rather than a discrete staircase of rectangles.
+ */
 function paintCoolingTower(layer: PixelLayer, x: number, baseY: number, height: number, width: number, style: TowerFieldStyle): void {
-  const rows = Math.max(6, Math.round(height / 6));
+  const rows = Math.max(10, Math.round(height / 3));
   for (let i = 0; i < rows; i += 1) {
     const t = rows <= 1 ? 0 : i / (rows - 1);
     const waist = Math.sin(t * Math.PI);
     const rowWidth = width * (0.62 + 0.38 * (1 - waist));
     const rowY = baseY - height + t * height;
-    const rowHeight = height / rows + 1;
-    fillRect(layer, x + (width - rowWidth) / 2, rowY, rowWidth, rowHeight, style.body);
+    const rowHeight = height / rows + 1.5;
+    fillRectAA(layer, x + (width - rowWidth) / 2, rowY, rowWidth, rowHeight, style.body);
   }
   blendRect(layer, x + width * 0.1, baseY - height, width * 0.8, Math.max(1, height * 0.03), style.trim, 0.5);
 }
@@ -319,7 +344,7 @@ function paintTowerField(layer: PixelLayer, rng: Rng, style: TowerFieldStyle, sc
     if (coolingTowers && rng.chance(0.08)) {
       paintCoolingTower(layer, x, height, towerHeight, towerWidth, style);
     } else {
-      fillRect(layer, x, top, towerWidth, towerHeight, style.body);
+      fillRectAA(layer, x, top, towerWidth, towerHeight, style.body);
       blendRect(layer, x, top, towerWidth, Math.max(1, scale), style.trim, 0.8);
 
       const floorStep = Math.max(4 * scale, style.floorSpacing * scale);
@@ -327,6 +352,9 @@ function paintTowerField(layer: PixelLayer, rng: Rng, style: TowerFieldStyle, sc
         blendRect(layer, x + scale * 0.5, fy, towerWidth - scale, Math.max(1, scale * 0.4), style.trim, 0.35);
       }
 
+      // Windows: a soft-edged rect for the pane itself, plus — for lit ones — a wider, much
+      // fainter glow blended behind it so light appears to spill onto the facade instead of the
+      // window reading as a single flat-coloured dot.
       const [winW, winH] = style.windowSize;
       const [gapX, gapY] = style.windowGap;
       const stepX = (winW + gapX) * scale;
@@ -334,8 +362,13 @@ function paintTowerField(layer: PixelLayer, rng: Rng, style: TowerFieldStyle, sc
       for (let wy = top + floorStep * 0.6; wy < height - winH * scale - 2 * scale; wy += stepY) {
         for (let wx = x + gapX * scale; wx < x + towerWidth - winW * scale; wx += stepX) {
           if (!rng.chance(style.windowChance)) continue;
-          const color = rng.chance(style.warmChance) ? style.windowWarm : style.windowCool;
-          fillRect(layer, wx, wy, winW * scale, winH * scale, color);
+          const isWarm = rng.chance(style.warmChance);
+          const color = isWarm ? style.windowWarm : style.windowCool;
+          const paneW = winW * scale;
+          const paneH = winH * scale;
+          const glowRadius = Math.max(paneW, paneH) * (isWarm ? 1.9 : 1.3);
+          fillCircleBlend(layer, wx + paneW / 2, wy + paneH / 2, glowRadius, color, isWarm ? 0.16 : 0.09);
+          fillRectAA(layer, wx, wy, paneW, paneH, color);
         }
       }
 
@@ -360,43 +393,71 @@ interface PipelineStyle {
   readonly hazardDark: Rgb;
 }
 
-/** Horizontal pipe runs with flanges/brackets and valve wheels, plus a few vertical drops. */
+function mixRgb(a: Rgb, b: Rgb, t: number): Rgb {
+  return { r: a.r + (b.r - a.r) * t, g: a.g + (b.g - a.g) * t, b: a.b + (b.b - a.b) * t };
+}
+
+function smoothstep01(t: number): number {
+  const c = clamp01(t);
+  return c * c * (3 - 2 * c);
+}
+
+/** Horizontal pipe runs with flanges/brackets, valve wheels and soft rail ticks, plus a few vertical drops. */
 function paintPipeRuns(layer: PixelLayer, rng: Rng, style: PipelineStyle, scale: number): void {
   const { width, height } = layer;
   for (let i = 0; i < 3; i += 1) {
     const y = Math.round(height * rng.range(0.25, 0.85));
     const thickness = rng.int(3, 6) * scale;
-    fillRect(layer, 0, y, width, thickness, style.pipe);
-    blendRect(layer, 0, y, width, Math.max(1, scale), style.pipeLight, 0.35);
-    blendRect(layer, 0, y + thickness - scale, width, Math.max(1, scale), style.pipeDark, 0.5);
+    fillRectAA(layer, 0, y, width, thickness, style.pipe);
+    blendRect(layer, 0, y, width, Math.max(1, scale), style.pipeLight, 0.4);
+    blendRect(layer, 0, y + thickness - scale, width, Math.max(1, scale), style.pipeDark, 0.55);
+    // A soft repeating rail tick along the underside — reads as segment/rivet detail without
+    // resorting to a single hard-edged dot every bracket.
+    const tickSpacing = 6 * scale;
+    for (let tx = rng.int(0, tickSpacing); tx < width; tx += tickSpacing) {
+      blendRect(layer, tx, y + thickness - scale * 1.4, scale * 2, scale * 0.6, style.pipeDark, 0.3);
+    }
 
     for (let x = rng.int(0, 40) * scale; x < width; x += rng.int(28, 70) * scale) {
-      fillRect(layer, x, y - 2 * scale, 3 * scale, thickness + 4 * scale, style.bracket);
+      fillRectAA(layer, x, y - 2 * scale, 3 * scale, thickness + 4 * scale, style.bracket);
       if (rng.chance(0.3)) {
         strokeCircle(layer, x + 1.5 * scale, y + thickness / 2, 3 * scale, Math.max(1, scale), style.bracket);
       }
       if (rng.chance(0.35)) {
-        fillRect(layer, x + scale, y - 3 * scale, scale, 2 * scale, style.rust);
+        // A small soft rust blotch rather than a single hard-edged pixel dot.
+        fillCircleBlend(layer, x + scale * 1.5, y - 2 * scale, scale * 1.6, style.rust, 0.5);
       }
     }
   }
   for (let i = 0; i < 6; i += 1) {
     const x = rng.int(0, width - 4 * scale);
-    fillRect(layer, x, 0, rng.int(2, 4) * scale, height, style.pipeDark);
+    fillRectAA(layer, x, 0, rng.int(2, 4) * scale, height, style.pipeDark);
   }
 }
 
-/** A diagonal hazard-chevron band along the very bottom edge — the near layer's readable marking. */
+/**
+ * A diagonal hazard-chevron band along the very bottom edge — the near layer's readable marking.
+ * Each stripe boundary is soft-blended across roughly a texel instead of a hard integer-phase
+ * cutoff, so the chevrons read as clean anti-aliased bands rather than jagged 8-bit steps.
+ */
 function paintHazardStripes(layer: PixelLayer, style: PipelineStyle, scale: number): void {
   const { width, height } = layer;
   const bandHeight = Math.max(4 * scale, Math.round(height * 0.05));
   const y0 = height - bandHeight;
   const period = 10 * scale;
+  const half = period / 2;
+  const edgeSoft = Math.max(1, scale * 0.6);
   for (let y = y0; y < height; y += 1) {
     const rowIndex = y - y0;
     for (let x = 0; x < width; x += 1) {
       const phase = (((x + rowIndex) % period) + period) % period;
-      plot(layer, x, y, phase < period / 2 ? style.hazard : style.hazardDark);
+      const local = phase % half;
+      const distToEdge = Math.min(local, half - local);
+      const t = smoothstep01(distToEdge / edgeSoft);
+      const isHazard = Math.floor(phase / half) % 2 === 0;
+      const nearColor = isHazard ? style.hazard : style.hazardDark;
+      const farColor = isHazard ? style.hazardDark : style.hazard;
+      plot(layer, x, y, mixRgb(farColor, nearColor, t));
     }
   }
 }
@@ -444,7 +505,7 @@ export function buildEnhancedParallaxData(options: ParallaxOptions): readonly En
     scale,
     false,
   );
-  paintHaze(far, rgbOf(palette.fog), 0.04, 0.22);
+  paintHaze(far, rgbOf(palette.fog), 0.05, 0.26);
   // One-time distance blur: stands in for a per-frame background DoF pass (see module doc).
   boxBlurPremultiplied(far, Math.round(scale * 0.75));
 
@@ -471,7 +532,7 @@ export function buildEnhancedParallaxData(options: ParallaxOptions): readonly En
     scale,
     true,
   );
-  paintHaze(mid, rgbOf(palette.fog), 0.02, 0.14);
+  paintHaze(mid, rgbOf(palette.fog), 0.03, 0.18);
 
   const nearLogicalHeight = Math.round(viewHeight * 0.4);
   const near = createPixelLayer(logicalWidth * scale, nearLogicalHeight * scale);
@@ -485,6 +546,9 @@ export function buildEnhancedParallaxData(options: ParallaxOptions): readonly En
     hazardDark: rgbOf(palette.hazardDark),
   };
   paintPipeRuns(near, createRng(seed ^ 0x77d1), pipelineStyle, scale);
+  // A whisper of haze fading to nothing by the floor — softens the seam where this layer's top
+  // edge meets mid's silhouettes instead of a hard depth cut, without dulling the readable pipes.
+  paintHaze(near, rgbOf(palette.fog), 0.05, 0);
   paintHazardStripes(near, pipelineStyle, scale);
 
   return [

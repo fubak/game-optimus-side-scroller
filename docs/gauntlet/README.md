@@ -1,5 +1,10 @@
 # 4K visual overhaul — captures & verification
 
+## Art direction
+
+Enhanced targets **Dead Cells** (smooth HD-2D, punchy emissive bloom, no CRT film look).
+See `docs/art-direction.md`. Classic (`?classic=1`) stays chunky pixel art for regression baselines.
+
 ## Artifacts (this agent run)
 
 Captured on the cloud agent at **true 3840×2160** backbuffer (Enhanced) vs Classic 480×270 integer upscale:

@@ -32,6 +32,11 @@ void main() {
  * screen. Each beam is an analytic distance-from-centreline falloff (cheap: no samples, no loop
  * over occluders) — "volumetric" in look only, not simulation. Colours alternate cool
  * cyan/tech-light and warm sodium so the shafts read as industrial floodlights, not an anime sunbeam.
+ *
+ * Each beam widens gradually as it travels from its origin (`spread`) and uses a wider half-width
+ * than a hard-edged wedge would need — combined with the smoothstep falloff already spanning the
+ * whole width, this is what keeps the shaft reading as a soft cone of light rather than a
+ * flat-sided, hard-edged wedge.
  */
 const SHAFT_FRAGMENT_SHADER = `#version 300 es
 precision highp float;
@@ -42,14 +47,15 @@ uniform vec3 u_coolColor;
 uniform vec3 u_warmColor;
 out vec4 outColor;
 
-float beam(vec2 uv, float originX, float angle, float halfWidth, float falloff) {
+float beam(vec2 uv, float originX, float angle, float halfWidth, float falloff, float spread) {
   vec2 dir = vec2(sin(angle), cos(angle));
   vec2 toP = uv - vec2(originX, 0.0);
   float along = dot(toP, dir);
   if (along < 0.0) return 0.0;
   vec2 perp = toP - dir * along;
   float dist = length(perp);
-  float band = smoothstep(halfWidth, 0.0, dist);
+  float width = halfWidth + along * spread;
+  float band = smoothstep(width, 0.0, dist);
   return band * exp(-along * falloff);
 }
 
@@ -58,9 +64,9 @@ void main() {
   // ever approaching flashing/strobing territory — this uniform is forced to a constant by the
   // caller under reduced motion, so the drift itself is skipped rather than merely slowed.
   float t = u_time * 0.015;
-  float b0 = beam(v_local, 0.18 + 0.015 * sin(t), 0.18, 0.05, 1.7);
-  float b1 = beam(v_local, 0.52 + 0.02 * sin(t * 0.7 + 1.4), -0.12, 0.045, 1.9);
-  float b2 = beam(v_local, 0.83 + 0.015 * sin(t * 1.2 + 2.7), 0.09, 0.04, 2.1);
+  float b0 = beam(v_local, 0.18 + 0.015 * sin(t), 0.18, 0.075, 1.3, 0.16);
+  float b1 = beam(v_local, 0.52 + 0.02 * sin(t * 0.7 + 1.4), -0.12, 0.07, 1.45, 0.18);
+  float b2 = beam(v_local, 0.83 + 0.015 * sin(t * 1.2 + 2.7), 0.09, 0.065, 1.6, 0.14);
 
   vec3 color = b0 * u_coolColor + b1 * u_warmColor + b2 * u_coolColor;
   outColor = vec4(color * u_intensity, 1.0);

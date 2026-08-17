@@ -40,8 +40,12 @@ const HIP_Y = -10;
 const LEG_BASE_X = 2;
 const ARM_BASE_X = 5;
 
-/** How long a freshly-entered state takes to blend its offsets in from the neutral rest pose. */
-const TRANSITION_BLEND_SEC = 0.1;
+/**
+ * How long a freshly-entered state takes to blend its offsets in from the neutral rest pose.
+ * Slightly longer than a hard snap so Enhanced reads closer to Dead Cells' fluid pose changes
+ * (see `docs/art-direction.md`) without feeling floaty.
+ */
+const TRANSITION_BLEND_SEC = 0.14;
 /** How long the death collapse takes to fully fold, independent of `DEATH_TIME`'s respawn timer. */
 const COLLAPSE_DURATION_SEC = 0.9;
 
@@ -128,10 +132,9 @@ function rawPoseFor(state: PlayerState, animTime: number, speedRatio: number): P
     case 'run': {
       const cadence = 12 + speedRatio * 6;
       const rawPhase = animTime * cadence;
-      // Quantised to a fixed number of steps per cycle so the cycle reads as a chunky 10–12 frame
-      // run rather than a perfectly smooth sinusoid, while remaining a pure function of animTime.
-      const stepsPerCycle = 12;
-      const phase = (Math.round((rawPhase / (Math.PI * 2)) * stepsPerCycle) / stepsPerCycle) * (Math.PI * 2);
+      // Smooth sinusoid (Dead Cells HD-2D), not a chunky stepped cycle — Enhanced's linear-filtered
+      // materials and soft lighting make stepped poses read as hitching rather than "pixel craft".
+      const phase = rawPhase;
       const swing = Math.sin(phase);
       const lift = Math.abs(Math.cos(phase));
       // Arms lag the legs by a fixed phase offset instead of swinging in perfect anti-phase.

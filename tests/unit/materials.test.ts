@@ -98,12 +98,15 @@ describe('generateMaterialAtlas', () => {
   });
 
   it('keeps roughness/ao/metallic within the 0..255 byte range (no NaN/overflow from painters)', () => {
+    // One assertion over the whole (several-hundred-thousand-byte) buffer instead of three `expect`
+    // calls per byte — thousands of individual assertions over a Uint8Array this size is what was
+    // timing out the suite, not the invariant itself (which a single pass still checks in full).
     const atlas = generateMaterialAtlas(1337);
+    let invalidCount = 0;
     for (const value of atlas.params) {
-      expect(value).toBeGreaterThanOrEqual(0);
-      expect(value).toBeLessThanOrEqual(255);
-      expect(Number.isNaN(value)).toBe(false);
+      if (!(value >= 0 && value <= 255) || Number.isNaN(value)) invalidCount += 1;
     }
+    expect(invalidCount).toBe(0);
   });
 });
 
