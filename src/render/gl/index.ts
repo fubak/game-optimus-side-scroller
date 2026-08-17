@@ -18,3 +18,9 @@ export { SolidBatch } from './solidBatch';
 
 export { FullscreenBlit } from './blit';
 export { GlWorldRenderer, tryCreateGlWorldRenderer } from './GlWorldRenderer';
+
+export type { RGBA as MsdfColor } from './msdfBatch';
+export { MsdfBatch } from './msdfBatch';
+
+export type { MaterialTextureSet } from './materialTextures';
+export { updateMaterialTextureSet, uploadMaterialAtlas } from './materialTextures';

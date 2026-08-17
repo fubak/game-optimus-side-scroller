@@ -14,6 +14,12 @@ export interface WorldView {
   draw(ctx: CanvasRenderingContext2D, world: World, alpha?: number): void;
   /** Debug overlay: collision boxes, tile grid, and similar diagnostics. */
   drawDebug(ctx: CanvasRenderingContext2D, world: World): void;
+  /**
+   * Notify the backend of the display's real backbuffer size (device pixels). Classic ignores
+   * this — its backbuffer is always the world view — but WebGL2 uses it to render at the display's
+   * native resolution instead of a fixed low-res target.
+   */
+  resize?(bufferWidth: number, bufferHeight: number): void;
   /** Release any backend-specific resources (GL contexts, buffers, etc.). */
   dispose?(): void;
   readonly backend: 'classic' | 'webgl2';

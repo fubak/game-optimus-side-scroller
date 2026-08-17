@@ -48,12 +48,46 @@ const requestedLevel = params.get('level');
 const seedParam = params.get('seed');
 const autoplay = params.get('autoplay') === '1';
 
-const display = createDisplay(host);
 const keyboard = new KeyboardInput(window);
 const audio = createAudio();
 
 let renderSettings: RenderSettings = loadRenderSettings(window.localStorage);
 const backendPreference = resolveBackendPreference(window.location.search, renderSettings);
+
+// A level requested by id starts straight away; otherwise the title screen runs the show.
+const levelList = requestedLevel === null ? LEVELS : ALL_LEVELS;
+const requestedIndex =
+  requestedLevel === null ? -1 : levelList.findIndex((level) => level.id === requestedLevel);
+
+const game = new Game({
+  storage: window.localStorage,
+  audio,
+  levels: levelList,
+  autoplay,
+  ...(requestedIndex >= 0 ? { startLevelIndex: requestedIndex } : {}),
+  ...(seedParam === null ? {} : { seed: Number(seedParam) }),
+});
+
+game.onBindingsChanged = (altBindings) => {
+  keyboard.setBindings(altBindings ? ALT_BINDINGS : DEFAULT_BINDINGS);
+};
+keyboard.setBindings(game.save.settings.altBindings ? ALT_BINDINGS : DEFAULT_BINDINGS);
+
+// The renderer decides the display mode: Classic always draws at the 480×270 world-view size, so
+// it gets the Classic display (fixed buffer, integer CSS scale); WebGL2 supersamples up to the
+// device's real resolution, so it gets the Enhanced display (backbuffer sized to the device,
+// fractional CSS letterbox). `preference: 'classic'` (including the `?classic=1` shortcut) always
+// resolves to the Classic backend here, so it always gets the Classic display too.
+let renderer: WorldView = createWorldRenderer({
+  world: game.world ?? game.attractWorld,
+  preference: backendPreference,
+});
+const displayMode = renderer.backend === 'webgl2' ? 'enhanced' : 'classic';
+const display = createDisplay(host, { mode: displayMode, renderScale: renderSettings.renderScale });
+renderer.resize?.(display.bufferWidth, display.bufferHeight);
+window.addEventListener('resize', () => {
+  renderer.resize?.(display.bufferWidth, display.bufferHeight);
+});
 
 /**
  * Touch controls appear only on devices with a coarse pointer (or when forced with `?touch=1`, which
@@ -95,29 +129,6 @@ if (touch !== null) {
   });
 }
 
-// A level requested by id starts straight away; otherwise the title screen runs the show.
-const levelList = requestedLevel === null ? LEVELS : ALL_LEVELS;
-const requestedIndex =
-  requestedLevel === null ? -1 : levelList.findIndex((level) => level.id === requestedLevel);
-
-const game = new Game({
-  storage: window.localStorage,
-  audio,
-  levels: levelList,
-  autoplay,
-  ...(requestedIndex >= 0 ? { startLevelIndex: requestedIndex } : {}),
-  ...(seedParam === null ? {} : { seed: Number(seedParam) }),
-});
-
-game.onBindingsChanged = (altBindings) => {
-  keyboard.setBindings(altBindings ? ALT_BINDINGS : DEFAULT_BINDINGS);
-};
-keyboard.setBindings(game.save.settings.altBindings ? ALT_BINDINGS : DEFAULT_BINDINGS);
-
-let renderer: WorldView = createWorldRenderer({
-  world: game.world ?? game.attractWorld,
-  preference: backendPreference,
-});
 let debugVisible = false;
 let lastRenderAlpha = 0;
 
@@ -164,6 +175,7 @@ window.addEventListener('keydown', (event) => {
       world: game.world ?? game.attractWorld,
       preference: nextBackend,
     });
+    renderer.resize?.(display.bufferWidth, display.bufferHeight);
   }
 });
 
@@ -203,8 +215,9 @@ function drawDebugPanel(ctx: CanvasRenderingContext2D): void {
   const lines = [
     `FPS ${fps.toFixed(1)} FRAME ${frameTimeMs.toFixed(2)}MS`,
     `UPD ${updateMs.toFixed(2)}MS REN ${renderMs.toFixed(2)}MS`,
-    `GPU — (stage 1)  ALPHA ${lastRenderAlpha.toFixed(2)}`,
-    `REN ${renderer.backend.toUpperCase()} Q ${renderSettings.quality.toUpperCase()}`,
+    `ALPHA ${lastRenderAlpha.toFixed(2)}`,
+    `REN ${renderer.backend.toUpperCase()} (${display.mode.toUpperCase()}) Q ${renderSettings.quality.toUpperCase()}`,
+    `BUF ${String(display.bufferWidth)}x${String(display.bufferHeight)}`,
     `SCENE ${game.scene.name.toUpperCase()} LVL ${String(game.scene.levelIndex + 1)}`,
     player === undefined
       ? 'NO WORLD'
@@ -257,4 +270,5 @@ if (shouldInstallTestHooks(window.location.search, import.meta.env.DEV)) {
 }
 
 display.resize();
+renderer.resize?.(display.bufferWidth, display.bufferHeight);
 loop.start();

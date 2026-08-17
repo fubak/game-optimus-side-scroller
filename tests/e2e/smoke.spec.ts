@@ -60,9 +60,11 @@ async function stepFrames(page: Page, frames: number, chunk = 120): Promise<void
 }
 
 test.describe('boot', () => {
-  test('loads the title screen with no console errors', async ({ page }) => {
+  test('loads the title screen with no console errors (Classic buffer)', async ({ page }) => {
     const errors = watchForErrors(page);
-    await page.goto('/?test=1');
+    // Force Classic so the buffer-size assertions below are meaningful: Enhanced's backbuffer is
+    // resolution-dependent by design (see the 'Enhanced mode' describe block further down).
+    await page.goto('/?test=1&classic=1');
     await waitForHooks(page);
 
     // The canvas exists at the internal resolution and is scaled up by an integer factor.
@@ -91,6 +93,8 @@ test.describe('boot', () => {
   });
 
   test('the attract-mode demo plays behind the title screen', async ({ page }) => {
+    // Default backend/display (Classic or Enhanced, whichever this browser resolves to): the pixel
+    // count assertion below works at any buffer size, so this doubles as default-path coverage.
     await page.goto('/?test=1');
     await waitForHooks(page);
     await page.evaluate(() => {
@@ -117,8 +121,10 @@ test.describe('boot', () => {
     expect(pixels).toBeGreaterThan(500);
   });
 
-  test('resizing keeps the pixel grid crisp', async ({ page }) => {
-    await page.goto('/?test=1');
+  test('resizing keeps the pixel grid crisp (Classic)', async ({ page }) => {
+    // Integer-scale-only is a Classic guarantee; Enhanced deliberately uses fractional CSS sizing
+    // (see the 'Enhanced mode' describe block), so this needs the Classic backend forced too.
+    await page.goto('/?test=1&classic=1');
     await waitForHooks(page);
     for (const size of [
       { width: 800, height: 600 },
@@ -133,6 +139,67 @@ test.describe('boot', () => {
       expect(Number.isInteger(scale)).toBe(true);
       expect(scale).toBeGreaterThanOrEqual(1);
     }
+  });
+});
+
+test.describe('Enhanced mode', () => {
+  test('boots with a resolution-independent buffer and no console errors', async ({ page }) => {
+    const errors = watchForErrors(page);
+    // Explicitly request WebGL2; if this browser cannot provide it the game gracefully falls back
+    // to Classic (see createWorldRenderer), so this test only asserts what holds in either case.
+    await page.goto('/?test=1&renderer=webgl2');
+    await waitForHooks(page);
+
+    const canvas = page.locator('canvas#screen');
+    await expect(canvas).toBeVisible();
+
+    const metrics = await canvas.evaluate((element) => {
+      const canvasElement = element as HTMLCanvasElement;
+      const rect = canvasElement.getBoundingClientRect();
+      return {
+        bufferWidth: canvasElement.width,
+        bufferHeight: canvasElement.height,
+        cssWidth: rect.width,
+        cssHeight: rect.height,
+      };
+    });
+    // The buffer is sized to the device, not pinned to 480×270 — just check it is sane and roughly
+    // matches the 16:9 world-view aspect ratio (letterboxing can shave a pixel or two off either
+    // side when rounding to whole device pixels).
+    expect(metrics.bufferWidth).toBeGreaterThan(0);
+    expect(metrics.bufferHeight).toBeGreaterThan(0);
+    expect(metrics.bufferWidth / metrics.bufferHeight).toBeCloseTo(16 / 9, 1);
+    expect(metrics.cssWidth).toBeGreaterThan(0);
+    expect(metrics.cssHeight).toBeGreaterThan(0);
+
+    const state = await snapshot(page);
+    expect(state.scene).toBe('title');
+
+    await page.screenshot({ path: 'test-results/title-enhanced.png' });
+    expect(errors).toEqual([]);
+  });
+
+  test('resizing keeps the canvas letterboxed and crash-free', async ({ page }) => {
+    const errors = watchForErrors(page);
+    await page.goto('/?test=1&renderer=webgl2');
+    await waitForHooks(page);
+
+    for (const size of [
+      { width: 800, height: 600 },
+      { width: 1600, height: 900 },
+      { width: 1000, height: 500 },
+    ]) {
+      await page.setViewportSize(size);
+      await page.evaluate(() => {
+        window.__optimus?.stepFrames(2);
+      });
+      const canvas = page.locator('canvas#screen');
+      await expect(canvas).toBeVisible();
+      const box = await canvas.boundingBox();
+      expect(box?.width ?? 0).toBeGreaterThan(0);
+      expect(box?.height ?? 0).toBeGreaterThan(0);
+    }
+    expect(errors).toEqual([]);
   });
 });
 

@@ -6,8 +6,11 @@
  * the left: `0b10001` is two pixels at the outer edges.
  */
 
-const GLYPH_WIDTH = 5;
-const GLYPH_HEIGHT = 7;
+export const GLYPH_WIDTH = 5;
+export const GLYPH_HEIGHT = 7;
+
+/** Unscaled pixel size of one bitmap pixel; both renderers key their metrics off this. */
+export const FONT_SCALE = 1;
 
 // prettier-ignore
 const GLYPHS: Readonly<Record<string, readonly number[]>> = {
@@ -83,6 +86,9 @@ const GLYPHS: Readonly<Record<string, readonly number[]>> = {
 
 const FALLBACK = GLYPHS['?'] ?? [];
 
+/** Every character key the bitmap font defines, in object-enumeration order. */
+export const GLYPH_CHARACTERS: readonly string[] = Object.keys(GLYPHS);
+
 export type TextAlign = 'left' | 'center' | 'right';
 
 export interface TextOptions {
@@ -94,9 +100,30 @@ export interface TextOptions {
   readonly align?: TextAlign;
   /** Draw a 1 px offset shadow behind the text for legibility over busy backgrounds. */
   readonly shadow?: string;
+  /**
+   * Reserved for callers that branch between renderers. `drawText` always uses the bitmap path
+   * below; pass the same options to `drawTextMsdf` (`./msdfFont`) to render the MSDF atlas
+   * instead. Kept here so a single options object can be threaded through either call.
+   */
+  readonly msdf?: boolean;
 }
 
 export const TEXT_LINE_HEIGHT = GLYPH_HEIGHT;
+
+export interface FontMetrics {
+  readonly glyphWidth: number;
+  readonly glyphHeight: number;
+  readonly lineHeight: number;
+  readonly scale: number;
+}
+
+/** Shared layout constants; other renderers (e.g. `msdfFont.ts`) key off this instead of magic numbers. */
+export const TEXT_METRICS: FontMetrics = {
+  glyphWidth: GLYPH_WIDTH,
+  glyphHeight: GLYPH_HEIGHT,
+  lineHeight: TEXT_LINE_HEIGHT,
+  scale: FONT_SCALE,
+};
 
 /** Width of `text` in pixels for the given scale/tracking. */
 export function measureText(text: string, scale = 1, tracking = 1): number {
@@ -108,8 +135,25 @@ export function textHeight(scale = 1): number {
   return GLYPH_HEIGHT * scale;
 }
 
+/**
+ * Resolve a character to the glyph key that will actually be drawn: itself if defined, its
+ * uppercase form if that is defined (lowercase letters share the uppercase glyph), or `'?'`.
+ * Exported so other glyph consumers (e.g. `msdfFont.ts`) fall back exactly the same way.
+ */
+export function resolveGlyphCharacter(character: string): string {
+  if (character in GLYPHS) return character;
+  const upper = character.toUpperCase();
+  if (upper in GLYPHS) return upper;
+  return '?';
+}
+
 function glyphFor(character: string): readonly number[] {
-  return GLYPHS[character] ?? GLYPHS[character.toUpperCase()] ?? FALLBACK;
+  return GLYPHS[resolveGlyphCharacter(character)] ?? FALLBACK;
+}
+
+/** Raw 5×7 bit rows for `character` (after the same fallback `resolveGlyphCharacter` uses). */
+export function getGlyphBitmap(character: string): readonly number[] {
+  return glyphFor(character);
 }
 
 /** Rows of a glyph as strings of `#`/`.` — used by tests to verify the font data. */
