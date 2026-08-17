@@ -298,13 +298,13 @@ function makeRivetPositions(rng: Rng, size: number): [number, number][] {
 }
 
 /**
- * A bolt head's height profile: a flat-ish cap out to `radius * 0.55`, then a soft bevelled
- * shoulder down to the plate by `radius`. Two clearly-separated zones (flat cap, smooth shoulder)
- * is what reads as "a bolt head with a soft bevel" once lit, rather than a single sharp cone.
+ * A bolt head's height profile: a small flat cap out to `radius * 0.4`, then a wide soft bevel
+ * down to the plate by `radius`. The wide shoulder is what keeps rivets reading as painterly
+ * painted-on bolts rather than hard-edged stamped discs once lit.
  */
 function rivetBump(x: number, y: number, positions: readonly (readonly [number, number])[], radius: number): number {
   let bump = 0;
-  const capRadius = radius * 0.55;
+  const capRadius = radius * 0.4;
   for (const [rx, ry] of positions) {
     const dist = Math.hypot(x - rx, y - ry);
     if (dist >= radius) continue;
@@ -318,23 +318,25 @@ const paintBrushedSteel: PainterFactory = (seed, rng) => {
   const size = MATERIAL_TILE_PX;
   const rivets = makeRivetPositions(rng, size);
   const seamY = size * 0.5;
+  // Soft panel crease: a wide trough rather than a hard 1–2px groove line.
+  const seamHalf = size * 0.045;
   return (x, y) => {
     // Long, soft anisotropic streaks: very slow variation along x (the brush direction), gentler
-    // variation along y than before so streaks read as long soft bands instead of scratches.
-    const streaks = fbm(seed, x * 0.012, y * 0.22, size, 2);
-    // A single low-frequency wear pass — large soft patches of duller/brighter metal, not per-texel grain.
-    const wear = fbm(seed + 41, x * 0.02, y * 0.02, size, 2);
-    let height = 0.5 + (streaks - 0.5) * 0.1 + (wear - 0.5) * 0.04;
-    const rivet = rivetBump(x, y, rivets, size * 0.07);
-    height += rivet * 0.3;
-    const nearSeam = Math.abs(y - seamY) < size * 0.02;
-    if (nearSeam) height -= 0.15;
+    // variation along y so streaks read as long soft bands instead of scratches.
+    const streaks = fbm(seed, x * 0.01, y * 0.16, size, 2);
+    // A single low-frequency wear pass — large soft patches of duller/brighter metal, not grit.
+    const wear = fbm(seed + 41, x * 0.016, y * 0.016, size, 2);
+    let height = 0.5 + (streaks - 0.5) * 0.08 + (wear - 0.5) * 0.03;
+    const rivet = rivetBump(x, y, rivets, size * 0.09);
+    height += rivet * 0.22;
+    const seam = 1 - softStep(Math.abs(y - seamY), 0, seamHalf);
+    height -= seam * 0.1;
 
     const tone = mixColor(STEEL_DARK, STEEL_LIGHT, clamp01(streaks * 0.65 + wear * 0.15 + 0.15));
-    const albedo = mixColor(tone, STEEL_LIGHT, rivet * 0.55);
-    const roughness = clamp01(0.34 + (1 - streaks) * 0.12 - rivet * 0.2);
-    const ao = clamp01(0.88 + wear * 0.1 - (nearSeam ? 0.2 : 0));
-    const metallic = clamp01(0.88 - rivet * 0.1);
+    const albedo = mixColor(tone, STEEL_LIGHT, rivet * 0.45);
+    const roughness = clamp01(0.34 + (1 - streaks) * 0.12 - rivet * 0.18);
+    const ao = clamp01(0.9 + wear * 0.08 - seam * 0.14);
+    const metallic = clamp01(0.88 - rivet * 0.08);
     return { albedo: [albedo[0], albedo[1], albedo[2], 1], height: clamp01(height), roughness, ao, metallic };
   };
 };
@@ -345,17 +347,17 @@ const paintPaintedSteel: PainterFactory = (seed, rng) => {
   return (x, y) => {
     // Low-frequency fbm plus a very wide soft threshold: a handful of large flake-shaped chips
     // with blurry edges, rather than a dense per-texel salt-and-pepper speckle.
-    const wear = fbm(seed, x * 0.035, y * 0.035, size, 2);
-    const chipMask = softStep(wear, 0.52, 0.72);
-    const rivet = rivetBump(x, y, rivets, size * 0.05);
-    const height = 0.5 + (wear - 0.5) * 0.06 - chipMask * 0.1 + rivet * 0.3;
+    const wear = fbm(seed, x * 0.028, y * 0.028, size, 2);
+    const chipMask = softStep(wear, 0.48, 0.78);
+    const rivet = rivetBump(x, y, rivets, size * 0.075);
+    const height = 0.5 + (wear - 0.5) * 0.05 - chipMask * 0.08 + rivet * 0.22;
 
     const paint = mixColor(PAINT_TEAL_DARK, PAINT_TEAL, clamp01(0.4 + wear * 0.5));
     const steelBeneath = mixColor(STEEL_DARK, STEEL_LIGHT, 0.4);
     const albedo = mixColor(paint, steelBeneath, chipMask);
-    const roughness = clamp01(0.55 - chipMask * 0.2 - rivet * 0.15);
-    const ao = clamp01(0.9 - chipMask * 0.2);
-    const metallic = clamp01(0.08 + chipMask * 0.55 + rivet * 0.2);
+    const roughness = clamp01(0.55 - chipMask * 0.2 - rivet * 0.12);
+    const ao = clamp01(0.92 - chipMask * 0.16);
+    const metallic = clamp01(0.08 + chipMask * 0.55 + rivet * 0.15);
     return { albedo: [albedo[0], albedo[1], albedo[2], 1], height: clamp01(height), roughness, ao, metallic };
   };
 };
@@ -363,34 +365,32 @@ const paintPaintedSteel: PainterFactory = (seed, rng) => {
 const paintGrating: PainterFactory = () => {
   const size = MATERIAL_TILE_PX;
   const cell = size / 8;
+  // Soft bar↔hole blend width so the diamond mesh has rounded painterly edges, not hard cutouts.
+  const blend = cell * 0.35;
   return (x, y) => {
     const u = bandDistance(x + y, cell * 2, cell * 0.9);
     const v = bandDistance(x - y, cell * 2, cell * 0.9);
-    const onBar = Math.max(u, v) < 0;
-    if (onBar) {
-      const edge = clamp01(-Math.max(u, v) / (cell * 0.45));
-      const albedo = mixColor(GRATE, STEEL_LIGHT, edge * 0.5);
-      return {
-        albedo: [albedo[0], albedo[1], albedo[2], 1],
-        height: clamp01(0.55 + edge * 0.35),
-        roughness: clamp01(0.3 - edge * 0.1),
-        ao: clamp01(0.75 + edge * 0.2),
-        metallic: 0.82,
-      };
-    }
-    // Soft AO gradient into the hole: darkest at its centre, lightening smoothly toward the bars
-    // it opens onto — a gentle occlusion falloff rather than flat shade plus per-texel grain.
-    // Outside the bar, u/v (the distance-past-the-band-edge) is >= 0 and grows the further into
-    // the hole you go, so it — not its negation — is what should drive the depth gradient.
-    const depthIntoHole = clamp01(Math.max(u, v) / (cell * 0.7));
-    const softDepth = smoothstep(depthIntoHole);
+    const signed = Math.max(u, v);
+    // 1 on the bar interior, 0 deep in the hole, with a wide softStep across the edge.
+    const barMask = 1 - softStep(signed, -blend * 0.15, blend);
+    const edge = softStep(-signed, 0, cell * 0.55);
+
+    const barAlbedo = mixColor(GRATE, STEEL_LIGHT, edge * 0.45);
     const dark = mixColor(STEEL_SHADOW, [0, 0, 0], 0.6);
+    const depthIntoHole = softStep(signed, 0, cell * 0.85);
+    const holeAlbedo = dark;
+    const albedo = mixColor(holeAlbedo, barAlbedo, barMask);
+    const alpha = lerp(clamp01(0.34 - depthIntoHole * 0.16), 1, barMask);
+    const height = lerp(clamp01(0.12 - depthIntoHole * 0.05), clamp01(0.52 + edge * 0.28), barMask);
+    const roughness = lerp(0.7, clamp01(0.32 - edge * 0.08), barMask);
+    const ao = lerp(clamp01(0.34 - depthIntoHole * 0.2), clamp01(0.78 + edge * 0.16), barMask);
+    const metallic = lerp(0, 0.82, barMask);
     return {
-      albedo: [dark[0], dark[1], dark[2], clamp01(0.32 - softDepth * 0.14)],
-      height: clamp01(0.1 - softDepth * 0.06),
-      roughness: 0.7,
-      ao: clamp01(0.32 - softDepth * 0.22),
-      metallic: 0,
+      albedo: [albedo[0], albedo[1], albedo[2], alpha],
+      height,
+      roughness,
+      ao,
+      metallic,
     };
   };
 };
@@ -400,20 +400,19 @@ const paintRustedPlate: PainterFactory = (seed, rng) => {
   const rivets = makeRivetPositions(rng, size);
   return (x, y) => {
     // Low-frequency mask with a wide soft edge: a few big rust islands, not a speckled threshold.
-    const rustMask = softStep(fbm(seed, x * 0.03, y * 0.03, size, 3), 0.4, 0.62);
-    // Pitting inside the islands, one octave lower than before and blended in softly so it reads
-    // as blotchy corrosion rather than per-texel pit speckle.
-    const pit = fbm(seed + 7, x * 0.09, y * 0.09, size, 2);
-    const pitting = rustMask * softStep(pit, 0.45, 0.75);
-    const streaks = fbm(seed + 19, x * 0.015, y * 0.25, size, 2);
-    const rivet = rivetBump(x, y, rivets, size * 0.07);
+    const rustMask = softStep(fbm(seed, x * 0.022, y * 0.022, size, 2), 0.36, 0.68);
+    // Soft blotchy corrosion inside the islands — wide softStep so pits are paint stains, not grit.
+    const pit = fbm(seed + 7, x * 0.06, y * 0.06, size, 2);
+    const pitting = rustMask * softStep(pit, 0.4, 0.8);
+    const streaks = fbm(seed + 19, x * 0.012, y * 0.18, size, 2);
+    const rivet = rivetBump(x, y, rivets, size * 0.09);
 
-    const height = 0.5 + (streaks - 0.5) * 0.08 - pitting * 0.25 + rivet * 0.3 * (1 - rustMask);
+    const height = 0.5 + (streaks - 0.5) * 0.06 - pitting * 0.18 + rivet * 0.22 * (1 - rustMask);
     const steel = mixColor(STEEL_DARK, STEEL_LIGHT, clamp01(streaks));
     const rust = mixColor(RUST_DARK, RUST, clamp01(pit));
     const albedo = mixColor(steel, rust, rustMask);
-    const roughness = clamp01(0.35 + rustMask * 0.45 + pitting * 0.15);
-    const ao = clamp01(0.85 - pitting * 0.4);
+    const roughness = clamp01(0.35 + rustMask * 0.45 + pitting * 0.12);
+    const ao = clamp01(0.88 - pitting * 0.32);
     const metallic = clamp01(0.85 - rustMask * 0.75);
     return { albedo: [albedo[0], albedo[1], albedo[2], 1], height: clamp01(height), roughness, ao, metallic };
   };
@@ -422,23 +421,22 @@ const paintRustedPlate: PainterFactory = (seed, rng) => {
 const paintConcrete: PainterFactory = (seed, rng) => {
   const size = MATERIAL_TILE_PX;
   const cracks = makeCracks(rng, size, 2);
-  const crackCore = size * 0.012;
-  const crackHalo = size * 0.05;
+  // Wider core + halo so cracks read as soft painted fractures, not 1px engraved lines.
+  const crackCore = size * 0.028;
+  const crackHalo = size * 0.09;
   return (x, y) => {
     // Soft low-frequency blotches instead of fine aggregate speckle.
-    const aggregate = fbm(seed, x * 0.045, y * 0.045, size, 3);
-    // Cracks are a handful of explicit thin polylines (see makeCracks), not a noise threshold —
-    // this is what keeps them reading as distinct fractures rather than noise soup. A crisp thin
-    // core plus a much wider, softer penumbra keeps the crack itself hairline while still giving
-    // linear-filtered sampling something gradual to interpolate around it.
+    const aggregate = fbm(seed, x * 0.032, y * 0.032, size, 2);
+    // Cracks are a handful of explicit polylines (see makeCracks), not a noise threshold —
+    // this is what keeps them reading as distinct fractures rather than noise soup.
     const crackDist = distanceToCracks(x, y, cracks, size);
     const crackLine = 1 - softStep(crackDist, 0, crackCore);
     const crackShadow = 1 - softStep(crackDist, 0, crackHalo);
-    const height = clamp01(0.5 + (aggregate - 0.5) * 0.14 - crackLine * 0.35 - crackShadow * 0.08);
+    const height = clamp01(0.5 + (aggregate - 0.5) * 0.1 - crackLine * 0.22 - crackShadow * 0.1);
 
     const albedo = mixColor(CONCRETE_DARK, CONCRETE, clamp01(aggregate));
-    const roughness = clamp01(0.82 + (1 - aggregate) * 0.08);
-    const ao = clamp01(0.9 - crackLine * 0.5 - crackShadow * 0.15);
+    const roughness = clamp01(0.82 + (1 - aggregate) * 0.06);
+    const ao = clamp01(0.92 - crackLine * 0.35 - crackShadow * 0.18);
     return { albedo: [albedo[0], albedo[1], albedo[2], 1], height, roughness, ao, metallic: 0.02 };
   };
 };
@@ -447,15 +445,15 @@ const paintConveyorRubber: PainterFactory = (seed) => {
   const size = MATERIAL_TILE_PX;
   const cell = size / 6;
   return (x, y) => {
-    const ridgeDist = bandDistance(x + y, cell, cell * 0.45);
-    // A soft cosine-shaped rib profile instead of a linear ramp — reads as a rounded rubber ridge.
-    const ridgeT = clamp01(1 - Math.abs(ridgeDist) / (cell * 0.45));
-    const ribProfile = smoothstep(ridgeT);
-    const wear = fbm(seed, x * 0.05, y * 0.05, size, 2);
-    const height = clamp01(0.35 + ribProfile * 0.35 + (wear - 0.5) * 0.03);
-    const albedo = mixColor(RUBBER, RUBBER_LIGHT, ribProfile * 0.55 + wear * 0.08);
-    const roughness = clamp01(0.85 - ribProfile * 0.3);
-    const ao = clamp01(0.7 + ribProfile * 0.25);
+    const ridgeDist = bandDistance(x + y, cell, cell * 0.5);
+    // A soft rounded rib profile — wide falloff so ridges feel painted, not cut.
+    const ridgeT = clamp01(1 - Math.abs(ridgeDist) / (cell * 0.5));
+    const ribProfile = softStep(ridgeT, 0.15, 1);
+    const wear = fbm(seed, x * 0.035, y * 0.035, size, 2);
+    const height = clamp01(0.38 + ribProfile * 0.28 + (wear - 0.5) * 0.025);
+    const albedo = mixColor(RUBBER, RUBBER_LIGHT, ribProfile * 0.5 + wear * 0.08);
+    const roughness = clamp01(0.85 - ribProfile * 0.28);
+    const ao = clamp01(0.72 + ribProfile * 0.22);
     return { albedo: [albedo[0], albedo[1], albedo[2], 1], height, roughness, ao, metallic: 0.03 };
   };
 };
@@ -467,17 +465,18 @@ const paintWarningChevrons: PainterFactory = (seed) => {
     const diag = x + y;
     const phase = Math.floor(diag / stripe) % 2;
     const edge = bandDistance(diag, stripe * 2, stripe);
-    const emboss = 1 - smoothstep(clamp01(Math.abs(edge) / (stripe * 0.25)));
-    const wear = fbm(seed, x * 0.03, y * 0.03, size, 2);
+    // Wider emboss falloff so chevron edges are soft painted ridges, not hard bevel lines.
+    const emboss = 1 - softStep(Math.abs(edge), 0, stripe * 0.42);
+    const wear = fbm(seed, x * 0.022, y * 0.022, size, 2);
     const isYellow = phase === 0;
     const base = isYellow ? WARN_YELLOW : STEEL_SHADOW;
-    const albedo = mixColor(base, STEEL_DARK, emboss * 0.3 + (1 - wear) * 0.1);
-    const height = clamp01(0.5 + emboss * 0.15);
+    const albedo = mixColor(base, STEEL_DARK, emboss * 0.25 + (1 - wear) * 0.08);
+    const height = clamp01(0.5 + emboss * 0.12);
     return {
       albedo: [albedo[0], albedo[1], albedo[2], 1],
       height,
-      roughness: clamp01(0.5 - emboss * 0.1),
-      ao: clamp01(0.9 - emboss * 0.1),
+      roughness: clamp01(0.5 - emboss * 0.08),
+      ao: clamp01(0.92 - emboss * 0.08),
       metallic: 0.18,
     };
   };
@@ -490,14 +489,14 @@ const paintHazardSpike: PainterFactory = (seed, rng) => {
   const maxDist = size * 0.62;
   return (x, y) => {
     const dist = Math.sqrt((x - cx) ** 2 + (y - cy) ** 2);
-    const tipFactor = clamp01(1 - dist / maxDist);
-    const facetNoise = fbm(seed, x * 0.08, y * 0.08, size, 2);
-    const nick = fbm(seed + 11, x * 0.15, y * 0.15, size, 2);
-    const height = clamp01(tipFactor ** 1.6 + (facetNoise - 0.5) * 0.05 - softStep(nick, 0.6, 0.85) * 0.15);
+    const tipFactor = softStep(1 - dist / maxDist, 0.05, 1);
+    const facetNoise = fbm(seed, x * 0.05, y * 0.05, size, 2);
+    const nick = fbm(seed + 11, x * 0.09, y * 0.09, size, 2);
+    const height = clamp01(tipFactor ** 1.45 + (facetNoise - 0.5) * 0.035 - softStep(nick, 0.55, 0.9) * 0.1);
 
     const albedo = mixColor(HAZARD_DARK, HAZARD, tipFactor);
     const roughness = clamp01(0.55 - tipFactor * 0.4 + (1 - tipFactor) * 0.2);
-    const ao = clamp01(0.7 + tipFactor * 0.3);
+    const ao = clamp01(0.72 + tipFactor * 0.28);
     const metallic = clamp01(0.3 + tipFactor * 0.55);
     return { albedo: [albedo[0], albedo[1], albedo[2], 1], height, roughness, ao, metallic };
   };
@@ -506,20 +505,24 @@ const paintHazardSpike: PainterFactory = (seed, rng) => {
 const paintCatwalk: PainterFactory = (seed) => {
   const size = MATERIAL_TILE_PX;
   const cell = size / 5;
+  const blend = cell * 0.28;
   return (x, y) => {
     const barX = bandDistance(x, cell, cell * 0.6);
-    const onBar = barX < 0;
-    const flange = onBar ? smoothstep(clamp01(1 + barX / (cell * 0.3))) : 0;
-    const grain = fbm(seed, x * 0.06, y * 0.06, size, 2);
-    const height = onBar ? clamp01(0.55 + flange * 0.3) : clamp01(0.08 + grain * 0.04);
+    // Soft bar mask instead of a hard on/off cut — rounded flange edges.
+    const barMask = 1 - softStep(barX, -blend * 0.2, blend);
+    const flange = softStep(-barX, 0, cell * 0.42);
+    const grain = fbm(seed, x * 0.04, y * 0.04, size, 2);
+    const height = lerp(clamp01(0.1 + grain * 0.03), clamp01(0.52 + flange * 0.24), barMask);
     const bar = mixColor(GRATE, STEEL_BASE, 0.5);
-    const albedo = onBar ? mixColor(bar, STEEL_LIGHT, flange * 0.6) : mixColor(STEEL_SHADOW, [0, 0, 0], 0.5);
+    const barAlbedo = mixColor(bar, STEEL_LIGHT, flange * 0.5);
+    const holeAlbedo = mixColor(STEEL_SHADOW, [0, 0, 0], 0.5);
+    const albedo = mixColor(holeAlbedo, barAlbedo, barMask);
     return {
-      albedo: [albedo[0], albedo[1], albedo[2], onBar ? 1 : 0.3],
+      albedo: [albedo[0], albedo[1], albedo[2], lerp(0.32, 1, barMask)],
       height,
-      roughness: onBar ? clamp01(0.35 - flange * 0.15) : 0.7,
-      ao: onBar ? clamp01(0.8 + flange * 0.15) : 0.3,
-      metallic: onBar ? 0.8 : 0,
+      roughness: lerp(0.7, clamp01(0.36 - flange * 0.12), barMask),
+      ao: lerp(0.32, clamp01(0.82 + flange * 0.12), barMask),
+      metallic: lerp(0, 0.8, barMask),
     };
   };
 };
@@ -529,21 +532,21 @@ const paintEmissiveEnergy: PainterFactory = (seed) => {
   const coreX = size * 0.5;
   return (x, y) => {
     const distToCore = Math.abs(x - coreX);
-    const channel = smoothstep(clamp01(1 - distToCore / (size * 0.22)));
-    const core = smoothstep(clamp01(1 - distToCore / (size * 0.06)));
-    const flicker = fbm(seed, x * 0.03, y * 0.09, size, 2);
-    const casingGrain = fbm(seed + 29, x * 0.05, y * 0.05, size, 2);
+    const channel = softStep(1 - distToCore / (size * 0.28), 0.05, 1);
+    const core = softStep(1 - distToCore / (size * 0.1), 0.1, 1);
+    const flicker = fbm(seed, x * 0.022, y * 0.06, size, 2);
+    const casingGrain = fbm(seed + 29, x * 0.035, y * 0.035, size, 2);
 
-    const height = clamp01(0.5 - channel * 0.25 + (casingGrain - 0.5) * 0.05);
+    const height = clamp01(0.5 - channel * 0.2 + (casingGrain - 0.5) * 0.035);
     const casing = mixColor(STEEL_SHADOW, STEEL_DARK, casingGrain);
     const glow = mixColor(ENERGY_DIM, ENERGY, clamp01(0.5 + flicker * 0.5));
-    const withCore = mixColor(glow, ENERGY_CORE, core * 0.8);
+    const withCore = mixColor(glow, ENERGY_CORE, core * 0.75);
     const albedo = mixColor(casing, withCore, channel);
     return {
       albedo: [albedo[0], albedo[1], albedo[2], 1],
       height,
       roughness: clamp01(0.6 - channel * 0.55),
-      ao: clamp01(0.9 - channel * 0.4),
+      ao: clamp01(0.92 - channel * 0.35),
       metallic: clamp01(0.55 * (1 - channel)),
     };
   };
@@ -553,23 +556,23 @@ const paintEmissiveGoal: PainterFactory = (seed) => {
   const size = MATERIAL_TILE_PX;
   const coreX = size * 0.5;
   return (x, y) => {
-    const wobble = Math.sin(y * 0.25 + seed * 0.0001) * size * 0.03;
+    const wobble = Math.sin(y * 0.18 + seed * 0.0001) * size * 0.035;
     const distToCore = Math.abs(x - coreX - wobble);
-    const shaft = smoothstep(clamp01(1 - distToCore / (size * 0.32)));
-    const ripple = smoothstep(clamp01(1 - distToCore / (size * 0.08)));
-    const shimmer = fbm(seed, x * 0.025, y * 0.08, size, 2);
-    const casingGrain = fbm(seed + 61, x * 0.05, y * 0.05, size, 2);
+    const shaft = softStep(1 - distToCore / (size * 0.38), 0.05, 1);
+    const ripple = softStep(1 - distToCore / (size * 0.12), 0.1, 1);
+    const shimmer = fbm(seed, x * 0.02, y * 0.055, size, 2);
+    const casingGrain = fbm(seed + 61, x * 0.035, y * 0.035, size, 2);
 
-    const height = clamp01(0.5 - shaft * 0.3 + (casingGrain - 0.5) * 0.05);
+    const height = clamp01(0.5 - shaft * 0.24 + (casingGrain - 0.5) * 0.035);
     const casing = mixColor(STEEL_SHADOW, STEEL_DARK, casingGrain);
     const glow = mixColor(GOAL_DIM, GOAL_ENERGY, clamp01(0.5 + shimmer * 0.5));
-    const withCore = mixColor(glow, GOAL_CORE, ripple * 0.85);
+    const withCore = mixColor(glow, GOAL_CORE, ripple * 0.8);
     const albedo = mixColor(casing, withCore, shaft);
     return {
       albedo: [albedo[0], albedo[1], albedo[2], 1],
       height,
       roughness: clamp01(0.55 - shaft * 0.5),
-      ao: clamp01(0.92 - shaft * 0.35),
+      ao: clamp01(0.94 - shaft * 0.3),
       metallic: clamp01(0.5 * (1 - shaft)),
     };
   };
@@ -596,23 +599,21 @@ function deriveMaterialSeed(seed: number, id: MaterialId): number {
 
 /**
  * Bump strength for the height→normal central difference, tuned per material for readable
- * relief. Every painter above now spreads its height variation over a lower-frequency, wider
- * footprint (soft blotches/streaks instead of per-texel noise), which on its own would flatten
- * the central-difference gradient at any single texel — these are pulled up from their old
- * (64px-tile) values to compensate, so features stay clearly readable as normals once lit.
+ * relief. Painters spread height over wide soft footprints, which flattens per-texel gradients —
+ * these stay high enough that bevels/rivets still read once lit, without amplifying grit.
  */
 const NORMAL_STRENGTH: Record<MaterialId, number> = {
-  [MaterialId.BrushedSteel]: 18,
-  [MaterialId.PaintedSteel]: 15,
-  [MaterialId.Grating]: 8,
-  [MaterialId.RustedPlate]: 14,
-  [MaterialId.Concrete]: 11,
-  [MaterialId.ConveyorRubber]: 10,
-  [MaterialId.WarningChevrons]: 12,
-  [MaterialId.HazardSpike]: 6,
-  [MaterialId.Catwalk]: 8,
-  [MaterialId.EmissiveEnergy]: 12,
-  [MaterialId.EmissiveGoal]: 11,
+  [MaterialId.BrushedSteel]: 14,
+  [MaterialId.PaintedSteel]: 12,
+  [MaterialId.Grating]: 6,
+  [MaterialId.RustedPlate]: 11,
+  [MaterialId.Concrete]: 8,
+  [MaterialId.ConveyorRubber]: 8,
+  [MaterialId.WarningChevrons]: 9,
+  [MaterialId.HazardSpike]: 5,
+  [MaterialId.Catwalk]: 6,
+  [MaterialId.EmissiveEnergy]: 9,
+  [MaterialId.EmissiveGoal]: 8,
 };
 
 function paintMaterialInto(
