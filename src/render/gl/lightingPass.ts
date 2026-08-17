@@ -50,20 +50,20 @@ const vec3 KEY_LIGHT_DIR = vec3(0.350219, -0.525328, 0.775485); // normalize(vec
 // Dead Cells-style key light (see docs/art-direction.md): a touch cooler/bluer than a plain
 // white sun so lit edges read with a slight "cool rim" contrast against the warm emissive glows
 // (visor/goal/energy cells), and pushed a bit brighter/stronger than before for punchier relief.
-const vec3 KEY_LIGHT_COLOR = vec3(0.92, 0.97, 1.0);
-const float KEY_LIGHT_INTENSITY = 1.1;
+const vec3 KEY_LIGHT_COLOR = vec3(0.88, 0.94, 1.0);
+const float KEY_LIGHT_INTENSITY = 1.25;
 // Gain applied to the key light's raw Lambert term before clamping — a cheap "make the relief
 // read more clearly" contrast boost: bevels/rivets that were only weakly lit now push closer to
 // fully lit, without touching ambient (so open, unlit areas do not brighten/wash out). Clamped to
 // 1.0 downstream, so this cannot wash albedo to flat white — it only steepens how quickly a
 // surface reaches full key-lit brightness as it faces the light.
-const float KEY_LIGHT_GAIN = 1.35;
+const float KEY_LIGHT_GAIN = 1.5;
 // Short directional shadow march for the key light only, reusing shadowFactor's occluder ray
 // march (see below) over a small fixed world-space distance instead of a per-light radius — reads
 // as a cheap contact/crevice shadow under overhangs and inside corners. XY of KEY_LIGHT_DIR,
 // normalized and pre-computed the same way KEY_LIGHT_DIR itself is.
 const vec2 KEY_LIGHT_DIR_XY = vec2(0.554700, -0.832053); // normalize(KEY_LIGHT_DIR.xy)
-const float KEY_SHADOW_DISTANCE = 10.0;
+const float KEY_SHADOW_DISTANCE = 12.0;
 
 in vec2 v_uv;
 
@@ -158,11 +158,14 @@ void main() {
   }
 
   vec3 finalColor = lit + emissive;
-  // Soft height fog toward the bottom of the view — Dead Cells-style atmospheric depth that
-  // lifts the scene off a flat black void without crushing midtones (kept mild on purpose).
-  float depthFog = smoothstep(0.55, 1.05, v_uv.y) * 0.22;
-  vec3 fogColor = mix(u_ambientGround, background, 0.65);
-  finalColor = mix(finalColor, fogColor, depthFog * (0.35 + 0.65 * coverage));
+  // Dead Cells-style atmospheric depth: cool fog in open air, denser toward the bottom of the
+  // view so platforms feel grounded without crushing midtones.
+  float depthFog = smoothstep(0.45, 1.05, v_uv.y) * 0.28;
+  vec3 fogColor = mix(u_ambientSky * 0.55, background, 0.55);
+  finalColor = mix(finalColor, fogColor, depthFog * (0.4 + 0.6 * coverage));
+  // Mild top vignette of cooler air so shafts read against a slightly darker ceiling void.
+  float ceiling = smoothstep(0.55, 0.0, v_uv.y) * 0.08;
+  finalColor *= 1.0 - ceiling;
   outColor = vec4(mix(background, finalColor, coverage), 1.0);
 }
 `;

@@ -156,7 +156,7 @@ export function collectLights(params: CollectLightsParams, out: LightList): void
   out.setAmbient(
     [AMBIENT_GROUND[0], AMBIENT_GROUND[1], AMBIENT_GROUND[2]],
     [AMBIENT_SKY[0], AMBIENT_SKY[1], AMBIENT_SKY[2]],
-    0.42,
+    0.48,
   );
 
   const budget = lightBudgetForQuality(params.settings.quality);
@@ -183,22 +183,22 @@ function addPlayerLights(params: CollectLightsParams, out: LightList, budget: nu
   // in colour — the shell's own light grey albedo (see `drawPlayer`) still needs to stay legible
   // just outside the glow's falloff.
   const visor = parseColor(palette.visor);
-  out.add(centerX, player.body.y + 4, 24, 8, visor[0], visor[1], visor[2], 1.4);
+  out.add(centerX, player.body.y + 4, 28, 8, visor[0], visor[1], visor[2], 1.65);
   if (out.count >= budget) return;
 
   const coreColor = parseColor(player.energyRatio > 0.25 ? palette.energy : palette.uiWarn);
-  out.add(centerX, player.body.y + 10, 16, 7, coreColor[0], coreColor[1], coreColor[2], 0.85);
+  out.add(centerX, player.body.y + 10, 18, 7, coreColor[0], coreColor[1], coreColor[2], 1.0);
   if (out.count >= budget) return;
 
   if (player.state === 'thrust') {
     const flame = parseColor(palette.flame);
-    out.add(centerX, player.body.y + PLAYER_HEIGHT + 6, 70, 16, flame[0], flame[1], flame[2], 2.2);
+    out.add(centerX, player.body.y + PLAYER_HEIGHT + 6, 80, 16, flame[0], flame[1], flame[2], 2.5);
     if (out.count >= budget) return;
   }
 
   if (player.state === 'dash') {
     const dash = parseColor(palette.visorGlow);
-    out.add(centerX, player.body.y + PLAYER_HEIGHT / 2, 26, 12, dash[0], dash[1], dash[2], 0.8);
+    out.add(centerX, player.body.y + PLAYER_HEIGHT / 2, 32, 12, dash[0], dash[1], dash[2], 1.0);
   }
 }
 
@@ -241,17 +241,17 @@ function addTileLights(params: CollectLightsParams, out: LightList, budget: numb
         case TileKind.Goal:
           // Wider, brighter beacon glow — the goal should read from across the room like a Dead
           // Cells exit/pickup light, not a faint accent (see `docs/art-direction.md`).
-          out.add(cx, cy, 46, 12, goalColor[0], goalColor[1], goalColor[2], 1.5);
+          out.add(cx, cy, 56, 14, goalColor[0], goalColor[1], goalColor[2], 1.85);
           break;
         case TileKind.Checkpoint:
           if (world.isCheckpointActive(tx, ty)) {
-            out.add(cx, cy, 20, 8, checkpointColor[0], checkpointColor[1], checkpointColor[2], 0.6);
+            out.add(cx, cy, 24, 9, checkpointColor[0], checkpointColor[1], checkpointColor[2], 0.75);
           }
           break;
         case TileKind.Spike:
           if (spikeLights < MAX_SPIKE_LIGHTS) {
             spikeLights += 1;
-            out.add(cx, cy + 4, 14, 4, hazardColor[0], hazardColor[1], hazardColor[2], 0.4);
+            out.add(cx, cy + 4, 16, 5, hazardColor[0], hazardColor[1], hazardColor[2], 0.55);
           }
           break;
         case TileKind.Empty:

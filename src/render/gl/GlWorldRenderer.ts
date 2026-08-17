@@ -108,8 +108,8 @@ import { Filter, TexFormat } from './texture';
  * of the emissive channel's mid-brightness detail (goal, visor, light shafts), and a higher
  * intensity makes the resulting halo read as a punchy pickup/beacon glow rather than a faint hint.
  */
-const BLOOM_THRESHOLD = 0.18;
-const BLOOM_INTENSITY = 1.6;
+const BLOOM_THRESHOLD = 0.14;
+const BLOOM_INTENSITY = 1.85;
 
 /** Bound on the internal grain-hash time counter (seconds); wraps so long sessions keep float precision. */
 const TIME_WRAP_SEC = 1000;
@@ -201,9 +201,9 @@ function lightShaftIntensity(quality: QualityPreset): number {
     case 'medium':
       return 0.5;
     case 'high':
-      return 0.95;
+      return 1.05;
     case 'ultra':
-      return 1.1;
+      return 1.2;
     default: {
       const exhaustive: never = quality;
       throw new Error(`Unhandled quality preset in GlWorldRenderer: ${String(exhaustive)}`);
