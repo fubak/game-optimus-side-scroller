@@ -68,11 +68,11 @@ function buildWalkerRig(options: EnemyRigOptions): RigParts {
   // Tread deformation: each track block flexes independently (a small height pulse riding the
   // belt scroll), so the tracks read as flexible rather than a single painted-on strip. More
   // segments than the chassis is wide keeps the belt reading as continuous at any zoom.
-  const treadSegments = 6;
+  const treadSegments = 10;
   const segmentSpacing = width / treadSegments;
   for (let i = 0; i < treadSegments; i += 1) {
     const offset = (animTime * 40 * facing + i * segmentSpacing) % width;
-    const flex = 1 + Math.sin(animTime * 14 + i * 1.7) * 0.35;
+    const flex = 1 + Math.sin(animTime * 14 + i * 1.7) * 0.28;
     const blockX = dropY + height - 3;
     parts.push(rect(x + ((offset + width) % width), blockX, 2, Math.max(1, 2 * flex), palette.plateLight, { alpha }));
   }
@@ -91,13 +91,15 @@ function buildDroneRig(options: EnemyRigOptions): RigParts {
   const dropY = y + dyingDrop(dying);
   // Bank: a slow lateral rock, as if correcting for drift, layered under the rotor spin.
   const bank = Math.sin(animTime * 3.4) * 1.2;
-  const rotor = Math.sin(animTime * 30) * 2;
-  const rotorBlurWidth = width - 2 + Math.abs(Math.sin(animTime * 60)) * 1.5;
+  // Softer rotor blur (Dead Cells HD-2D): lower temporal frequency so the disc reads as motion
+  // smear rather than a strobing bar at 60 fps.
+  const rotor = Math.sin(animTime * 18) * 2;
+  const rotorBlurWidth = width - 2 + Math.abs(Math.sin(animTime * 36)) * 1.5;
   // A second blur blade 90° out of phase (cosine instead of sine) reads as the same disc seen
   // from a slightly different angle each frame — two overlapping streaks instead of one bar,
   // which is enough for the eye to fill in a spinning rotor disc rather than a single wing.
-  const rotor2 = Math.cos(animTime * 30) * 2;
-  const rotor2BlurWidth = width - 4 + Math.abs(Math.cos(animTime * 60)) * 1.5;
+  const rotor2 = Math.cos(animTime * 18) * 2;
+  const rotor2BlurWidth = width - 4 + Math.abs(Math.cos(animTime * 36)) * 1.5;
 
   const parts: RigRect[] = [
     rect(x + 1 + rotor + bank, dropY, rotorBlurWidth, 1, palette.plateLight, { alpha, emissive: 0.15 }),

@@ -158,6 +158,11 @@ void main() {
   }
 
   vec3 finalColor = lit + emissive;
+  // Soft height fog toward the bottom of the view — Dead Cells-style atmospheric depth that
+  // lifts the scene off a flat black void without crushing midtones (kept mild on purpose).
+  float depthFog = smoothstep(0.55, 1.05, v_uv.y) * 0.22;
+  vec3 fogColor = mix(u_ambientGround, background, 0.65);
+  finalColor = mix(finalColor, fogColor, depthFog * (0.35 + 0.65 * coverage));
   outColor = vec4(mix(background, finalColor, coverage), 1.0);
 }
 `;

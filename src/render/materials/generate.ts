@@ -602,17 +602,17 @@ function deriveMaterialSeed(seed: number, id: MaterialId): number {
  * (64px-tile) values to compensate, so features stay clearly readable as normals once lit.
  */
 const NORMAL_STRENGTH: Record<MaterialId, number> = {
-  [MaterialId.BrushedSteel]: 26,
-  [MaterialId.PaintedSteel]: 22,
-  [MaterialId.Grating]: 10,
-  [MaterialId.RustedPlate]: 20,
-  [MaterialId.Concrete]: 16,
-  [MaterialId.ConveyorRubber]: 14,
-  [MaterialId.WarningChevrons]: 16,
-  [MaterialId.HazardSpike]: 7,
-  [MaterialId.Catwalk]: 10,
-  [MaterialId.EmissiveEnergy]: 18,
-  [MaterialId.EmissiveGoal]: 16,
+  [MaterialId.BrushedSteel]: 18,
+  [MaterialId.PaintedSteel]: 15,
+  [MaterialId.Grating]: 8,
+  [MaterialId.RustedPlate]: 14,
+  [MaterialId.Concrete]: 11,
+  [MaterialId.ConveyorRubber]: 10,
+  [MaterialId.WarningChevrons]: 12,
+  [MaterialId.HazardSpike]: 6,
+  [MaterialId.Catwalk]: 8,
+  [MaterialId.EmissiveEnergy]: 12,
+  [MaterialId.EmissiveGoal]: 11,
 };
 
 function paintMaterialInto(

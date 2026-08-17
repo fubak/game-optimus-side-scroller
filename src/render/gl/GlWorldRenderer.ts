@@ -147,8 +147,8 @@ interface DashGhost {
   age: number;
 }
 
-/** Matches the fade duration `drawDashGhost` uses in Classic (`renderer.ts`). */
-const GHOST_LIFETIME = 0.18;
+/** Matches a slightly longer Dead Cells-style after-image than Classic's short `drawDashGhost`. */
+const GHOST_LIFETIME = 0.28;
 
 function lerp(a: number, b: number, t: number): number {
   return a + (b - a) * t;
@@ -861,6 +861,17 @@ export class GlWorldRenderer implements WorldView {
       player.isInvulnerable && Math.floor(player.invulnerableTime * INVULNERABLE_BLINK_HZ) % 2 === 1;
     if (blinkedOut) return;
 
+    // Soft contact shadow under the feet — a Dead Cells silhouette cue that anchors the character
+    // to the ground plane without a full shadow map for the player.
+    this.gbufferBatch.rect(playerPos.x - 1, playerPos.y + PLAYER_HEIGHT - 1, PLAYER_WIDTH + 2, 3, {
+      r: 0.02,
+      g: 0.03,
+      b: 0.05,
+      a: 0.35,
+      roughness: 1,
+      metallic: 0,
+    });
+
     const parts = buildOptimusRig({
       x: playerPos.x,
       y: playerPos.y,
@@ -955,10 +966,24 @@ export class GlWorldRenderer implements WorldView {
   private drawGhosts(): void {
     if (this.ghosts.length === 0) return;
     const color = parseColor(palette.visorGlow);
+    const hot = parseColor(palette.visor);
     for (const ghost of this.ghosts) {
-      const alpha = 0.3 * (1 - ghost.age / GHOST_LIFETIME);
+      const life = 1 - ghost.age / GHOST_LIFETIME;
+      const alpha = 0.42 * life * life;
       if (alpha <= 0) continue;
-      this.forwardBatch.rect(ghost.x, ghost.y, PLAYER_WIDTH, PLAYER_HEIGHT, color[0], color[1], color[2], alpha);
+      // Soft cyan after-image: outer halo + hotter core, closer to Dead Cells dash streaks than a
+      // single flat AABB copy of the collision box.
+      this.forwardBatch.rect(
+        ghost.x - 1,
+        ghost.y - 1,
+        PLAYER_WIDTH + 2,
+        PLAYER_HEIGHT + 2,
+        color[0],
+        color[1],
+        color[2],
+        alpha * 0.45,
+      );
+      this.forwardBatch.rect(ghost.x, ghost.y, PLAYER_WIDTH, PLAYER_HEIGHT, hot[0], hot[1], hot[2], alpha);
     }
   }
 
@@ -966,11 +991,15 @@ export class GlWorldRenderer implements WorldView {
     const { player } = world;
     if (!player.isAlive || player.state !== 'thrust') return;
     const flame = parseColor(palette.flame);
+    const hot = parseColor(palette.flameHot);
+    const spark = parseColor(palette.spark);
     const flicker = 0.6 + Math.abs(Math.sin(player.animTime * 30)) * 0.4;
-    const length = (5 + flicker * 5) * clamp(0.35 + player.energyRatio, 0.35, 1);
+    const length = (6 + flicker * 6) * clamp(0.35 + player.energyRatio, 0.35, 1);
     const centerX = player.body.x + PLAYER_WIDTH / 2;
     const topY = player.body.y + PLAYER_HEIGHT;
-    this.forwardBatch.rect(centerX - 3, topY, 6, length, flame[0], flame[1], flame[2], 0.85);
+    this.forwardBatch.rect(centerX - 4, topY, 8, length, flame[0], flame[1], flame[2], 0.55);
+    this.forwardBatch.rect(centerX - 2.5, topY, 5, length * 0.85, hot[0], hot[1], hot[2], 0.9);
+    this.forwardBatch.rect(centerX - 1, topY, 2, length * 1.15, spark[0], spark[1], spark[2], 0.95);
   }
 
   /**

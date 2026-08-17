@@ -202,9 +202,10 @@ export class BackgroundBatch {
   setLayers(layers: readonly ParallaxLayer[]): void {
     for (const layer of this.layers) layer.texture.dispose();
     this.layers = layers.map((layer) => {
-      const hiRes = layer.canvas.width > layer.width || layer.canvas.height > layer.height;
       const texture = new Texture(this.gl, TexFormat.RGBA8, {
-        filter: hiRes ? Filter.Linear : Filter.Nearest,
+        // Enhanced always samples parallax with linear filtering — even Classic-resolution
+        // layers look softer at 4K than nearest (see `docs/art-direction.md`).
+        filter: Filter.Linear,
         wrap: Wrap.Clamp,
       });
       texture.uploadImage(layer.canvas, layer.canvas.width, layer.canvas.height);
