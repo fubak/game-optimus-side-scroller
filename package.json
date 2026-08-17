@@ -22,6 +22,7 @@
     "bench": "vite-node scripts/bench.ts",
     "generate:fonts": "vite-node scripts/generateMsdfFont.ts",
     "generate:materials": "vite-node scripts/generateMaterials.ts",
+    "generate:spritesheets": "vite-node scripts/generateCharacterSheets.ts",
     "ci": "npm run lint && npm run typecheck && npm run test && npm run build && npm run test:e2e"
   },
   "devDependencies": {

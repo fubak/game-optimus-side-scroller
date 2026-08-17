@@ -25,6 +25,9 @@ export { MsdfBatch } from './msdfBatch';
 export type { MaterialTextureSet } from './materialTextures';
 export { updateMaterialTextureSet, uploadMaterialAtlas } from './materialTextures';
 
+export type { CharacterTextureSet } from './characterTextures';
+export { uploadCharacterAtlas } from './characterTextures';
+
 export type { AttachmentSpec } from './renderTarget';
 export { RenderTarget } from './renderTarget';
 
@@ -38,6 +41,8 @@ export { TileBatch } from './tileBatch';
 
 export type { GBufferQuadStyle } from './gbufferBatch';
 export { GBufferBatch } from './gbufferBatch';
+
+export { SpriteGBufferBatch } from './spriteGBufferBatch';
 
 export { BackgroundBatch } from './backgroundBatch';
 

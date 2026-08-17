@@ -38,7 +38,7 @@ the Enhanced-only changes above touch it.
 | --- | --- |
 | Materials | 128px hand-authored panels, drips, bold hazard (`materials/generate.ts`) |
 | Parallax | 6× factory skyline, warm windows, dual haze (`parallaxEnhanced.ts`) |
-| Characters | Dense skeletal silhouettes + emissive accents (`rig/`) |
+| Characters | High-FPS hand-drawn-style sheets baked from rigs (`spritesheet/`) |
 | Lighting | Cool key, punchy beacons, atmospheric fog (`lightingPass.ts`, `lights.ts`) |
 | HUD | Full-res MSDF on Enhanced (`uiSpace.ts`) |
 
@@ -52,6 +52,15 @@ the Enhanced-only changes above touch it.
 | Procedural materials (hand-authored panels, 128px tiles) | `src/render/materials/generate.ts` |
 | Enhanced parallax / light shafts | `src/render/parallaxEnhanced.ts`, `src/render/gl/backgroundBatch.ts` |
 | Soft GPU particles | `src/render/gl/particleBatch.ts`, `GlWorldRenderer.drawParticles` |
-| Skeletal animation fluidity | `src/render/rig/optimusRig.ts` |
+| Character sprite sheets (Dead Cells–smooth FPS) | `src/render/spritesheet/`, `SpriteGBufferBatch` |
+| Skeletal bake source poses | `src/render/rig/optimusRig.ts`, `enemyRigs.ts` |
 | Full-res Enhanced HUD/menus | `src/render/uiSpace.ts`, `src/main.ts` |
 | Softened tile grid (Enhanced) | `GlWorldRenderer` tile UV bleed + quad overlap |
+
+## Character animation (Enhanced)
+
+Optimus and enemies play **procedural sprite sheets** generated at Enhanced load from the skeletal
+rigs (soft alpha fringe + dark ink outline). Clip rates are intentionally dense — run is 20 frames
+@ 20fps, dash @ 30fps, thrust @ 24fps — so motion reads closer to Dead Cells' painted fluidity than
+to sparse keyframe swaps. Classic (`?classic=1`) is unchanged and still uses Canvas2D sprites.
+Previews: `npm run generate:spritesheets` → `public/generated/spritesheets/`.

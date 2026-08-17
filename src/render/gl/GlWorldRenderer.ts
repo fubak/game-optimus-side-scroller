@@ -11,11 +11,12 @@
  *
  * Pipeline, once per frame:
  *  1. **Geometry pass** — {@link gBuffer} is cleared and filled: {@link tileBatch} draws every
- *     visible tile as a textured quad sampling the shared material atlas; {@link gbufferBatch}
- *     draws every entity (pickups, enemies, projectiles, the player) as a flat-coloured quad with
- *     a procedural bevel normal. No blending: later draws simply overwrite earlier ones, which is
- *     enough painter's-algorithm ordering for a 2D platformer with no overlapping geometry that
- *     needs to blend.
+ *     visible tile as a textured quad sampling the shared material atlas; {@link spriteBatch}
+ *     draws the player and enemies from procedurally baked hand-drawn-style sprite sheets;
+ *     {@link gbufferBatch} draws pickups/projectiles (and the player contact shadow) as coloured
+ *     quads with a procedural bevel normal. No blending: later draws simply overwrite earlier ones,
+ *     which is enough painter's-algorithm ordering for a 2D platformer with no overlapping geometry
+ *     that needs to blend.
  *  2. **Occluder pass** — {@link occluderTarget} (a single-channel mask) is stamped with a white
  *     quad per visible solid tile and the player's AABB, feeding the lighting pass's soft-shadow
  *     ray march.
@@ -60,7 +61,7 @@
 
 import { INTERNAL_HEIGHT, INTERNAL_WIDTH } from '../../core/canvas';
 import { clamp } from '../../core/math';
-import { INVULNERABLE_BLINK_HZ, PLAYER_HEIGHT, PLAYER_WIDTH, RUN_MAX_SPEED } from '../../game/constants';
+import { INVULNERABLE_BLINK_HZ, PLAYER_HEIGHT, PLAYER_WIDTH } from '../../game/constants';
 import { ENEMY_DEATH_TIME, PROJECTILE_SIZE } from '../../game/enemies';
 import type { Enemy } from '../../game/enemies';
 import type { Pickup } from '../../game/pickups';
@@ -76,13 +77,21 @@ import { createParallaxLayers } from '../parallax';
 import { palette } from '../palette';
 import type { ParticleView } from '../particles';
 import { ClassicWorldRenderer } from '../renderer';
-import { drawRigToGBuffer } from '../rig/drawRig';
-import { buildEnemyRig } from '../rig/enemyRigs';
-import { buildOptimusRig } from '../rig/optimusRig';
 import { DEFAULT_RENDER_SETTINGS } from '../settings';
 import type { QualityPreset, RenderSettings } from '../settings';
+import {
+  buildCharacterAtlas,
+  enemyCanonicalSize,
+  enemyClipId,
+  frameKey,
+  optimusClipId,
+  sampleClipFrame,
+} from '../spritesheet';
+import type { CharacterAtlas, ClipId } from '../spritesheet';
 import type { WorldView } from '../view';
 import { BackgroundBatch } from './backgroundBatch';
+import { uploadCharacterAtlas } from './characterTextures';
+import type { CharacterTextureSet } from './characterTextures';
 import { GlDevice, tryCreateWebGL2 } from './device';
 import { GBufferBatch } from './gbufferBatch';
 import { GpuTimer } from './gpuTimer';
@@ -96,6 +105,7 @@ import { CompositePass } from './post/composite';
 import { RenderTarget } from './renderTarget';
 import { SolidBatch } from './solidBatch';
 import type { CameraOffset, ViewSize } from './solidBatch';
+import { SpriteGBufferBatch } from './spriteGBufferBatch';
 import { TileBatch } from './tileBatch';
 import type { UvRect } from './tileBatch';
 import { TonemapPass } from './tonemap';
@@ -171,6 +181,8 @@ function parseDebugChannel(value: string | null): DebugChannel | null {
  * neighbouring material cell.
  */
 const TILE_UV_PAD_BLEED_TEXELS = 0.5;
+/** Half-texel bleed into character-sheet cell padding for linear filtering. */
+const SPRITE_UV_PAD_BLEED_TEXELS = 0.5;
 
 /**
  * World-space half-overlap when queuing Enhanced tile quads. Adjacent 16px tiles overlap by 1px
@@ -187,6 +199,23 @@ function uvRectFromAtlasRect(rect: AtlasRect, atlasWidth: number, atlasHeight: n
     u1: (rect.x + rect.width + bleed) / atlasWidth,
     v1: (rect.y + rect.height + bleed) / atlasHeight,
   };
+}
+
+function spriteUvFromRect(
+  rect: AtlasRect,
+  atlasWidth: number,
+  atlasHeight: number,
+  facing: number,
+): UvRect {
+  const bleed = SPRITE_UV_PAD_BLEED_TEXELS;
+  const u0 = (rect.x - bleed) / atlasWidth;
+  const v0 = (rect.y - bleed) / atlasHeight;
+  const u1 = (rect.x + rect.width + bleed) / atlasWidth;
+  const v1 = (rect.y + rect.height + bleed) / atlasHeight;
+  if (facing < 0) {
+    return { u0: u1, v0, u1: u0, v1 };
+  }
+  return { u0, v0, u1, v1 };
 }
 
 /**
@@ -252,6 +281,8 @@ export class GlWorldRenderer implements WorldView {
 
   private readonly tileBatch: TileBatch;
   private readonly gbufferBatch: GBufferBatch;
+  /** Textured character sheets (hand-drawn-style bake from skeletal rigs). */
+  private readonly spriteBatch: SpriteGBufferBatch;
   private readonly backgroundBatch: BackgroundBatch;
   /** Dedicated {@link SolidBatch} for stamping the occluder mask (white = "blocks light"). */
   private readonly occluderBatch: SolidBatch;
@@ -271,6 +302,8 @@ export class GlWorldRenderer implements WorldView {
 
   private readonly materialTextures: MaterialTextureSet;
   private readonly materialUvRects: ReadonlyMap<MaterialId, UvRect>;
+  private readonly characterAtlas: CharacterAtlas;
+  private readonly characterTextures: CharacterTextureSet;
 
   private disposed = false;
   /** Set once a deferred frame throws; from then on this renderer permanently defers to Classic. */
@@ -363,6 +396,9 @@ export class GlWorldRenderer implements WorldView {
 
     this.tileBatch = new TileBatch(gl, this.materialTextures);
     this.gbufferBatch = new GBufferBatch(gl);
+    this.characterAtlas = buildCharacterAtlas();
+    this.characterTextures = uploadCharacterAtlas(gl, this.characterAtlas);
+    this.spriteBatch = new SpriteGBufferBatch(gl, this.characterTextures);
     this.backgroundBatch = new BackgroundBatch(gl);
     this.occluderBatch = new SolidBatch(gl);
     this.forwardBatch = new SolidBatch(gl);
@@ -550,8 +586,10 @@ export class GlWorldRenderer implements WorldView {
     this.occluderTarget.dispose();
     this.accumTarget.dispose();
     this.materialTextures.dispose();
+    this.characterTextures.dispose();
     this.tileBatch.dispose();
     this.gbufferBatch.dispose();
+    this.spriteBatch.dispose();
     this.backgroundBatch.dispose();
     this.occluderBatch.dispose();
     this.forwardBatch.dispose();
@@ -719,11 +757,44 @@ export class GlWorldRenderer implements WorldView {
     this.tileBatch.flush();
 
     this.gbufferBatch.begin(view, cam);
+    this.spriteBatch.begin(view, cam);
     this.drawPickups(world);
     this.drawEnemies(world);
     this.drawProjectiles(world);
     this.drawPlayer(world, player);
     this.gbufferBatch.flush();
+    this.spriteBatch.flush();
+  }
+
+  /**
+   * Queue one baked character-sheet frame into {@link spriteBatch}. Facing &lt; 0 mirrors UVs.
+   * `body*` is the gameplay AABB; the sheet is anchored at the feet. Optional `drawScale*`
+   * remaps a clip baked at a canonical size onto a differently sized body (enemies).
+   */
+  private queueCharacterSprite(
+    clipId: ClipId,
+    animTime: number,
+    bodyX: number,
+    bodyY: number,
+    bodyWidth: number,
+    bodyHeight: number,
+    facing: number,
+    drawScaleX = 1,
+    drawScaleY = 1,
+  ): void {
+    const clip = this.characterAtlas.clips.get(clipId);
+    if (clip === undefined) return;
+    const frame = sampleClipFrame(clip, animTime);
+    const rect = this.characterAtlas.rects.get(frameKey(clipId, frame));
+    const drawSize = this.characterAtlas.drawSizes.get(clipId);
+    if (rect === undefined || drawSize === undefined) return;
+
+    const drawW = drawSize.width * drawScaleX;
+    const drawH = drawSize.height * drawScaleY;
+    const x = bodyX + bodyWidth / 2 - drawW / 2;
+    const y = bodyY + bodyHeight - drawH;
+    const uv = spriteUvFromRect(rect, this.characterAtlas.width, this.characterAtlas.height, facing);
+    this.spriteBatch.sprite(x, y, drawW, drawH, uv);
   }
 
   /** Resolves a {@link DebugChannel} to the texture it should present. */
@@ -842,30 +913,26 @@ export class GlWorldRenderer implements WorldView {
   }
 
   /**
-   * Draws one enemy through {@link buildEnemyRig} — a higher-density silhouette (tread flex,
-   * rotor bank, recoil/heat, core iris) than the single flat AABB quad this used to emit.
+   * Draws one enemy from its procedural sprite sheet (baked from {@link buildEnemyRig} poses
+   * with soft edges + ink outline). High-FPS clips keep motion Dead Cells–smooth.
    */
-  private drawEnemy(world: World, enemy: Enemy): void {
+  private drawEnemy(_world: World, enemy: Enemy): void {
     const dyingProgress = enemy.state === 'dying' ? 1 - enemy.deathTimer / ENEMY_DEATH_TIME : 0;
     if (dyingProgress >= 1) return;
 
-    const telegraphing = world.isCrusherTelegraphing(enemy);
     const { x, y, width, height } = enemy.body;
-
-    const parts = buildEnemyRig({
-      kind: enemy.kind,
+    const canonical = enemyCanonicalSize(enemy.kind);
+    this.queueCharacterSprite(
+      enemyClipId(enemy.kind),
+      enemy.animTime,
       x,
       y,
       width,
       height,
-      facing: enemy.direction,
-      animTime: enemy.animTime,
-      dying: dyingProgress,
-      telegraph: telegraphing || enemy.lethal,
-      vulnerable: enemy.kind === 'overseer' ? world.isBossVulnerable(enemy) : false,
-      hitPoints: enemy.hitPoints,
-    });
-    drawRigToGBuffer(this.gbufferBatch, parts);
+      enemy.direction,
+      width / canonical.width,
+      height / canonical.height,
+    );
   }
 
   private drawProjectiles(world: World): void {
@@ -892,7 +959,10 @@ export class GlWorldRenderer implements WorldView {
     }
   }
 
-  /** Draws Optimus through {@link buildOptimusRig} — the same skeletal rig used to feed the GL path. */
+  /**
+   * Draws Optimus from the high-FPS procedural sprite sheet (baked from {@link buildOptimusRig}
+   * with hand-drawn soft edges / ink outline). Classic Canvas2D still uses the flat sprites path.
+   */
   private drawPlayer(world: World, playerPos: Point): void {
     const { player } = world;
     const blinkedOut =
@@ -910,16 +980,15 @@ export class GlWorldRenderer implements WorldView {
       metallic: 0,
     });
 
-    const parts = buildOptimusRig({
-      x: playerPos.x,
-      y: playerPos.y,
-      facing: player.facing,
-      state: player.state,
-      animTime: player.animTime,
-      speedRatio: Math.abs(player.body.vx) / RUN_MAX_SPEED,
-      energyRatio: player.energyRatio,
-    });
-    drawRigToGBuffer(this.gbufferBatch, parts);
+    this.queueCharacterSprite(
+      optimusClipId(player.state),
+      player.animTime,
+      playerPos.x,
+      playerPos.y,
+      PLAYER_WIDTH,
+      PLAYER_HEIGHT,
+      player.facing,
+    );
   }
 
   /** Fills {@link occluderTarget}: solid terrain plus the player's own AABB block light. */
