@@ -32,7 +32,15 @@ nearest-neighbour pixel-art look it always was. It is the fallback renderer, the
 and the basis for the Playwright visual-regression baselines (`tests/e2e/visual.spec.ts`) — none of
 the Enhanced-only changes above touch it.
 
-## Where the defaults live
+## Enhanced layers (art quality)
+
+| Layer | Target |
+| --- | --- |
+| Materials | 128px hand-authored panels, drips, bold hazard (`materials/generate.ts`) |
+| Parallax | 6× factory skyline, warm windows, dual haze (`parallaxEnhanced.ts`) |
+| Characters | Dense skeletal silhouettes + emissive accents (`rig/`) |
+| Lighting | Cool key, punchy beacons, atmospheric fog (`lightingPass.ts`, `lights.ts`) |
+| HUD | Full-res MSDF on Enhanced (`uiSpace.ts`) |
 
 | Concern | File |
 | --- | --- |
