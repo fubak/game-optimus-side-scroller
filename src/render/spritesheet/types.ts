@@ -16,7 +16,16 @@ export type OptimusClipId =
   | 'dead'
   | 'victory';
 
-export type EnemyClipId = 'walker' | 'drone' | 'turret' | 'crusher' | 'overseer';
+/** Base enemy idle loops plus telegraph / sealed-core state clips. */
+export type EnemyClipId =
+  | 'walker'
+  | 'drone'
+  | 'turret'
+  | 'turretTelegraph'
+  | 'crusher'
+  | 'crusherTelegraph'
+  | 'overseer'
+  | 'overseerSealed';
 
 export type ClipId = `optimus:${OptimusClipId}` | `enemy:${EnemyClipId}`;
 

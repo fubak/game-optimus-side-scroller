@@ -33,4 +33,11 @@ describe('optimusClipId / enemyClipId', () => {
     expect(enemyClipId('walker')).toBe('enemy:walker');
     expect(enemyClipId('overseer')).toBe('enemy:overseer');
   });
+
+  it('selects telegraph and sealed-core clips from combat state', () => {
+    expect(enemyClipId('turret', { telegraph: true })).toBe('enemy:turretTelegraph');
+    expect(enemyClipId('crusher', { telegraph: true })).toBe('enemy:crusherTelegraph');
+    expect(enemyClipId('overseer', { vulnerable: false })).toBe('enemy:overseerSealed');
+    expect(enemyClipId('overseer', { vulnerable: true })).toBe('enemy:overseer');
+  });
 });

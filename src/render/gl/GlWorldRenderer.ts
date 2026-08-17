@@ -62,7 +62,7 @@
 import { INTERNAL_HEIGHT, INTERNAL_WIDTH } from '../../core/canvas';
 import { clamp } from '../../core/math';
 import { INVULNERABLE_BLINK_HZ, PLAYER_HEIGHT, PLAYER_WIDTH } from '../../game/constants';
-import { ENEMY_DEATH_TIME, PROJECTILE_SIZE } from '../../game/enemies';
+import { ENEMY_DEATH_TIME, PROJECTILE_SIZE, TURRET_WINDUP } from '../../game/enemies';
 import type { Enemy } from '../../game/enemies';
 import type { Pickup } from '../../game/pickups';
 import { isSolid } from '../../game/tiles';
@@ -70,7 +70,7 @@ import { TileKind } from '../../game/tiles';
 import type { World } from '../../game/world';
 import { parseColor } from '../color';
 import { generateMaterialAtlas } from '../materials/generate';
-import { materialForTileAt } from '../materials/tileMaterial';
+import { materialForTileAt, tileVariation } from '../materials/tileMaterial';
 import { ALL_MATERIAL_IDS } from '../materials/types';
 import type { AtlasRect, MaterialId } from '../materials/types';
 import { createParallaxLayers } from '../parallax';
@@ -265,6 +265,13 @@ function tileEmissive(kind: TileKind, tx: number, ty: number, world: World): num
       throw new Error(`Unhandled tile kind in GlWorldRenderer: ${String(exhaustive)}`);
     }
   }
+}
+
+/** Combat telegraph for Enhanced sheet selection (crushers/boss + turret wind-up). */
+function isEnhancedEnemyTelegraphing(world: World, enemy: Enemy): boolean {
+  if (world.isCrusherTelegraphing(enemy) || enemy.lethal) return true;
+  if (enemy.kind === 'turret' && enemy.timer > 0 && enemy.timer < TURRET_WINDUP) return true;
+  return false;
 }
 
 export class GlWorldRenderer implements WorldView {
@@ -763,6 +770,7 @@ export class GlWorldRenderer implements WorldView {
 
     this.gbufferBatch.begin(view, cam);
     this.spriteBatch.begin(view, cam);
+    this.drawTileOverlays(world, cam, view);
     this.drawPickups(world);
     this.drawEnemies(world);
     this.drawProjectiles(world);
@@ -847,6 +855,99 @@ export class GlWorldRenderer implements WorldView {
           uv,
           emissive,
         );
+      }
+    }
+  }
+
+  /**
+   * Spike tips + conveyor belt cleats drawn as G-buffer quads so hazards read as Classic silhouettes
+   * instead of flat material slabs. Visual only — collision stays on the tilemap.
+   */
+  private drawTileOverlays(world: World, cam: CameraOffset, view: ViewSize): void {
+    const { map } = world;
+    const tileSize = map.tileSize;
+    const minTx = Math.max(0, Math.floor(cam.x / tileSize));
+    const maxTx = Math.min(map.width - 1, Math.floor((cam.x + view.width) / tileSize));
+    const minTy = Math.max(0, Math.floor(cam.y / tileSize));
+    const maxTy = Math.min(map.height - 1, Math.floor((cam.y + view.height) / tileSize));
+    const hazard = parseColor(palette.hazard);
+    const hazardDark = parseColor(palette.hazardDark);
+    const rust = parseColor(palette.rust);
+
+    for (let ty = minTy; ty <= maxTy; ty += 1) {
+      for (let tx = minTx; tx <= maxTx; tx += 1) {
+        const kind = map.tileAt(tx, ty);
+        const x = tx * tileSize;
+        const y = ty * tileSize;
+        switch (kind) {
+          case TileKind.Spike: {
+            const hash = tileVariation(tx, ty);
+            this.gbufferBatch.rect(x, y + 12, tileSize, 4, {
+              r: hazardDark[0],
+              g: hazardDark[1],
+              b: hazardDark[2],
+              roughness: 0.35,
+              metallic: 0.75,
+              emissiveR: hazard[0] * 0.15,
+              emissiveG: hazard[1] * 0.15,
+              emissiveB: hazard[2] * 0.15,
+            });
+            for (let i = 0; i < 4; i += 1) {
+              const tipH = 6 + ((hash >> (i * 2)) & 1) * 2;
+              const tipX = x + i * 4 + 1;
+              const tipY = y + 16 - tipH - 4;
+              this.gbufferBatch.rect(tipX, tipY, 2, tipH, {
+                r: hazard[0],
+                g: hazard[1],
+                b: hazard[2],
+                roughness: 0.28,
+                metallic: 0.85,
+                emissiveR: hazard[0] * 0.35,
+                emissiveG: hazard[1] * 0.35,
+                emissiveB: hazard[2] * 0.35,
+              });
+              this.gbufferBatch.rect(tipX + 1, tipY, 1, tipH, {
+                r: hazardDark[0],
+                g: hazardDark[1],
+                b: hazardDark[2],
+                roughness: 0.4,
+                metallic: 0.7,
+              });
+            }
+            break;
+          }
+          case TileKind.ConveyorLeft:
+          case TileKind.ConveyorRight: {
+            const direction = kind === TileKind.ConveyorRight ? 1 : -1;
+            const shift = Math.floor(world.elapsedSec * 60 * direction) % 8;
+            for (let i = -8; i < tileSize + 8; i += 8) {
+              const cleatX = x + ((((i + shift) % 8) + 8) % 8) + Math.floor(i / 8) * 8;
+              if (cleatX < x - 4 || cleatX > x + tileSize) continue;
+              const drawX = Math.max(x, cleatX);
+              const drawW = Math.min(3, x + tileSize - cleatX);
+              if (drawW <= 0) continue;
+              this.gbufferBatch.rect(drawX, y + 1, drawW, 2, {
+                r: rust[0],
+                g: rust[1],
+                b: rust[2],
+                roughness: 0.55,
+                metallic: 0.35,
+              });
+            }
+            break;
+          }
+          case TileKind.Empty:
+          case TileKind.Solid:
+          case TileKind.OneWay:
+          case TileKind.Checkpoint:
+          case TileKind.Goal:
+          case TileKind.Scenery:
+            break;
+          default: {
+            const exhaustive: never = kind;
+            throw new Error(`Unhandled tile kind in drawTileOverlays: ${String(exhaustive)}`);
+          }
+        }
       }
     }
   }
@@ -1008,17 +1109,18 @@ export class GlWorldRenderer implements WorldView {
 
   /**
    * Draws one enemy from its procedural sprite sheet (baked from {@link buildEnemyRig} poses
-   * with soft edges + ink outline). Dying enemies switch to the live rig so fade/drop still play.
+   * with soft edges + ink outline). Dying enemies switch to the live rig so fade/drop still play;
+   * telegraph / sealed-core states select alternate baked clips.
    */
   private drawEnemy(world: World, enemy: Enemy): void {
     const dyingProgress = enemy.state === 'dying' ? 1 - enemy.deathTimer / ENEMY_DEATH_TIME : 0;
     if (dyingProgress >= 1) return;
 
     const { x, y, width, height } = enemy.body;
-    const telegraphing = world.isCrusherTelegraphing(enemy) || enemy.lethal;
+    const telegraphing = isEnhancedEnemyTelegraphing(world, enemy);
+    const vulnerable = enemy.kind === 'overseer' ? world.isBossVulnerable(enemy) : false;
 
-    // Live rig for telegraph / dying / boss so sheets stay a cheap idle loop for fodder enemies.
-    if (dyingProgress > 0 || telegraphing || enemy.kind === 'overseer') {
+    if (dyingProgress > 0) {
       const parts = buildEnemyRig({
         kind: enemy.kind,
         x,
@@ -1029,7 +1131,7 @@ export class GlWorldRenderer implements WorldView {
         animTime: enemy.animTime,
         dying: dyingProgress,
         telegraph: telegraphing,
-        vulnerable: enemy.kind === 'overseer' ? world.isBossVulnerable(enemy) : false,
+        vulnerable,
         hitPoints: enemy.hitPoints,
       });
       drawRigToGBuffer(this.gbufferBatch, parts);
@@ -1038,7 +1140,7 @@ export class GlWorldRenderer implements WorldView {
 
     const canonical = enemyCanonicalSize(enemy.kind);
     this.queueCharacterSprite(
-      enemyClipId(enemy.kind),
+      enemyClipId(enemy.kind, { telegraph: telegraphing, vulnerable }),
       enemy.animTime,
       x,
       y,

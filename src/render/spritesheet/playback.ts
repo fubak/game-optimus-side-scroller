@@ -40,18 +40,39 @@ export function optimusClipId(state: PlayerState): ClipId {
   }
 }
 
-/** Resolve a clip id for an enemy kind. */
-export function enemyClipId(kind: EnemyKind): ClipId {
+export interface EnemyClipOptions {
+  readonly telegraph?: boolean;
+  /** Overseer only — false selects the sealed-core sheet. */
+  readonly vulnerable?: boolean;
+}
+
+/** Resolve a clip id for an enemy kind + combat state. */
+export function enemyClipId(kind: EnemyKind, options: EnemyClipOptions = {}): ClipId {
+  const telegraph = options.telegraph === true;
   switch (kind) {
     case 'walker':
+      return 'enemy:walker';
     case 'drone':
+      return 'enemy:drone';
     case 'turret':
+      return telegraph ? 'enemy:turretTelegraph' : 'enemy:turret';
     case 'crusher':
+      return telegraph ? 'enemy:crusherTelegraph' : 'enemy:crusher';
     case 'overseer':
-      return `enemy:${kind}`;
+      return options.vulnerable === false ? 'enemy:overseerSealed' : 'enemy:overseer';
     default: {
       const exhaustive: never = kind;
       throw new Error(`Unhandled enemy kind in enemyClipId: ${String(exhaustive)}`);
     }
   }
+}
+
+/** Canonical enemy kind for sizing a clip (state suffixes share the same body). */
+export function enemyKindFromClipId(clipId: ClipId): EnemyKind {
+  if (clipId.startsWith('enemy:turret')) return 'turret';
+  if (clipId.startsWith('enemy:crusher')) return 'crusher';
+  if (clipId.startsWith('enemy:overseer')) return 'overseer';
+  if (clipId === 'enemy:walker') return 'walker';
+  if (clipId === 'enemy:drone') return 'drone';
+  throw new Error(`Not an enemy clip id: ${clipId}`);
 }

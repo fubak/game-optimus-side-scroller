@@ -253,11 +253,12 @@ function draw(alpha = 0): void {
   // HUD/menus stay sharp (see `uiSpace.ts`). Classic keeps identity + bitmap font.
   const uiScale = beginUiSpace(ctx, display);
   const textDraw = makeBufferSpaceTextDraw(uiScale, hudTextDraw());
+  const enhancedChrome = renderer.backend === 'webgl2';
   if (world !== null && game.showsWorldBehind) {
-    game.hud.draw(ctx, world, INTERNAL_WIDTH, textDraw);
+    game.hud.draw(ctx, world, INTERNAL_WIDTH, textDraw, enhancedChrome);
   }
   drawDamageFeedback(ctx, game);
-  drawScene(ctx, game, textDraw);
+  drawScene(ctx, game, textDraw, enhancedChrome);
   drawSceneTransition(ctx, game);
   if (touch !== null) {
     drawTouchControls(ctx, touchButtons, touch.activeActions, textDraw);

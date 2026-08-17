@@ -2,6 +2,7 @@ import { INTERNAL_HEIGHT, INTERNAL_WIDTH } from '../core/canvas';
 import type { Game, LevelSummary } from '../game/game';
 import { MENU_ITEMS } from '../game/scenes';
 import type { SceneState } from '../game/scenes';
+import { drawOptimusVictory } from './drawOptimusEnhanced';
 import { formatScore, formatTime } from './hud';
 import { palette } from './palette';
 import { drawOptimus } from './sprites';
@@ -54,8 +55,14 @@ export function drawDamageFeedback(ctx: CanvasRenderingContext2D, game: Game): v
 /**
  * @param textDraw Text renderer to use — `drawText` (bitmap, Classic) or `drawTextMsdf`
  *   (distance-field, Enhanced). Defaults to `drawText` so existing callers/tests keep working.
+ * @param enhanced When true, epilogue Optimus uses the Tesla polymer rig instead of Classic bricks.
  */
-export function drawScene(ctx: CanvasRenderingContext2D, game: Game, textDraw: DrawTextFn = drawText): void {
+export function drawScene(
+  ctx: CanvasRenderingContext2D,
+  game: Game,
+  textDraw: DrawTextFn = drawText,
+  enhanced = false,
+): void {
   const scene = game.scene;
   switch (scene.name) {
     case 'title':
@@ -83,7 +90,7 @@ export function drawScene(ctx: CanvasRenderingContext2D, game: Game, textDraw: D
       drawGameOver(ctx, game, textDraw);
       break;
     case 'campaignComplete':
-      drawCampaignComplete(ctx, game, textDraw);
+      drawCampaignComplete(ctx, game, textDraw, enhanced);
       break;
     default: {
       const exhaustive: never = scene.name;
@@ -347,7 +354,12 @@ function drawGameOver(ctx: CanvasRenderingContext2D, game: Game, textDraw: DrawT
   drawMenu(ctx, MENU_ITEMS.gameOver, game.scene.cursor, 130, textDraw, { time: game.timeInScene });
 }
 
-function drawCampaignComplete(ctx: CanvasRenderingContext2D, game: Game, textDraw: DrawTextFn): void {
+function drawCampaignComplete(
+  ctx: CanvasRenderingContext2D,
+  game: Game,
+  textDraw: DrawTextFn,
+  enhanced: boolean,
+): void {
   scrim(ctx, 0.9);
   textDraw(ctx, 'OPTIMUS IS FREE', CENTER_X, 34, { color: palette.energy, align: 'center', scale: 3 });
   const lines = [
@@ -365,15 +377,19 @@ function drawCampaignComplete(ctx: CanvasRenderingContext2D, game: Game, textDra
     align: 'center',
   });
 
-  drawOptimus(ctx, {
-    x: CENTER_X - 5,
-    y: 150,
-    facing: 1,
-    state: 'victory',
-    animTime: game.timeInScene,
-    speedRatio: 0,
-    energyRatio: 1,
-  });
+  if (enhanced) {
+    drawOptimusVictory(ctx, CENTER_X - 5, 150, game.timeInScene);
+  } else {
+    drawOptimus(ctx, {
+      x: CENTER_X - 5,
+      y: 150,
+      facing: 1,
+      state: 'victory',
+      animTime: game.timeInScene,
+      speedRatio: 0,
+      energyRatio: 1,
+    });
+  }
   drawMenu(ctx, MENU_ITEMS.campaignComplete, game.scene.cursor, INTERNAL_HEIGHT - 34, textDraw, {
     time: game.timeInScene,
   });

@@ -14,8 +14,9 @@ import { buildEnemyRig } from '../rig/enemyRigs';
 import { buildOptimusRig } from '../rig/optimusRig';
 import type { RigParts } from '../rig/types';
 import { outlineMask, softEdgeAlpha } from './style';
-import type { AtlasRect, CharacterAtlas, ClipDesc, ClipId, EnemyClipId, OptimusClipId } from './types';
+import type { AtlasRect, CharacterAtlas, ClipDesc, ClipId, OptimusClipId } from './types';
 import { frameKey } from './types';
+import { enemyKindFromClipId } from './playback';
 
 /** Cell pixel size — high enough for Tesla polymer detail at Enhanced supersampling. */
 export const CELL_WIDTH = 144;
@@ -53,8 +54,11 @@ export const ENEMY_CLIPS: readonly ClipDesc[] = [
   { id: 'enemy:walker', frameCount: 14, fps: 16, loop: true },
   { id: 'enemy:drone', frameCount: 14, fps: 18, loop: true },
   { id: 'enemy:turret', frameCount: 12, fps: 14, loop: true },
+  { id: 'enemy:turretTelegraph', frameCount: 10, fps: 18, loop: true },
   { id: 'enemy:crusher', frameCount: 12, fps: 14, loop: true },
+  { id: 'enemy:crusherTelegraph', frameCount: 10, fps: 20, loop: true },
   { id: 'enemy:overseer', frameCount: 14, fps: 14, loop: true },
+  { id: 'enemy:overseerSealed', frameCount: 12, fps: 12, loop: true },
 ];
 
 const INK: readonly [number, number, number] = [28, 32, 40];
@@ -81,8 +85,70 @@ function clipOptimusState(id: ClipId): PlayerState {
   return name;
 }
 
-function clipEnemyKind(id: ClipId): EnemyKind {
-  return id.slice('enemy:'.length) as EnemyClipId;
+function bakeEnemyPose(clipId: ClipId): { telegraph: boolean; vulnerable: boolean } {
+  switch (clipId) {
+    case 'enemy:turretTelegraph':
+    case 'enemy:crusherTelegraph':
+      return { telegraph: true, vulnerable: false };
+    case 'enemy:overseerSealed':
+      return { telegraph: false, vulnerable: false };
+    case 'enemy:overseer':
+      return { telegraph: false, vulnerable: true };
+    case 'enemy:walker':
+    case 'enemy:drone':
+    case 'enemy:turret':
+    case 'enemy:crusher':
+      return { telegraph: false, vulnerable: false };
+    case 'optimus:idle':
+    case 'optimus:run':
+    case 'optimus:jump':
+    case 'optimus:fall':
+    case 'optimus:thrust':
+    case 'optimus:dash':
+    case 'optimus:hurt':
+    case 'optimus:dead':
+    case 'optimus:victory':
+      throw new Error(`bakeEnemyPose: not an enemy clip (${clipId})`);
+    default: {
+      const exhaustive: never = clipId;
+      throw new Error(`Unhandled clip in bakeEnemyPose: ${String(exhaustive)}`);
+    }
+  }
+}
+
+function bakeEnemyFrame(
+  kind: EnemyKind,
+  frame: number,
+  fps: number,
+  pose: { telegraph: boolean; vulnerable: boolean },
+): {
+  albedo: Uint8Array;
+  emissive: Uint8Array;
+  worldW: number;
+  worldH: number;
+} {
+  const animTime = frame / fps;
+  const { width, height } = enemyCanonicalSize(kind);
+  // Overhead for crusher/overseer guide rails so they survive the sheet bake.
+  const overhead = kind === 'crusher' || kind === 'overseer' ? height * 0.95 : height * 0.2;
+  const worldW = width * ENEMY_DRAW_PAD;
+  const worldH = height * ENEMY_DRAW_PAD + overhead;
+  const parts = buildEnemyRig({
+    kind,
+    x: 0,
+    y: 0,
+    width,
+    height,
+    facing: 1,
+    animTime,
+    telegraph: pose.telegraph,
+    vulnerable: pose.vulnerable,
+    hitPoints: 3,
+  });
+  const feetWorldX = width / 2;
+  const feetWorldY = height;
+  const baked = rasterizeParts(parts, feetWorldX, feetWorldY, worldW, worldH);
+  return { ...baked, worldW, worldH };
 }
 
 function atlasSize(frameCount: number): {
@@ -303,36 +369,6 @@ function bakeOptimusFrame(state: PlayerState, frame: number, fps: number): {
   return rasterizeParts(parts, feetWorldX, feetWorldY, WORLD_DRAW_WIDTH, WORLD_DRAW_HEIGHT);
 }
 
-function bakeEnemyFrame(kind: EnemyKind, frame: number, fps: number): {
-  albedo: Uint8Array;
-  emissive: Uint8Array;
-  worldW: number;
-  worldH: number;
-} {
-  const animTime = frame / fps;
-  const { width, height } = enemyCanonicalSize(kind);
-  // Overhead for crusher/overseer guide rails so they survive the sheet bake.
-  const overhead = kind === 'crusher' || kind === 'overseer' ? height * 0.95 : height * 0.2;
-  const worldW = width * ENEMY_DRAW_PAD;
-  const worldH = height * ENEMY_DRAW_PAD + overhead;
-  const parts = buildEnemyRig({
-    kind,
-    x: 0,
-    y: 0,
-    width,
-    height,
-    facing: 1,
-    animTime,
-    telegraph: false,
-    vulnerable: kind === 'overseer',
-    hitPoints: 3,
-  });
-  const feetWorldX = width / 2;
-  const feetWorldY = height;
-  const baked = rasterizeParts(parts, feetWorldX, feetWorldY, worldW, worldH);
-  return { ...baked, worldW, worldH };
-}
-
 /** Build the full Optimus + enemy character atlas (deterministic, pure). */
 export function buildCharacterAtlas(): CharacterAtlas {
   const clips = new Map<ClipId, ClipDesc>();
@@ -363,7 +399,12 @@ export function buildCharacterAtlas(): CharacterAtlas {
           drawSizes.set(clip.id, { width: WORLD_DRAW_WIDTH, height: WORLD_DRAW_HEIGHT });
         }
       } else {
-        const baked = bakeEnemyFrame(clipEnemyKind(clip.id), frame, clip.fps);
+        const baked = bakeEnemyFrame(
+          enemyKindFromClipId(clip.id),
+          frame,
+          clip.fps,
+          bakeEnemyPose(clip.id),
+        );
         blitCell(albedo, emissive, width, baked.albedo, baked.emissive, destX, destY);
         if (frame === 0) {
           drawSizes.set(clip.id, { width: baked.worldW, height: baked.worldH });

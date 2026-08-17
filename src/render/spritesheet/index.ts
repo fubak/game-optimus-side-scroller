@@ -22,4 +22,4 @@ export {
   hashCharacterAtlas,
 } from './bake';
 
-export { enemyClipId, optimusClipId, sampleClipFrame } from './playback';
+export { enemyClipId, enemyKindFromClipId, optimusClipId, sampleClipFrame } from './playback';

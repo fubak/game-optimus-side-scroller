@@ -41,7 +41,7 @@ the Enhanced-only changes above touch it.
 | Characters | Tesla Optimus sheets + rounded enemy machines (`spritesheet/`, `rig/`) |
 | Pickups / FX | Multi-part shapes, bolt halos, full-size dash ghosts (`GlWorldRenderer`) |
 | Lighting | Cool key, punchy beacons, atmospheric fog (`lightingPass.ts`, `lights.ts`) |
-| HUD | Full-res MSDF on Enhanced (`uiSpace.ts`) |
+| HUD | Full-res MSDF + soft chrome bars (`uiSpace.ts`, `hudChrome.ts`) |
 
 | Concern | File |
 | --- | --- |
@@ -71,7 +71,10 @@ Previews: `npm run generate:spritesheets` → `public/generated/spritesheets/`.
 
 ## Other Enhanced props
 
-Enemies bake from elliptical factory rigs (wheels, eyes, rotors, cores) and draw ~1.35× hitbox;
-telegraph / dying / overseer use the live rig for correct state. Pickups restore Classic's
-canister / hex-nut / cross shapes with emissive accents. Projectiles use a core+halo stack; dash
-ghosts and jetpack plume match Optimus's larger visual footprint.
+Enemies bake from elliptical factory rigs (wheels, eyes, rotors, cores) and draw ~1.35× hitbox.
+Telegraph / sealed-core combat states select alternate sheet clips; only dying enemies fall back to
+the live rig for fade/drop. Spike tips and scrolling conveyor cleats are drawn as G-buffer overlays
+so hazards keep Classic silhouettes. Pickups restore Classic's canister / hex-nut / cross shapes with
+emissive accents. Projectiles use a core+halo stack; dash ghosts and jetpack plume match Optimus's
+larger visual footprint. Menus/epilogue paint the Tesla polymer Optimus rig on Enhanced
+(`drawOptimusEnhanced.ts`); Classic keeps brick sprites.

@@ -3,6 +3,7 @@ import { ENERGY_LOW_THRESHOLD, HEALTH_MAX } from '../game/constants';
 import { OVERSEER_HIT_POINTS } from '../game/enemies';
 import type { World } from '../game/world';
 import type { TouchButton } from '../core/touch';
+import { fillSoftBar, fillSoftPip } from './hudChrome';
 import { palette } from './palette';
 import { drawText } from './text';
 import type { DrawTextFn } from './text';
@@ -12,7 +13,8 @@ import type { DrawTextFn } from './text';
  *
  * Layout is always in 480×270 world-view units. On Enhanced, `main.ts` scales the canvas
  * transform and rasterizes MSDF text at backbuffer resolution (see `uiSpace.ts`) so bars and
- * labels stay sharp; Classic keeps the bitmap font at 1:1.
+ * labels stay sharp; Classic keeps the bitmap font at 1:1. Pass `enhancedChrome: true` for soft
+ * layered bars/pips (Enhanced only).
  */
 
 export interface Toast {
@@ -45,12 +47,14 @@ export class Hud {
   /**
    * @param textDraw Text renderer to use — `drawText` (bitmap, Classic) or `drawTextMsdf`
    *   (distance-field, Enhanced). Defaults to `drawText` so existing callers/tests keep working.
+   * @param enhancedChrome Soft layered bars/pips for Enhanced; Classic hard rects when false.
    */
   draw(
     ctx: CanvasRenderingContext2D,
     world: World,
     viewWidth: number,
     textDraw: DrawTextFn = drawText,
+    enhancedChrome = false,
   ): void {
     const { player } = world;
 
@@ -58,29 +62,58 @@ export class Hud {
     for (let i = 0; i < HEALTH_MAX; i += 1) {
       const x = 6 + i * 9;
       const filled = i < player.health;
-      ctx.fillStyle = filled ? palette.health : palette.plateDark;
-      ctx.fillRect(x, 6, 7, 6);
-      ctx.fillStyle = filled ? palette.white : palette.plateShadow;
-      ctx.fillRect(x + 1, 7, 2, 1);
+      if (enhancedChrome) {
+        fillSoftPip(ctx, x, 6, 7, 6, filled, {
+          filled: palette.health,
+          empty: palette.plateDark,
+          highlight: palette.white,
+          emptyShade: palette.plateShadow,
+        });
+      } else {
+        ctx.fillStyle = filled ? palette.health : palette.plateDark;
+        ctx.fillRect(x, 6, 7, 6);
+        ctx.fillStyle = filled ? palette.white : palette.plateShadow;
+        ctx.fillRect(x + 1, 7, 2, 1);
+      }
     }
 
     // ── Energy bar with a low-charge pulse ─────────────────────────────────────────────────────
     const barWidth = 58;
-    ctx.fillStyle = palette.plateShadow;
-    ctx.fillRect(5, 15, barWidth + 2, 6);
-    ctx.fillStyle = palette.energyDim;
-    ctx.fillRect(6, 16, barWidth, 4);
     const low = player.energy <= ENERGY_LOW_THRESHOLD;
     const pulse = low ? 0.55 + 0.45 * Math.sin(world.elapsedSec * 12) : 1;
-    ctx.globalAlpha = pulse;
-    ctx.fillStyle = low ? palette.uiWarn : palette.energy;
-    ctx.fillRect(6, 16, Math.round(barWidth * clamp(player.energyRatio, 0, 1)), 4);
-    ctx.globalAlpha = 1;
+    if (enhancedChrome) {
+      ctx.globalAlpha = pulse;
+      fillSoftBar(ctx, 6, 16, barWidth, 4, player.energyRatio, {
+        well: palette.plateShadow,
+        track: palette.energyDim,
+        fill: low ? palette.uiWarn : palette.energy,
+        highlight: palette.white,
+      });
+      ctx.globalAlpha = 1;
+    } else {
+      ctx.fillStyle = palette.plateShadow;
+      ctx.fillRect(5, 15, barWidth + 2, 6);
+      ctx.fillStyle = palette.energyDim;
+      ctx.fillRect(6, 16, barWidth, 4);
+      ctx.globalAlpha = pulse;
+      ctx.fillStyle = low ? palette.uiWarn : palette.energy;
+      ctx.fillRect(6, 16, Math.round(barWidth * clamp(player.energyRatio, 0, 1)), 4);
+      ctx.globalAlpha = 1;
+    }
 
     // ── Dash charge ticks ─────────────────────────────────────────────────────────────────────
     const dashReady = player.dashCharge >= 1;
-    ctx.fillStyle = dashReady ? palette.visor : palette.plateDark;
-    ctx.fillRect(6, 23, Math.round(20 * player.dashCharge), 2);
+    if (enhancedChrome) {
+      fillSoftBar(ctx, 6, 23, 20, 2, player.dashCharge, {
+        well: palette.plateShadow,
+        track: palette.plateDark,
+        fill: dashReady ? palette.visor : palette.plateFace,
+        ...(dashReady ? { highlight: palette.visorGlow } : {}),
+      });
+    } else {
+      ctx.fillStyle = dashReady ? palette.visor : palette.plateDark;
+      ctx.fillRect(6, 23, Math.round(20 * player.dashCharge), 2);
+    }
     textDraw(ctx, 'DASH', 30, 22, { color: dashReady ? palette.visor : palette.uiDim, tracking: 0 });
 
     // ── Lives ─────────────────────────────────────────────────────────────────────────────────
@@ -102,15 +135,24 @@ export class Hud {
     // ── Boss health ───────────────────────────────────────────────────────────────────────────
     const boss = world.isBossEngaged ? world.boss : null;
     if (boss !== null) {
-      const barWidth = 120;
-      const x = Math.round(viewWidth / 2 - barWidth / 2);
+      const bossBarWidth = 120;
+      const x = Math.round(viewWidth / 2 - bossBarWidth / 2);
       textDraw(ctx, 'OVERSEER', viewWidth / 2, 6, { color: palette.hazard, align: 'center' });
-      ctx.fillStyle = palette.plateShadow;
-      ctx.fillRect(x - 1, 15, barWidth + 2, 6);
-      ctx.fillStyle = palette.hazardDark;
-      ctx.fillRect(x, 16, barWidth, 4);
-      ctx.fillStyle = world.isBossVulnerable(boss) ? palette.visorGlow : palette.hazard;
-      ctx.fillRect(x, 16, Math.round((barWidth * Math.max(0, boss.hitPoints)) / OVERSEER_HIT_POINTS), 4);
+      if (enhancedChrome) {
+        fillSoftBar(ctx, x, 16, bossBarWidth, 4, Math.max(0, boss.hitPoints) / OVERSEER_HIT_POINTS, {
+          well: palette.plateShadow,
+          track: palette.hazardDark,
+          fill: world.isBossVulnerable(boss) ? palette.visorGlow : palette.hazard,
+          highlight: palette.white,
+        });
+      } else {
+        ctx.fillStyle = palette.plateShadow;
+        ctx.fillRect(x - 1, 15, bossBarWidth + 2, 6);
+        ctx.fillStyle = palette.hazardDark;
+        ctx.fillRect(x, 16, bossBarWidth, 4);
+        ctx.fillStyle = world.isBossVulnerable(boss) ? palette.visorGlow : palette.hazard;
+        ctx.fillRect(x, 16, Math.round((bossBarWidth * Math.max(0, boss.hitPoints)) / OVERSEER_HIT_POINTS), 4);
+      }
       if (world.isBossVulnerable(boss)) {
         textDraw(ctx, 'CORE EXPOSED — STOMP IT', viewWidth / 2, 24, {
           color: palette.visorGlow,
