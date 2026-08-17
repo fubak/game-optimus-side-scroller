@@ -15,7 +15,7 @@ describe('spritesheet style', () => {
     expect(texelNoise(3, 7)).not.toBe(texelNoise(4, 7));
   });
 
-  it('applyPanelWear darkens edge texels relative to interior', () => {
+  it('applyPanelWear darkens side-edge texels relative to interior', () => {
     const width = 8;
     const height = 8;
     const hard = new Uint8Array(width * height);
@@ -32,7 +32,8 @@ describe('spritesheet style', () => {
       }
     }
     applyPanelWear(rgb, hard, width, height);
-    const edge = (2 * width + 2) * 4;
+    // Left edge mid-height (edge darken, no top specular) vs block centre.
+    const edge = (4 * width + 2) * 4;
     const interior = (4 * width + 4) * 4;
     expect(rgb[edge] ?? 0).toBeLessThan(rgb[interior] ?? 0);
   });
