@@ -109,26 +109,22 @@ tests/unit/   Vitest specs for the pure modules
 tests/e2e/    Playwright smoke tests against the built bundle
 ```
 
-### Renderer backends (4K visual overhaul — in progress)
+### Renderer backends (4K visual overhaul)
 
-- **WebGL2** is preferred when available (`?renderer=auto`, the default). Stage 1 presents the
-  Classic painter through a GL blit so the device/program/texture path is live; later stages replace
-  that with deferred lighting, materials, skeletal sprites and post-processing.
+- **WebGL2 Enhanced (default):** deferred G-buffer (albedo / normal / material / emissive), procedural
+  material atlases, dynamic point lights (visor, jetpack, dash, pickups, goal, hazards, boss core),
+  soft occluder shadows, skeletal Optimus/enemy rigs, GPU particles, Kawase bloom + ACES/AgX tonemap,
+  vignette/grain/CA/dither. Backbuffer = `min(dpr, cap) × CSS × renderScale`, capped at 3840×2160.
 - **Classic** Canvas2D remains a full fallback (`?classic=1` or `?renderer=classic`) so the game
   never fails to boot without WebGL2.
-- **F3** debug overlay reports the active backend and quality preset; **F4** cycles quality
-  (`low`/`medium`/`high`/`ultra`). Render settings live in `localStorage` key `optimus.render.v1`.
-- Reduced motion forces bloom/grain/chromatic aberration/motion blur off.
+- **F3** debug overlay reports CPU metrics, GPU timer (when available), backend, quality, and buffer size.
+- **F4** cycles quality (`low`/`medium`/`high`/`ultra`). Settings live in `localStorage` key
+  `optimus.render.v1`. Reduced motion forces bloom/grain/CA/motion-blur/vignette off.
 - **Post-processing** (`src/render/gl/post/`): dual-filter Kawase bloom on thresholded emissives,
-  ACES or AgX tonemapping (`settings.tonemap`), vignette, filmic grain, and a slight chromatic
-  aberration at the frame edges, plus dither to hide banding. Each effect is toggleable in
-  `RenderSettings`; low quality skips bloom/grain/CA, and reduced motion turns all of them off.
-- **GPU particles** (`src/render/gl/particleBatch.ts`): instanced, soft-edged quads drawn in two
-  additive/alpha passes after lighting, sized for thousands of live particles without per-frame
-  allocation.
-- **Frame-time bench** (`npm run bench`, [`docs/bench/`](docs/bench/README.md)): a headless
-  Playwright pass through level 1 at 1080p/1440p/4K and three quality presets, reporting
-  p50/p95/p99 frame times.
+  ACES or AgX tonemapping (`settings.tonemap`), vignette, filmic grain, chromatic aberration, dither.
+- **GPU particles** (`src/render/gl/particleBatch.ts`): instanced soft-edged quads (10k capacity).
+- **Frame-time bench** (`npm run bench`, [`docs/bench/`](docs/bench/README.md)) and capture notes
+  ([`docs/gauntlet/`](docs/gauntlet/README.md)).
 
 Handy URLs: `?classic=1`, `?renderer=webgl2`, `?level=level-4`, `?autoplay=1`.
 
