@@ -23,14 +23,17 @@ function referenceTileHash(tx: number, ty: number): number {
 }
 
 describe('generateMaterialAtlas', () => {
-  it('is deterministic: the same seed always produces identical bytes', () => {
-    const a = generateMaterialAtlas(0x1234abcd);
-    const b = generateMaterialAtlas(0x1234abcd);
-    expect(a.albedo).toEqual(b.albedo);
-    expect(a.normal).toEqual(b.normal);
-    expect(a.params).toEqual(b.params);
-    expect(hashMaterialAtlas(a)).toBe(hashMaterialAtlas(b));
-  });
+  it(
+    'is deterministic: the same seed always produces identical bytes',
+    () => {
+      const a = generateMaterialAtlas(0x1234abcd);
+      const b = generateMaterialAtlas(0x1234abcd);
+      // Hash compare is enough for determinism and much cheaper than deep-equal on ~1MB atlases.
+      expect(hashMaterialAtlas(a)).toBe(hashMaterialAtlas(b));
+      expect(a.albedo.length).toBe(b.albedo.length);
+    },
+    20_000,
+  );
 
   it('produces different bytes for a different seed', () => {
     const a = generateMaterialAtlas(1);

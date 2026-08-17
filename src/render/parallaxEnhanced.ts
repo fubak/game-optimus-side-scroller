@@ -36,7 +36,7 @@ import { palette } from './palette';
  */
 
 /** Texels per logical screen pixel for every Enhanced layer's canvas. */
-export const ENHANCED_SCALE = 4;
+export const ENHANCED_SCALE = 5;
 
 interface Rgb {
   readonly r: number;

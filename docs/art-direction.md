@@ -41,7 +41,7 @@ the Enhanced-only changes above touch it.
 | Bloom thresholds/intensity | `src/render/gl/GlWorldRenderer.ts`, `src/render/gl/post/bloom.ts` |
 | Deferred lighting (key light, point lights) | `src/render/gl/lightingPass.ts`, `src/render/gl/lights.ts` |
 | Material atlas filtering | `src/render/gl/GlWorldRenderer.ts` (atlas upload), `src/render/gl/materialTextures.ts` |
-| Procedural materials (smooth painters, 96px tiles) | `src/render/materials/generate.ts` |
+| Procedural materials (hand-authored panels, 128px tiles) | `src/render/materials/generate.ts` |
 | Enhanced parallax / light shafts | `src/render/parallaxEnhanced.ts`, `src/render/gl/backgroundBatch.ts` |
 | Soft GPU particles | `src/render/gl/particleBatch.ts`, `GlWorldRenderer.drawParticles` |
 | Skeletal animation fluidity | `src/render/rig/optimusRig.ts` |
