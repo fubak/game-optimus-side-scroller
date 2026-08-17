@@ -18,6 +18,7 @@ import {
   drawWalker,
 } from './sprites';
 import { drawTiles } from './tiles';
+import type { WorldView } from './view';
 
 /**
  * Draws a {@link World}.
@@ -36,10 +37,37 @@ interface DashGhost {
   age: number;
 }
 
-export class WorldRenderer {
+interface Point {
+  x: number;
+  y: number;
+}
+
+function lerp(a: number, b: number, t: number): number {
+  return a + (b - a) * t;
+}
+
+/**
+ * Classic Canvas2D {@link WorldView}.
+ *
+ * `WorldRenderer` is kept as the exported name (see the alias below) so existing imports —
+ * `import { WorldRenderer } from './render/renderer'` — keep working unchanged.
+ */
+export class ClassicWorldRenderer implements WorldView {
+  readonly backend = 'classic';
+
   private layers: ParallaxLayer[];
   private levelId: string;
   private ghosts: DashGhost[] = [];
+
+  /**
+   * Camera/player positions from the previous simulation step, used to interpolate draw position
+   * when `alpha` is supplied. GL will lean on this same pattern harder; Classic only needs it to
+   * satisfy the `WorldView` contract without changing its own pixel-snapped look.
+   */
+  private prevCamera: Point | null = null;
+  private currCamera: Point | null = null;
+  private prevPlayer: Point | null = null;
+  private currPlayer: Point | null = null;
 
   constructor(world: World | null) {
     this.levelId = world?.level.id ?? '';
@@ -55,6 +83,10 @@ export class WorldRenderer {
     if (world.level.id === this.levelId) return;
     this.levelId = world.level.id;
     this.ghosts = [];
+    this.prevCamera = null;
+    this.currCamera = null;
+    this.prevPlayer = null;
+    this.currPlayer = null;
     this.layers = createParallaxLayers({
       seed: world.level.seed,
       viewWidth: INTERNAL_WIDTH,
@@ -76,12 +108,23 @@ export class WorldRenderer {
     }
     for (const ghost of this.ghosts) ghost.age += dtSec;
     this.ghosts = this.ghosts.filter((ghost) => ghost.age < 0.18);
+
+    this.prevCamera = this.currCamera ?? { x: world.camera.renderX, y: world.camera.renderY };
+    this.currCamera = { x: world.camera.renderX, y: world.camera.renderY };
+    this.prevPlayer = this.currPlayer ?? { x: player.body.x, y: player.body.y };
+    this.currPlayer = { x: player.body.x, y: player.body.y };
   }
 
-  draw(ctx: CanvasRenderingContext2D, world: World): void {
+  /**
+   * @param alpha Interpolation factor in [0,1) between the previous and current simulation step.
+   *   Omitted or `0` draws at the current step's position exactly as before — Classic only lerps
+   *   camera/player draw position when a non-zero alpha is explicitly requested.
+   */
+  draw(ctx: CanvasRenderingContext2D, world: World, alpha?: number): void {
     this.ensureLevel(world);
-    const cameraX = world.camera.renderX;
-    const cameraY = world.camera.renderY;
+    const camera = this.interpolatedCamera(world, alpha);
+    const cameraX = camera.x;
+    const cameraY = camera.y;
 
     drawSky(ctx);
     drawParallax(ctx, this.layers, cameraX, cameraY);
@@ -146,12 +189,13 @@ export class WorldRenderer {
     }
 
     const { player } = world;
+    const playerPos = this.interpolatedPlayer(world, alpha);
     const blinkedOut =
       player.isInvulnerable && Math.floor(player.invulnerableTime * INVULNERABLE_BLINK_HZ) % 2 === 1;
     if (!blinkedOut) {
       drawOptimus(ctx, {
-        x: player.body.x - cameraX,
-        y: player.body.y - cameraY,
+        x: playerPos.x - cameraX,
+        y: playerPos.y - cameraY,
         facing: player.facing,
         state: player.state,
         animTime: player.animTime,
@@ -193,7 +237,31 @@ export class WorldRenderer {
       PLAYER_HEIGHT - 1,
     );
   }
+
+  private interpolatedCamera(world: World, alpha: number | undefined): Point {
+    if (alpha === undefined || alpha <= 0 || this.prevCamera === null || this.currCamera === null) {
+      return { x: world.camera.renderX, y: world.camera.renderY };
+    }
+    return {
+      x: lerp(this.prevCamera.x, this.currCamera.x, alpha),
+      y: lerp(this.prevCamera.y, this.currCamera.y, alpha),
+    };
+  }
+
+  private interpolatedPlayer(world: World, alpha: number | undefined): Point {
+    if (alpha === undefined || alpha <= 0 || this.prevPlayer === null || this.currPlayer === null) {
+      return { x: world.player.body.x, y: world.player.body.y };
+    }
+    return {
+      x: lerp(this.prevPlayer.x, this.currPlayer.x, alpha),
+      y: lerp(this.prevPlayer.y, this.currPlayer.y, alpha),
+    };
+  }
 }
+
+/** Alias kept for source compatibility with existing `import { WorldRenderer } from './render/renderer'`. */
+export const WorldRenderer = ClassicWorldRenderer;
+export type WorldRenderer = ClassicWorldRenderer;
 
 function drawEnemy(
   ctx: CanvasRenderingContext2D,

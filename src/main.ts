@@ -8,11 +8,21 @@ import { installTestHooks, shouldInstallTestHooks } from './core/testHooks';
 import { TouchInput, createTouchLayout, prefersTouchControls } from './core/touch';
 import { Game } from './game/game';
 import { ALL_LEVELS, LEVELS } from './game/levels/index';
+import { createWorldRenderer } from './render/createWorldRenderer';
 import { drawTouchControls } from './render/hud';
 import { palette } from './render/palette';
-import { WorldRenderer } from './render/renderer';
 import { drawDamageFeedback, drawScene, drawSceneTransition } from './render/screens';
+import {
+  applyQualityPreset,
+  loadRenderSettings,
+  resolveBackendPreference,
+  saveRenderSettings,
+  withReducedMotion,
+  type QualityPreset,
+  type RenderSettings,
+} from './render/settings';
 import { drawText } from './render/text';
+import type { WorldView } from './render/view';
 
 /**
  * Bootstrap: canvas, input, audio, game, renderer, loop.
@@ -25,6 +35,7 @@ import { drawText } from './render/text';
  * - `?autoplay=1` — hand the controls to the autopilot (attract mode / demo recording)
  * - `?seed=<n>` — force the world RNG seed
  * - `?test=1` — install `window.__optimus` test hooks in a production build
+ * - `?classic=1` / `?renderer=classic|webgl2|auto` — force a render backend
  */
 
 const host = document.getElementById('app');
@@ -40,6 +51,9 @@ const autoplay = params.get('autoplay') === '1';
 const display = createDisplay(host);
 const keyboard = new KeyboardInput(window);
 const audio = createAudio();
+
+let renderSettings: RenderSettings = loadRenderSettings(window.localStorage);
+const backendPreference = resolveBackendPreference(window.location.search, renderSettings);
 
 /**
  * Touch controls appear only on devices with a coarse pointer (or when forced with `?touch=1`, which
@@ -100,8 +114,25 @@ game.onBindingsChanged = (altBindings) => {
 };
 keyboard.setBindings(game.save.settings.altBindings ? ALT_BINDINGS : DEFAULT_BINDINGS);
 
-const renderer = new WorldRenderer(game.world ?? game.attractWorld);
+let renderer: WorldView = createWorldRenderer({
+  world: game.world ?? game.attractWorld,
+  preference: backendPreference,
+});
 let debugVisible = false;
+let lastRenderAlpha = 0;
+
+const QUALITY_CYCLE: readonly QualityPreset[] = ['low', 'medium', 'high', 'ultra'];
+
+function effectiveRenderSettings(): RenderSettings {
+  return game.save.settings.reducedMotion ? withReducedMotion(renderSettings) : renderSettings;
+}
+
+function cycleQuality(): void {
+  const index = QUALITY_CYCLE.indexOf(renderSettings.quality);
+  const next = QUALITY_CYCLE[(index + 1) % QUALITY_CYCLE.length] ?? 'high';
+  renderSettings = applyQualityPreset(renderSettings, next);
+  saveRenderSettings(window.localStorage, renderSettings);
+}
 
 const loop: Loop = createLoop({
   update(dtSec) {
@@ -111,16 +142,38 @@ const loop: Loop = createLoop({
     const world = game.world ?? game.attractWorld;
     if (world !== null) renderer.trackTrail(world, dtSec);
   },
-  render() {
-    draw();
+  render(alpha) {
+    lastRenderAlpha = alpha;
+    draw(alpha);
   },
 });
 
-function draw(): void {
+window.addEventListener('keydown', (event) => {
+  if (event.code === 'F4') {
+    event.preventDefault();
+    cycleQuality();
+  }
+  if (event.code === 'F5' && (event.shiftKey || params.get('dev') === '1')) {
+    // Shift+F5 toggles Classic ↔ Auto without a full reload of game state.
+    event.preventDefault();
+    const nextBackend = renderer.backend === 'webgl2' ? 'classic' : 'auto';
+    renderSettings = { ...renderSettings, backend: nextBackend };
+    saveRenderSettings(window.localStorage, renderSettings);
+    renderer.dispose?.();
+    renderer = createWorldRenderer({
+      world: game.world ?? game.attractWorld,
+      preference: nextBackend,
+    });
+  }
+});
+
+function draw(alpha = 0): void {
   const { ctx } = display;
   const world = game.showsWorldBehind ? game.world : game.attractWorld;
+  // Touch settings so a future quality-driven path can read them without unused warnings.
+  void effectiveRenderSettings();
   if (world !== null) {
-    renderer.draw(ctx, world);
+    renderer.draw(ctx, world, alpha);
     if (game.showsWorldBehind) {
       game.hud.draw(ctx, world, INTERNAL_WIDTH);
     }
@@ -150,6 +203,8 @@ function drawDebugPanel(ctx: CanvasRenderingContext2D): void {
   const lines = [
     `FPS ${fps.toFixed(1)} FRAME ${frameTimeMs.toFixed(2)}MS`,
     `UPD ${updateMs.toFixed(2)}MS REN ${renderMs.toFixed(2)}MS`,
+    `GPU — (stage 1)  ALPHA ${lastRenderAlpha.toFixed(2)}`,
+    `REN ${renderer.backend.toUpperCase()} Q ${renderSettings.quality.toUpperCase()}`,
     `SCENE ${game.scene.name.toUpperCase()} LVL ${String(game.scene.levelIndex + 1)}`,
     player === undefined
       ? 'NO WORLD'

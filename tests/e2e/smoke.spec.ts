@@ -245,3 +245,31 @@ test.describe('touch controls', () => {
     expect(errors).toEqual([]);
   });
 });
+
+test.describe('renderer backends', () => {
+  test('Classic mode boots when forced with ?classic=1', async ({ page }) => {
+    const errors = watchForErrors(page);
+    await page.goto('/?test=1&classic=1');
+    await waitForHooks(page);
+    const backend = await page.evaluate(() => {
+      const canvas = document.querySelector('#screen');
+      if (!(canvas instanceof HTMLCanvasElement)) {
+        return { lit: 0, width: 0, height: 0 };
+      }
+      const ctx = canvas.getContext('2d');
+      window.__optimus?.stepFrames(30);
+      const data = ctx?.getImageData(0, 0, canvas.width, canvas.height).data;
+      let lit = 0;
+      if (data !== undefined) {
+        for (let i = 0; i < data.length; i += 4) {
+          if ((data[i] ?? 0) > 60) lit += 1;
+        }
+      }
+      return { lit, width: canvas.width, height: canvas.height };
+    });
+    expect(backend.width).toBe(480);
+    expect(backend.height).toBe(270);
+    expect(backend.lit).toBeGreaterThan(500);
+    expect(errors).toEqual([]);
+  });
+});

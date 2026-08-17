@@ -102,11 +102,24 @@ the audio is oscillators and noise bursts with a scheduled arpeggio for music.
 ```
 src/core/     engine primitives: canvas, loop, input, touch, audio, rng, math, storage
 src/game/     simulation: tilemap, physics, player, enemies, levels, world, scenes, game, autopilot
-src/render/   drawing: tiles, parallax, sprites, particles, HUD, screens, text, palette
+src/render/   drawing: Classic Canvas2D + WebGL2 (`gl/`) backends behind `WorldView`
 scripts/      developer tools (level report / layout audit)
 tests/unit/   Vitest specs for the pure modules
 tests/e2e/    Playwright smoke tests against the built bundle
 ```
+
+### Renderer backends (4K visual overhaul — in progress)
+
+- **WebGL2** is preferred when available (`?renderer=auto`, the default). Stage 1 presents the
+  Classic painter through a GL blit so the device/program/texture path is live; later stages replace
+  that with deferred lighting, materials, skeletal sprites and post-processing.
+- **Classic** Canvas2D remains a full fallback (`?classic=1` or `?renderer=classic`) so the game
+  never fails to boot without WebGL2.
+- **F3** debug overlay reports the active backend and quality preset; **F4** cycles quality
+  (`low`/`medium`/`high`/`ultra`). Render settings live in `localStorage` key `optimus.render.v1`.
+- Reduced motion forces bloom/grain/chromatic aberration/motion blur off.
+
+Handy URLs: `?classic=1`, `?renderer=webgl2`, `?level=level-4`, `?autoplay=1`.
 
 ## Authoring a level
 
