@@ -38,7 +38,8 @@ the Enhanced-only changes above touch it.
 | --- | --- |
 | Materials | 128px hand-authored panels, drips, bold hazard (`materials/generate.ts`) |
 | Parallax | 6× factory skyline, warm windows, dual haze (`parallaxEnhanced.ts`) |
-| Characters | Tesla Optimus–inspired sheets baked from elliptical polymer rigs (`spritesheet/`, `rig/optimusRig.ts`) |
+| Characters | Tesla Optimus sheets + rounded enemy machines (`spritesheet/`, `rig/`) |
+| Pickups / FX | Multi-part shapes, bolt halos, full-size dash ghosts (`GlWorldRenderer`) |
 | Lighting | Cool key, punchy beacons, atmospheric fog (`lightingPass.ts`, `lights.ts`) |
 | HUD | Full-res MSDF on Enhanced (`uiSpace.ts`) |
 
@@ -67,3 +68,10 @@ he is not camera-locked). Soft alpha fringes keep the silhouette smooth at super
 stay dense — run 20@20fps, dash @ 30fps — for Dead Cells–smooth motion. Classic (`?classic=1`) is
 unchanged and still uses Canvas2D industrial sprites.
 Previews: `npm run generate:spritesheets` → `public/generated/spritesheets/`.
+
+## Other Enhanced props
+
+Enemies bake from elliptical factory rigs (wheels, eyes, rotors, cores) and draw ~1.35× hitbox;
+telegraph / dying / overseer use the live rig for correct state. Pickups restore Classic's
+canister / hex-nut / cross shapes with emissive accents. Projectiles use a core+halo stack; dash
+ghosts and jetpack plume match Optimus's larger visual footprint.

@@ -60,6 +60,14 @@ describe('buildEnemyRig — exhaustive kind coverage', () => {
       }
     }
   });
+
+  it('uses elliptical parts for rounded factory silhouettes', () => {
+    for (const kind of ALL_ENEMY_KINDS) {
+      const parts = buildEnemyRig(baseOptions(kind, { animTime: 0.2, vulnerable: true, hitPoints: 3 }));
+      const ellipses = parts.filter((part) => part.shape === 'ellipse');
+      expect(ellipses.length).toBeGreaterThan(3);
+    }
+  });
 });
 
 describe('buildEnemyRig — pose continuity (no NaNs)', () => {

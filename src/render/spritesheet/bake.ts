@@ -29,7 +29,9 @@ const CELL_PAD = 2;
 export const WORLD_DRAW_WIDTH = 24;
 export const WORLD_DRAW_HEIGHT = 48;
 /** Extra world padding around an enemy AABB when baking/drawing its sheet cell. */
-export const ENEMY_DRAW_PAD = 1.3;
+export const ENEMY_DRAW_PAD = 1.45;
+/** Extra on-screen scale for Enhanced enemies (visual only; hitboxes unchanged). */
+export const ENEMY_VISUAL_SCALE = 1.35;
 
 /**
  * Dead Cells–smooth clip table. Dense frame counts + high FPS so short actions stay fluid
@@ -309,8 +311,10 @@ function bakeEnemyFrame(kind: EnemyKind, frame: number, fps: number): {
 } {
   const animTime = frame / fps;
   const { width, height } = enemyCanonicalSize(kind);
+  // Overhead for crusher/overseer guide rails so they survive the sheet bake.
+  const overhead = kind === 'crusher' || kind === 'overseer' ? height * 0.95 : height * 0.2;
   const worldW = width * ENEMY_DRAW_PAD;
-  const worldH = height * ENEMY_DRAW_PAD;
+  const worldH = height * ENEMY_DRAW_PAD + overhead;
   const parts = buildEnemyRig({
     kind,
     x: 0,

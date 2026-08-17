@@ -83,11 +83,16 @@ import {
   buildCharacterAtlas,
   enemyCanonicalSize,
   enemyClipId,
+  ENEMY_VISUAL_SCALE,
   frameKey,
   optimusClipId,
   sampleClipFrame,
+  WORLD_DRAW_HEIGHT,
+  WORLD_DRAW_WIDTH,
 } from '../spritesheet';
 import type { CharacterAtlas, ClipId } from '../spritesheet';
+import { drawRigToGBuffer } from '../rig/drawRig';
+import { buildEnemyRig } from '../rig/enemyRigs';
 import type { WorldView } from '../view';
 import { BackgroundBatch } from './backgroundBatch';
 import { uploadCharacterAtlas } from './characterTextures';
@@ -856,44 +861,133 @@ export class GlWorldRenderer implements WorldView {
   private drawPickup(pickup: Pickup, bob: number): void {
     const x = pickup.x;
     const y = pickup.y + bob;
+    const w = pickup.width;
+    const h = pickup.height;
     switch (pickup.kind) {
       case 'energyCell': {
+        // Tall canister with glowing window — colour-blind shape language matching Classic.
         const body = parseColor(palette.plateDark);
         const glow = parseColor(palette.energy);
-        this.gbufferBatch.rect(x, y, pickup.width, pickup.height, {
+        const tip = parseColor(palette.visorGlow);
+        const cap = parseColor(palette.plateLight);
+        this.gbufferBatch.rect(x, y, w, h, {
           r: body[0],
           g: body[1],
           b: body[2],
-          emissiveR: glow[0] * 0.5,
-          emissiveG: glow[1] * 0.5,
-          emissiveB: glow[2] * 0.5,
-          roughness: 0.4,
-          metallic: 0.5,
+          roughness: 0.45,
+          metallic: 0.55,
+        });
+        this.gbufferBatch.rect(x + 1, y + 2, w - 2, h - 4, {
+          r: glow[0],
+          g: glow[1],
+          b: glow[2],
+          emissiveR: glow[0] * 0.85,
+          emissiveG: glow[1] * 0.85,
+          emissiveB: glow[2] * 0.85,
+          roughness: 0.25,
+          metallic: 0.2,
+        });
+        this.gbufferBatch.rect(x + 2, y + 3, Math.max(1, w - 5), h - 6, {
+          r: tip[0],
+          g: tip[1],
+          b: tip[2],
+          emissiveR: tip[0],
+          emissiveG: tip[1],
+          emissiveB: tip[2],
+          roughness: 0.2,
+          metallic: 0.1,
+        });
+        this.gbufferBatch.rect(x + 1, y, w - 2, 2, {
+          r: cap[0],
+          g: cap[1],
+          b: cap[2],
+          roughness: 0.35,
+          metallic: 0.7,
+        });
+        this.gbufferBatch.rect(x + 1, y + h - 2, w - 2, 2, {
+          r: cap[0],
+          g: cap[1],
+          b: cap[2],
+          roughness: 0.35,
+          metallic: 0.7,
         });
         break;
       }
       case 'bolt': {
-        const c = parseColor(palette.plateLight);
-        this.gbufferBatch.rect(x, y, pickup.width, pickup.height, {
-          r: c[0],
-          g: c[1],
-          b: c[2],
-          roughness: 0.3,
-          metallic: 0.85,
+        // Hex-nut silhouette: wide cross of plates + warn core.
+        const metal = parseColor(palette.plateLight);
+        const warn = parseColor(palette.uiWarn);
+        const shade = parseColor(palette.plateShadow);
+        this.gbufferBatch.rect(x + 1, y, w - 2, h, {
+          r: metal[0],
+          g: metal[1],
+          b: metal[2],
+          roughness: 0.28,
+          metallic: 0.9,
+        });
+        this.gbufferBatch.rect(x, y + 1, w, h - 2, {
+          r: metal[0],
+          g: metal[1],
+          b: metal[2],
+          roughness: 0.28,
+          metallic: 0.9,
+        });
+        this.gbufferBatch.rect(x + 2, y + 2, w - 4, h - 4, {
+          r: warn[0],
+          g: warn[1],
+          b: warn[2],
+          emissiveR: warn[0] * 0.35,
+          emissiveG: warn[1] * 0.35,
+          emissiveB: warn[2] * 0.35,
+          roughness: 0.4,
+          metallic: 0.5,
+        });
+        this.gbufferBatch.rect(x + 3, y + 3, 1.4, 1.4, {
+          r: shade[0],
+          g: shade[1],
+          b: shade[2],
+          roughness: 0.5,
+          metallic: 0.8,
         });
         break;
       }
       case 'repairKit': {
-        const c = parseColor(palette.shellLight);
+        // White case + health cross (distinct from canister / nut).
+        const shell = parseColor(palette.shellLight);
+        const edge = parseColor(palette.shellDark);
         const cross = parseColor(palette.health);
-        this.gbufferBatch.rect(x, y, pickup.width, pickup.height, {
-          r: c[0],
-          g: c[1],
-          b: c[2],
-          emissiveR: cross[0] * 0.2,
-          emissiveG: cross[1] * 0.2,
-          emissiveB: cross[2] * 0.2,
+        this.gbufferBatch.rect(x, y, w, h, {
+          r: shell[0],
+          g: shell[1],
+          b: shell[2],
+          roughness: 0.55,
+          metallic: 0.05,
+        });
+        this.gbufferBatch.rect(x, y + h - 1.5, w, 1.5, {
+          r: edge[0],
+          g: edge[1],
+          b: edge[2],
           roughness: 0.6,
+          metallic: 0.05,
+        });
+        this.gbufferBatch.rect(x + w * 0.4, y + 2, Math.max(1.5, w * 0.2), h - 4, {
+          r: cross[0],
+          g: cross[1],
+          b: cross[2],
+          emissiveR: cross[0] * 0.55,
+          emissiveG: cross[1] * 0.55,
+          emissiveB: cross[2] * 0.55,
+          roughness: 0.45,
+          metallic: 0.05,
+        });
+        this.gbufferBatch.rect(x + 2, y + h * 0.4, w - 4, Math.max(1.5, h * 0.22), {
+          r: cross[0],
+          g: cross[1],
+          b: cross[2],
+          emissiveR: cross[0] * 0.55,
+          emissiveG: cross[1] * 0.55,
+          emissiveB: cross[2] * 0.55,
+          roughness: 0.45,
           metallic: 0.05,
         });
         break;
@@ -914,13 +1008,34 @@ export class GlWorldRenderer implements WorldView {
 
   /**
    * Draws one enemy from its procedural sprite sheet (baked from {@link buildEnemyRig} poses
-   * with soft edges + ink outline). High-FPS clips keep motion Dead Cells–smooth.
+   * with soft edges + ink outline). Dying enemies switch to the live rig so fade/drop still play.
    */
-  private drawEnemy(_world: World, enemy: Enemy): void {
+  private drawEnemy(world: World, enemy: Enemy): void {
     const dyingProgress = enemy.state === 'dying' ? 1 - enemy.deathTimer / ENEMY_DEATH_TIME : 0;
     if (dyingProgress >= 1) return;
 
     const { x, y, width, height } = enemy.body;
+    const telegraphing = world.isCrusherTelegraphing(enemy) || enemy.lethal;
+
+    // Live rig for telegraph / dying / boss so sheets stay a cheap idle loop for fodder enemies.
+    if (dyingProgress > 0 || telegraphing || enemy.kind === 'overseer') {
+      const parts = buildEnemyRig({
+        kind: enemy.kind,
+        x,
+        y,
+        width,
+        height,
+        facing: enemy.direction,
+        animTime: enemy.animTime,
+        dying: dyingProgress,
+        telegraph: telegraphing,
+        vulnerable: enemy.kind === 'overseer' ? world.isBossVulnerable(enemy) : false,
+        hitPoints: enemy.hitPoints,
+      });
+      drawRigToGBuffer(this.gbufferBatch, parts);
+      return;
+    }
+
     const canonical = enemyCanonicalSize(enemy.kind);
     this.queueCharacterSprite(
       enemyClipId(enemy.kind),
@@ -930,32 +1045,52 @@ export class GlWorldRenderer implements WorldView {
       width,
       height,
       enemy.direction,
-      width / canonical.width,
-      height / canonical.height,
+      (width / canonical.width) * ENEMY_VISUAL_SCALE,
+      (height / canonical.height) * ENEMY_VISUAL_SCALE,
     );
   }
 
   private drawProjectiles(world: World): void {
-    const body = parseColor(palette.hazardDark);
+    const dark = parseColor(palette.hazardDark);
     const glow = parseColor(palette.hazard);
+    const spark = parseColor(palette.spark);
     for (const projectile of world.projectiles.all) {
       if (!projectile.active) continue;
-      this.gbufferBatch.rect(
-        projectile.x - PROJECTILE_SIZE / 2,
-        projectile.y - PROJECTILE_SIZE / 2,
-        PROJECTILE_SIZE,
-        PROJECTILE_SIZE,
-        {
-          r: body[0],
-          g: body[1],
-          b: body[2],
-          emissiveR: glow[0] * 0.7,
-          emissiveG: glow[1] * 0.7,
-          emissiveB: glow[2] * 0.7,
-          roughness: 0.3,
-          metallic: 0.7,
-        },
-      );
+      const cx = projectile.x;
+      const cy = projectile.y;
+      const s = PROJECTILE_SIZE;
+      // Core + soft halo (Dead Cells bolt) instead of a single pillow square.
+      this.gbufferBatch.rect(cx - s * 0.85, cy - s * 0.85, s * 1.7, s * 1.7, {
+        r: dark[0],
+        g: dark[1],
+        b: dark[2],
+        a: 0.55,
+        emissiveR: glow[0] * 0.45,
+        emissiveG: glow[1] * 0.45,
+        emissiveB: glow[2] * 0.45,
+        roughness: 0.35,
+        metallic: 0.5,
+      });
+      this.gbufferBatch.rect(cx - s * 0.5, cy - s * 0.5, s, s, {
+        r: glow[0],
+        g: glow[1],
+        b: glow[2],
+        emissiveR: glow[0] * 0.95,
+        emissiveG: glow[1] * 0.95,
+        emissiveB: glow[2] * 0.95,
+        roughness: 0.25,
+        metallic: 0.6,
+      });
+      this.gbufferBatch.rect(cx - s * 0.22, cy - s * 0.22, s * 0.44, s * 0.44, {
+        r: spark[0],
+        g: spark[1],
+        b: spark[2],
+        emissiveR: spark[0],
+        emissiveG: spark[1],
+        emissiveB: spark[2],
+        roughness: 0.2,
+        metallic: 0.3,
+      });
     }
   }
 
@@ -1078,42 +1213,27 @@ export class GlWorldRenderer implements WorldView {
     const outer = parseColor(palette.visorGlow);
     const mid = parseColor(palette.visor);
     const core = parseColor(palette.white);
+    // Match the Enhanced Optimus visual footprint (~1.8× hitbox), not the 10×22 collision box.
+    const gw = WORLD_DRAW_WIDTH;
+    const gh = WORLD_DRAW_HEIGHT;
     for (const ghost of this.ghosts) {
       const life = 1 - ghost.age / GHOST_LIFETIME;
-      // Soft cubic fade keeps older trail copies readable without a harsh cutoff.
       const alpha = 0.48 * life * life * life;
       if (alpha <= 0.02) continue;
-      // Multi-layer cyan streak: wide soft halo → mid body → hot core (Dead Cells dash juice).
+      const gx = ghost.x + PLAYER_WIDTH / 2 - gw / 2;
+      const gy = ghost.y + PLAYER_HEIGHT - gh;
+      this.forwardBatch.rect(gx - 2, gy - 2, gw + 4, gh + 4, outer[0], outer[1], outer[2], alpha * 0.22);
+      this.forwardBatch.rect(gx, gy, gw, gh, mid[0], mid[1], mid[2], alpha * 0.5);
+      this.forwardBatch.rect(gx + gw * 0.18, gy + gh * 0.12, gw * 0.64, gh * 0.76, mid[0], mid[1], mid[2], alpha * 0.75);
       this.forwardBatch.rect(
-        ghost.x - 2.5,
-        ghost.y - 2,
-        PLAYER_WIDTH + 5,
-        PLAYER_HEIGHT + 4,
-        outer[0],
-        outer[1],
-        outer[2],
-        alpha * 0.28,
-      );
-      this.forwardBatch.rect(
-        ghost.x - 1,
-        ghost.y - 1,
-        PLAYER_WIDTH + 2,
-        PLAYER_HEIGHT + 2,
-        mid[0],
-        mid[1],
-        mid[2],
-        alpha * 0.55,
-      );
-      this.forwardBatch.rect(ghost.x, ghost.y, PLAYER_WIDTH, PLAYER_HEIGHT, mid[0], mid[1], mid[2], alpha * 0.85);
-      this.forwardBatch.rect(
-        ghost.x + 2,
-        ghost.y + 3,
-        PLAYER_WIDTH - 4,
-        PLAYER_HEIGHT - 6,
+        gx + gw * 0.32,
+        gy + gh * 0.22,
+        gw * 0.36,
+        gh * 0.45,
         core[0],
         core[1],
         core[2],
-        alpha * 0.35,
+        alpha * 0.32,
       );
     }
   }
@@ -1125,18 +1245,17 @@ export class GlWorldRenderer implements WorldView {
     const hot = parseColor(palette.flameHot);
     const spark = parseColor(palette.spark);
     const flicker = 0.6 + Math.abs(Math.sin(player.animTime * 30)) * 0.4;
-    const side = Math.sin(player.animTime * 42) * 0.8;
-    const length = (7 + flicker * 7) * clamp(0.35 + player.energyRatio, 0.35, 1);
+    const side = Math.sin(player.animTime * 42) * 1.2;
+    const length = (10 + flicker * 10) * clamp(0.35 + player.energyRatio, 0.35, 1);
     const centerX = player.body.x + PLAYER_WIDTH / 2;
     const topY = player.body.y + PLAYER_HEIGHT;
-    // Punchy multi-layer plume: outer haze → warm body → hot core → white tip + side wisps.
-    this.forwardBatch.rect(centerX - 5.5, topY, 11, length * 0.75, flame[0], flame[1], flame[2], 0.28);
-    this.forwardBatch.rect(centerX - 4, topY, 8, length, flame[0], flame[1], flame[2], 0.62);
-    this.forwardBatch.rect(centerX - 2.5, topY, 5, length * 0.9, hot[0], hot[1], hot[2], 0.95);
-    this.forwardBatch.rect(centerX - 1.2, topY, 2.4, length * 1.2, spark[0], spark[1], spark[2], 1);
-    this.forwardBatch.rect(centerX - 0.6, topY + length * 0.15, 1.2, length * 0.55, hot[0], hot[1], hot[2], 0.85);
-    this.forwardBatch.rect(centerX - 3.5 + side, topY + length * 0.2, 2, length * 0.45, flame[0], flame[1], flame[2], 0.4);
-    this.forwardBatch.rect(centerX + 1.5 - side, topY + length * 0.25, 2, length * 0.4, flame[0], flame[1], flame[2], 0.35);
+    this.forwardBatch.rect(centerX - 7, topY, 14, length * 0.75, flame[0], flame[1], flame[2], 0.26);
+    this.forwardBatch.rect(centerX - 5, topY, 10, length, flame[0], flame[1], flame[2], 0.58);
+    this.forwardBatch.rect(centerX - 3.2, topY, 6.4, length * 0.9, hot[0], hot[1], hot[2], 0.92);
+    this.forwardBatch.rect(centerX - 1.5, topY, 3, length * 1.2, spark[0], spark[1], spark[2], 1);
+    this.forwardBatch.rect(centerX - 0.7, topY + length * 0.15, 1.4, length * 0.55, hot[0], hot[1], hot[2], 0.85);
+    this.forwardBatch.rect(centerX - 4.5 + side, topY + length * 0.2, 2.6, length * 0.45, flame[0], flame[1], flame[2], 0.38);
+    this.forwardBatch.rect(centerX + 1.9 - side, topY + length * 0.25, 2.6, length * 0.4, flame[0], flame[1], flame[2], 0.32);
   }
 
   /**
