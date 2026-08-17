@@ -963,7 +963,7 @@ export class GlWorldRenderer implements WorldView {
       [bottom[0], bottom[1], bottom[2]],
     );
     this.backgroundBatch.drawLayers(view.width, view.height, cam.x, cam.y);
-    const scrim = parseColor('rgb(9 12 20 / 0.45)');
+    const scrim = parseColor('rgb(8 10 18 / 0.38)');
     this.backgroundBatch.drawScrim(view.width, view.height, scrim[0], scrim[1], scrim[2], scrim[3]);
 
     const shaftIntensity = reducedMotion ? 0 : lightShaftIntensity(settings.quality) * (settings.lightShafts ? 1 : 0);
