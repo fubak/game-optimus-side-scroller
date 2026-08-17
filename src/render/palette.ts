@@ -21,16 +21,18 @@ export const palette = {
   plateShadow: '#232a38',
   grate: '#46536a',
   rust: '#9c6440',
-  hazard: '#d9564f',
-  hazardDark: '#8f3833',
+  // Slightly hotter hazard for Enhanced emissive accents; still readable flat-fill in Classic.
+  hazard: '#e25d55',
+  hazardDark: '#943a34',
 
-  // Optimus
-  shellLight: '#e6ebf2',
-  shell: '#c3ccd9',
-  shellDark: '#8e99ab',
+  // Optimus — shell bevels a touch brighter, visor punchier for Dead Cells bloom without washing
+  // Classic's flat-fill contrast (shell still sits clearly above plateFace / joint).
+  shellLight: '#eef3f9',
+  shell: '#c8d1de',
+  shellDark: '#8793a6',
   joint: '#3a4252',
-  visor: '#3fd0ff',
-  visorGlow: '#a5ecff',
+  visor: '#4ad6ff',
+  visorGlow: '#b6f0ff',
 
   // FX & UI
   energy: '#4ce0b3',
