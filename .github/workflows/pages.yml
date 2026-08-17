@@ -38,6 +38,9 @@ jobs:
           PAGES_BASE: /${{ github.event.repository.name }}/
 
       - uses: actions/configure-pages@v5
+        with:
+          # Create/enable the Pages site if the repo has never had one (first deploy).
+          enablement: true
 
       - uses: actions/upload-pages-artifact@v3
         with:
