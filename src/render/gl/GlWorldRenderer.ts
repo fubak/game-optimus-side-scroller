@@ -93,8 +93,8 @@ import type { Texture } from './texture';
 import { TexFormat } from './texture';
 
 /** Soft-threshold cutoff and overall strength for Stage 7's emissive-only bloom (`post/bloom.ts`). */
-const BLOOM_THRESHOLD = 0.45;
-const BLOOM_INTENSITY = 0.85;
+const BLOOM_THRESHOLD = 0.35;
+const BLOOM_INTENSITY = 1.15;
 
 /** Bound on the internal grain-hash time counter (seconds); wraps so long sessions keep float precision. */
 const TIME_WRAP_SEC = 1000;

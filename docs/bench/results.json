@@ -86,5 +86,6 @@
       "p99": 198.40000000037253,
       "avgFps": 5.754747666826203
     }
-  ]
+  ],
+  "environmentNote": "Captured on Cursor cloud agent VM with software WebGL. Absolute fps is not representative of a mid-range discrete GPU; use these numbers for relative preset/resolution trends only. Re-run `npm run bench` on target hardware for the \u226412 ms @4K budget."
 }

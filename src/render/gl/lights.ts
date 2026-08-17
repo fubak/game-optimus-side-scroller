@@ -156,7 +156,7 @@ export function collectLights(params: CollectLightsParams, out: LightList): void
   out.setAmbient(
     [AMBIENT_GROUND[0], AMBIENT_GROUND[1], AMBIENT_GROUND[2]],
     [AMBIENT_SKY[0], AMBIENT_SKY[1], AMBIENT_SKY[2]],
-    1,
+    0.42,
   );
 
   const budget = lightBudgetForQuality(params.settings.quality);
@@ -182,16 +182,16 @@ function addPlayerLights(params: CollectLightsParams, out: LightList, budget: nu
   // bright details, not wash the whole silhouette in colour (the shell's own light grey albedo —
   // see `drawPlayer` — needs to stay legible under them).
   const visor = parseColor(palette.visor);
-  out.add(centerX, player.body.y + 4, 13, 7, visor[0], visor[1], visor[2], 0.55);
+  out.add(centerX, player.body.y + 4, 18, 8, visor[0], visor[1], visor[2], 1.1);
   if (out.count >= budget) return;
 
   const coreColor = parseColor(player.energyRatio > 0.25 ? palette.energy : palette.uiWarn);
-  out.add(centerX, player.body.y + 10, 11, 6, coreColor[0], coreColor[1], coreColor[2], 0.4);
+  out.add(centerX, player.body.y + 10, 16, 7, coreColor[0], coreColor[1], coreColor[2], 0.85);
   if (out.count >= budget) return;
 
   if (player.state === 'thrust') {
     const flame = parseColor(palette.flame);
-    out.add(centerX, player.body.y + PLAYER_HEIGHT + 6, 40, 14, flame[0], flame[1], flame[2], 1.1);
+    out.add(centerX, player.body.y + PLAYER_HEIGHT + 6, 56, 16, flame[0], flame[1], flame[2], 1.8);
     if (out.count >= budget) return;
   }
 

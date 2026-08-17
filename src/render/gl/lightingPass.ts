@@ -44,7 +44,7 @@ precision highp float;
 // camera" (the conventional key light placement) is (+x-ish, -y, +z).
 const vec3 KEY_LIGHT_DIR = vec3(0.350219, -0.525328, 0.775485); // normalize(vec3(0.35, -0.525, 0.775))
 const vec3 KEY_LIGHT_COLOR = vec3(1.0, 0.98, 0.94);
-const float KEY_LIGHT_INTENSITY = 0.35;
+const float KEY_LIGHT_INTENSITY = 0.85;
 
 in vec2 v_uv;
 
