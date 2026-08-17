@@ -19,6 +19,7 @@
     "test:coverage": "vitest run --coverage",
     "test:e2e": "playwright test",
     "levels": "vite-node scripts/levelReport.ts",
+    "bench": "vite-node scripts/bench.ts",
     "generate:fonts": "vite-node scripts/generateMsdfFont.ts",
     "generate:materials": "vite-node scripts/generateMaterials.ts",
     "ci": "npm run lint && npm run typecheck && npm run test && npm run build && npm run test:e2e"

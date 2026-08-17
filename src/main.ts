@@ -43,6 +43,18 @@ if (host === null) {
   throw new Error('Missing #app host element.');
 }
 
+function isQualityPreset(value: unknown): value is QualityPreset {
+  switch (value) {
+    case 'low':
+    case 'medium':
+    case 'high':
+    case 'ultra':
+      return true;
+    default:
+      return false;
+  }
+}
+
 const params = new URLSearchParams(window.location.search);
 const requestedLevel = params.get('level');
 const seedParam = params.get('seed');
@@ -52,6 +64,12 @@ const keyboard = new KeyboardInput(window);
 const audio = createAudio();
 
 let renderSettings: RenderSettings = loadRenderSettings(window.localStorage);
+// `?quality=<preset>` lets the bench harness (`scripts/bench.ts`) force a preset without needing
+// its own localStorage plumbing; it does not persist, matching `?classic=1`/`?renderer=` below.
+const qualityParam = params.get('quality');
+if (isQualityPreset(qualityParam)) {
+  renderSettings = applyQualityPreset(renderSettings, qualityParam);
+}
 const backendPreference = resolveBackendPreference(window.location.search, renderSettings);
 
 // A level requested by id starts straight away; otherwise the title screen runs the show.
@@ -132,6 +150,34 @@ if (touch !== null) {
 let debugVisible = false;
 let lastRenderAlpha = 0;
 
+/**
+ * Raw per-`requestAnimationFrame` wall-clock deltas, for `scripts/bench.ts`'s p50/p95/p99 report.
+ * A fixed-size ring buffer written once per real animation frame (see `recordFrameSample` below)
+ * so sampling never allocates in the render hot path; `frameSamples()`/`resetFrameSamples()` below
+ * are the only places this gets copied out, and both are rare, test-hook-only calls.
+ */
+const FRAME_SAMPLE_CAPACITY = 4096;
+const frameSamples = new Float64Array(FRAME_SAMPLE_CAPACITY);
+let frameSampleCount = 0;
+let frameSampleCursor = 0;
+let lastFrameSampleAtMs: number | null = null;
+
+function recordFrameSample(): void {
+  const now = performance.now();
+  if (lastFrameSampleAtMs !== null) {
+    frameSamples[frameSampleCursor] = now - lastFrameSampleAtMs;
+    frameSampleCursor = (frameSampleCursor + 1) % FRAME_SAMPLE_CAPACITY;
+    frameSampleCount = Math.min(frameSampleCount + 1, FRAME_SAMPLE_CAPACITY);
+  }
+  lastFrameSampleAtMs = now;
+}
+
+function resetFrameSamples(): void {
+  frameSampleCount = 0;
+  frameSampleCursor = 0;
+  lastFrameSampleAtMs = null;
+}
+
 const QUALITY_CYCLE: readonly QualityPreset[] = ['low', 'medium', 'high', 'ultra'];
 
 function effectiveRenderSettings(): RenderSettings {
@@ -154,6 +200,7 @@ const loop: Loop = createLoop({
     if (world !== null) renderer.trackTrail(world, dtSec);
   },
   render(alpha) {
+    recordFrameSample();
     lastRenderAlpha = alpha;
     draw(alpha);
   },
@@ -265,6 +312,9 @@ if (shouldInstallTestHooks(window.location.search, import.meta.env.DEV)) {
       loop.start();
     },
     snapshot: () => game.snapshot(),
+    metrics: () => loop.metrics,
+    frameSamples: () => Array.from(frameSamples.subarray(0, frameSampleCount)),
+    resetFrameSamples,
   });
 }
 

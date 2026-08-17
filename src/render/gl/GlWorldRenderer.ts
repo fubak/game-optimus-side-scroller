@@ -24,11 +24,18 @@
  *     normal/material of its own.
  *  4. **Lighting pass** — {@link lightingPass} combines G-buffer + occluder + background + the
  *     frame's {@link LightList} (from {@link collectLights}) into {@link accumTarget}.
- *  5. **Forward pass** — dash ghosts, the jetpack flame and particles are drawn directly into
- *     {@link accumTarget} with real alpha/additive blending (they are all bright, blend-heavy FX
- *     that do not need to interact with the light list).
- *  6. **Tonemap present** — {@link tonemapPass} resolves {@link accumTarget} to the real backbuffer
- *     (sized to the device, not 480×270 — see {@link resize}), then the backbuffer is blitted into
+ *  5. **Bloom** (Stage 7, `post/bloom.ts`) — {@link bloomPass} thresholds the emissive G-buffer
+ *     channel and adds a soft, dual-Kawase-blurred glow back onto {@link accumTarget}, additively,
+ *     before anything else touches it. Skipped entirely under low quality/`settings.bloom`
+ *     off/reduced motion.
+ *  6. **Forward pass** — dash ghosts, the jetpack flame and particles ({@link particleBatch},
+ *     Stage 6's soft-edged instanced batch) are drawn directly into {@link accumTarget} with real
+ *     alpha/additive blending (they are all bright, blend-heavy FX that do not need to interact
+ *     with the light list).
+ *  7. **Composite present** (Stage 7, `post/composite.ts`) — {@link compositePass} tonemaps
+ *     {@link accumTarget} (ACES or AgX), optionally layers on a vignette/filmic grain/chromatic
+ *     aberration, and always dithers to fight 8-bit banding, resolving to the real backbuffer
+ *     (sized to the device, not 480×270 — see {@link resize}). The backbuffer is then blitted into
  *     the game's Canvas2D display surface so HUD/screens/e2e keep working unchanged.
  *
  * All render targets run at the fixed 480×270 world-view resolution (matching gameplay's own
@@ -43,7 +50,7 @@
 
 import { INTERNAL_HEIGHT, INTERNAL_WIDTH } from '../../core/canvas';
 import { clamp } from '../../core/math';
-import { INVULNERABLE_BLINK_HZ, PLAYER_HEIGHT, PLAYER_WIDTH } from '../../game/constants';
+import { INVULNERABLE_BLINK_HZ, PLAYER_HEIGHT, PLAYER_WIDTH, RUN_MAX_SPEED } from '../../game/constants';
 import { ENEMY_DEATH_TIME, PROJECTILE_SIZE } from '../../game/enemies';
 import type { Enemy } from '../../game/enemies';
 import type { Pickup } from '../../game/pickups';
@@ -59,6 +66,9 @@ import { createParallaxLayers } from '../parallax';
 import { palette } from '../palette';
 import type { ParticleView } from '../particles';
 import { ClassicWorldRenderer } from '../renderer';
+import { drawRigToGBuffer } from '../rig/drawRig';
+import { buildEnemyRig } from '../rig/enemyRigs';
+import { buildOptimusRig } from '../rig/optimusRig';
 import { DEFAULT_RENDER_SETTINGS } from '../settings';
 import type { RenderSettings } from '../settings';
 import type { WorldView } from '../view';
@@ -70,6 +80,9 @@ import { LightList, collectLights } from './lights';
 import { LightingPass } from './lightingPass';
 import { uploadMaterialAtlas } from './materialTextures';
 import type { MaterialTextureSet } from './materialTextures';
+import { ParticleBatch, particleBlendGroup } from './particleBatch';
+import { BloomPass } from './post/bloom';
+import { CompositePass } from './post/composite';
 import { RenderTarget } from './renderTarget';
 import { SolidBatch } from './solidBatch';
 import type { CameraOffset, ViewSize } from './solidBatch';
@@ -78,6 +91,13 @@ import type { UvRect } from './tileBatch';
 import { TonemapPass } from './tonemap';
 import type { Texture } from './texture';
 import { TexFormat } from './texture';
+
+/** Soft-threshold cutoff and overall strength for Stage 7's emissive-only bloom (`post/bloom.ts`). */
+const BLOOM_THRESHOLD = 0.45;
+const BLOOM_INTENSITY = 0.85;
+
+/** Bound on the internal grain-hash time counter (seconds); wraps so long sessions keep float precision. */
+const TIME_WRAP_SEC = 1000;
 
 interface Point {
   readonly x: number;
@@ -161,9 +181,16 @@ export class GlWorldRenderer implements WorldView {
   private readonly backgroundBatch: BackgroundBatch;
   /** Dedicated {@link SolidBatch} for stamping the occluder mask (white = "blocks light"). */
   private readonly occluderBatch: SolidBatch;
-  /** Dedicated {@link SolidBatch} for post-lighting forward FX (ghosts, flame, particles). */
+  /** Dedicated {@link SolidBatch} for post-lighting forward FX (ghosts, flame). */
   private readonly forwardBatch: SolidBatch;
+  /** GPU-instanced soft-edged particle batch (Stage 6) — see `post-lighting forward FX` above. */
+  private readonly particleBatch: ParticleBatch;
   private readonly lightingPass: LightingPass;
+  /** Emissive-only dual-Kawase bloom (Stage 7), composited additively into {@link accumTarget}. */
+  private readonly bloomPass: BloomPass;
+  /** Tonemap + vignette/grain/chromatic-aberration/dither present (Stage 7); replaces {@link tonemapPass}
+   * on the main path — {@link tonemapPass} is kept only for the raw G-buffer debug view. */
+  private readonly compositePass: CompositePass;
   private readonly tonemapPass: TonemapPass;
   private readonly gpuTimer: GpuTimer;
   private readonly lights = new LightList();
@@ -185,6 +212,8 @@ export class GlWorldRenderer implements WorldView {
   private currCamera: Point | null = null;
   private prevPlayer: Point | null = null;
   private currPlayer: Point | null = null;
+  /** Seconds of simulated time, wrapped every {@link TIME_WRAP_SEC}; seeds the composite pass's grain. */
+  private frameTimeSec = 0;
 
   /**
    * Optional G-buffer channel visualiser, e.g. `?gdbg=normal`. Parsed once at construction (not
@@ -243,7 +272,10 @@ export class GlWorldRenderer implements WorldView {
     this.backgroundBatch = new BackgroundBatch(gl);
     this.occluderBatch = new SolidBatch(gl);
     this.forwardBatch = new SolidBatch(gl);
+    this.particleBatch = new ParticleBatch(gl);
     this.lightingPass = new LightingPass(gl);
+    this.bloomPass = new BloomPass(gl, INTERNAL_WIDTH, INTERNAL_HEIGHT);
+    this.compositePass = new CompositePass(gl);
     this.tonemapPass = new TonemapPass(gl);
     this.gpuTimer = new GpuTimer(gl);
 
@@ -268,6 +300,8 @@ export class GlWorldRenderer implements WorldView {
     // Kept warm even while the deferred pipeline is healthy, so a mid-session `glFailed` fallback
     // does not resume Classic with a stale/empty ghost trail.
     this.classic.trackTrail(world, dtSec);
+
+    this.frameTimeSec = (this.frameTimeSec + dtSec) % TIME_WRAP_SEC;
 
     const { player } = world;
     if (player.state === 'dash') {
@@ -336,7 +370,10 @@ export class GlWorldRenderer implements WorldView {
     this.backgroundBatch.dispose();
     this.occluderBatch.dispose();
     this.forwardBatch.dispose();
+    this.particleBatch.dispose();
     this.lightingPass.dispose();
+    this.bloomPass.dispose();
+    this.compositePass.dispose();
     this.tonemapPass.dispose();
     this.gpuTimer.dispose();
     this.device.dispose();
@@ -442,6 +479,19 @@ export class GlWorldRenderer implements WorldView {
       shadowsEnabled,
     });
 
+    // Quality low always skips bloom (headroom over correctness); reduced motion forces every
+    // Stage 7 screen-space effect off regardless of what `settings` itself says (belt-and-braces —
+    // `settings` is normally already resolved through `withReducedMotion` by the caller, see
+    // `src/main.ts`, but the deferred pipeline does not rely on that having happened).
+    if (settings.bloom && settings.quality !== 'low' && !reducedMotion) {
+      this.bloomPass.draw({
+        emissive: this.gBufferEmissive,
+        threshold: BLOOM_THRESHOLD,
+        intensity: BLOOM_INTENSITY,
+        compositeInto: this.accumTarget,
+      });
+    }
+
     this.drawForwardEffects(world, view, cam);
 
     gl.bindFramebuffer(gl.FRAMEBUFFER, null);
@@ -449,7 +499,13 @@ export class GlWorldRenderer implements WorldView {
     gl.disable(gl.BLEND);
     gl.clearColor(0, 0, 0, 1);
     gl.clear(gl.COLOR_BUFFER_BIT);
-    this.tonemapPass.draw(this.accumTarget.texture.handle, 0);
+    this.compositePass.draw(this.accumTarget.texture.handle, {
+      tonemap: settings.tonemap,
+      vignette: settings.vignette && !reducedMotion,
+      grain: settings.grain && settings.quality !== 'low' && !reducedMotion,
+      chromaticAberration: settings.chromaticAberration && settings.quality !== 'low' && !reducedMotion,
+      timeSec: this.frameTimeSec,
+    });
 
     this.gpuTimer.end();
 
@@ -582,105 +638,31 @@ export class GlWorldRenderer implements WorldView {
     }
   }
 
+  /**
+   * Draws one enemy through {@link buildEnemyRig} — a higher-density silhouette (tread flex,
+   * rotor bank, recoil/heat, core iris) than the single flat AABB quad this used to emit.
+   */
   private drawEnemy(world: World, enemy: Enemy): void {
     const dyingProgress = enemy.state === 'dying' ? 1 - enemy.deathTimer / ENEMY_DEATH_TIME : 0;
-    const alpha = Math.max(0, 1 - dyingProgress);
-    if (alpha <= 0) return;
+    if (dyingProgress >= 1) return;
 
     const telegraphing = world.isCrusherTelegraphing(enemy);
     const { x, y, width, height } = enemy.body;
 
-    switch (enemy.kind) {
-      case 'walker': {
-        const base = parseColor(palette.rust);
-        const eye = parseColor(palette.hazard);
-        this.gbufferBatch.rect(x, y, width, height, {
-          r: base[0],
-          g: base[1],
-          b: base[2],
-          a: alpha,
-          emissiveR: eye[0] * 0.5,
-          emissiveG: eye[1] * 0.5,
-          emissiveB: eye[2] * 0.5,
-          roughness: 0.55,
-          metallic: 0.5,
-        });
-        break;
-      }
-      case 'drone': {
-        const base = parseColor(palette.plateFace);
-        const eye = parseColor(palette.hazard);
-        this.gbufferBatch.rect(x, y, width, height, {
-          r: base[0],
-          g: base[1],
-          b: base[2],
-          a: alpha,
-          emissiveR: eye[0] * 0.6,
-          emissiveG: eye[1] * 0.6,
-          emissiveB: eye[2] * 0.6,
-          roughness: 0.4,
-          metallic: 0.35,
-        });
-        break;
-      }
-      case 'turret': {
-        const base = parseColor(palette.plateDark);
-        const hazard = parseColor(palette.hazard);
-        const charge = telegraphing ? 1 : 0.35 + 0.35 * Math.sin(enemy.animTime * 6);
-        this.gbufferBatch.rect(x, y, width, height, {
-          r: base[0],
-          g: base[1],
-          b: base[2],
-          a: alpha,
-          emissiveR: hazard[0] * charge * 0.4,
-          emissiveG: hazard[1] * charge * 0.4,
-          emissiveB: hazard[2] * charge * 0.4,
-          roughness: 0.5,
-          metallic: 0.6,
-        });
-        break;
-      }
-      case 'crusher': {
-        const base = parseColor(palette.plateFace);
-        const warn = parseColor(telegraphing ? palette.hazard : palette.uiWarn);
-        const strength = telegraphing ? 0.5 : 0.15;
-        this.gbufferBatch.rect(x, y, width, height, {
-          r: base[0],
-          g: base[1],
-          b: base[2],
-          a: alpha,
-          emissiveR: warn[0] * strength,
-          emissiveG: warn[1] * strength,
-          emissiveB: warn[2] * strength,
-          roughness: 0.45,
-          metallic: 0.55,
-        });
-        break;
-      }
-      case 'overseer': {
-        const vulnerable = world.isBossVulnerable(enemy);
-        const base = parseColor(palette.plateFace);
-        const core = parseColor(palette.visorGlow);
-        // Matches the pulse `drawOverseer` uses in Classic — ~2.2 Hz, under the reduced-motion cap.
-        const pulse = vulnerable ? 0.6 + 0.4 * Math.sin(enemy.animTime * 14) : 0;
-        this.gbufferBatch.rect(x, y, width, height, {
-          r: base[0],
-          g: base[1],
-          b: base[2],
-          a: alpha,
-          emissiveR: core[0] * pulse,
-          emissiveG: core[1] * pulse,
-          emissiveB: core[2] * pulse,
-          roughness: 0.4,
-          metallic: 0.6,
-        });
-        break;
-      }
-      default: {
-        const exhaustive: never = enemy.kind;
-        throw new Error(`Unhandled enemy kind in GlWorldRenderer: ${String(exhaustive)}`);
-      }
-    }
+    const parts = buildEnemyRig({
+      kind: enemy.kind,
+      x,
+      y,
+      width,
+      height,
+      facing: enemy.direction,
+      animTime: enemy.animTime,
+      dying: dyingProgress,
+      telegraph: telegraphing || enemy.lethal,
+      vulnerable: enemy.kind === 'overseer' ? world.isBossVulnerable(enemy) : false,
+      hitPoints: enemy.hitPoints,
+    });
+    drawRigToGBuffer(this.gbufferBatch, parts);
   }
 
   private drawProjectiles(world: World): void {
@@ -707,57 +689,23 @@ export class GlWorldRenderer implements WorldView {
     }
   }
 
-  /** Simplified silhouette: full collision box + a darker boot band, visor and chest emissives. */
+  /** Draws Optimus through {@link buildOptimusRig} — the same skeletal rig used to feed the GL path. */
   private drawPlayer(world: World, playerPos: Point): void {
     const { player } = world;
     const blinkedOut =
       player.isInvulnerable && Math.floor(player.invulnerableTime * INVULNERABLE_BLINK_HZ) % 2 === 1;
     if (blinkedOut) return;
 
-    const { x, y } = playerPos;
-    const shell = parseColor(palette.shell);
-    const shellDark = parseColor(palette.shellDark);
-    this.gbufferBatch.rect(x, y, PLAYER_WIDTH, PLAYER_HEIGHT, {
-      r: shell[0],
-      g: shell[1],
-      b: shell[2],
-      roughness: 0.35,
-      metallic: 0.5,
+    const parts = buildOptimusRig({
+      x: playerPos.x,
+      y: playerPos.y,
+      facing: player.facing,
+      state: player.state,
+      animTime: player.animTime,
+      speedRatio: Math.abs(player.body.vx) / RUN_MAX_SPEED,
+      energyRatio: player.energyRatio,
     });
-    const bootHeight = PLAYER_HEIGHT * 0.28;
-    this.gbufferBatch.rect(x, y + PLAYER_HEIGHT - bootHeight, PLAYER_WIDTH, bootHeight, {
-      r: shellDark[0],
-      g: shellDark[1],
-      b: shellDark[2],
-      roughness: 0.4,
-      metallic: 0.55,
-    });
-
-    if (player.state !== 'dead') {
-      const visor = parseColor(palette.visor);
-      this.gbufferBatch.rect(x + 1, y + 2, PLAYER_WIDTH - 2, 2, {
-        r: visor[0],
-        g: visor[1],
-        b: visor[2],
-        emissiveR: visor[0] * 0.9,
-        emissiveG: visor[1] * 0.9,
-        emissiveB: visor[2] * 0.9,
-        roughness: 0.2,
-        metallic: 0.1,
-      });
-    }
-
-    const core = parseColor(player.energyRatio > 0.25 ? palette.energy : palette.uiWarn);
-    this.gbufferBatch.rect(x + PLAYER_WIDTH / 2 - 1.5, y + PLAYER_HEIGHT * 0.4, 3, 3, {
-      r: core[0],
-      g: core[1],
-      b: core[2],
-      emissiveR: core[0] * 0.8,
-      emissiveG: core[1] * 0.8,
-      emissiveB: core[2] * 0.8,
-      roughness: 0.25,
-      metallic: 0.2,
-    });
+    drawRigToGBuffer(this.gbufferBatch, parts);
   }
 
   /** Fills {@link occluderTarget}: solid terrain plus the player's own AABB block light. */
@@ -815,11 +763,18 @@ export class GlWorldRenderer implements WorldView {
     this.drawJetpackFlame(world);
     this.forwardBatch.flush();
 
-    // Particles use plain alpha blending, matching `ParticleSystem.draw`.
+    // Particles: glow-like kinds (sparks, exhaust) additive, everything else plain alpha — see
+    // `particleBlendGroup`. Two passes over the (small, ≤512-particle) pool is cheap; each pass is
+    // still exactly one instanced draw call via `ParticleBatch`.
+    gl.blendFunc(gl.SRC_ALPHA, gl.ONE);
+    this.particleBatch.begin(view, cam);
+    this.drawParticles(world, 'additive');
+    this.particleBatch.flush();
+
     gl.blendFunc(gl.SRC_ALPHA, gl.ONE_MINUS_SRC_ALPHA);
-    this.forwardBatch.begin(view, cam);
-    this.drawParticles(world);
-    this.forwardBatch.flush();
+    this.particleBatch.begin(view, cam);
+    this.drawParticles(world, 'alpha');
+    this.particleBatch.flush();
 
     gl.disable(gl.BLEND);
   }
@@ -846,15 +801,16 @@ export class GlWorldRenderer implements WorldView {
   }
 
   /**
-   * Approximates `ParticleSystem.draw`'s per-kind sizing/alpha as flat quads (rings become filled
-   * squares rather than stroked circles — a deliberate simplification for a single instanced
-   * batch; see the module doc).
+   * Approximates `ParticleSystem.draw`'s per-kind sizing/alpha through {@link ParticleBatch}'s
+   * soft-edged instanced quads instead of flat rects — `ring` gets a real soft annulus rather than
+   * a filled square. Only queues particles whose {@link particleBlendGroup} matches `group`, so
+   * `drawForwardEffects` can flush additive and alpha kinds as two separate batches/blend states.
    */
-  private drawParticles(world: World): void {
+  private drawParticles(world: World, group: 'additive' | 'alpha'): void {
     const { particles } = world;
     for (let i = 0; i < particles.capacity; i += 1) {
       const particle: ParticleView | null = particles.particleAt(i);
-      if (particle === null) continue;
+      if (particle === null || particleBlendGroup(particle.kind) !== group) continue;
       const progress = clamp(particle.life / particle.maxLife, 0, 1);
       const color = parseColor(particle.color);
       switch (particle.kind) {
@@ -862,13 +818,13 @@ export class GlWorldRenderer implements WorldView {
         case 'debris': {
           const size = Math.max(1, Math.round(particle.size * progress + 0.4));
           const alpha = clamp(progress * 1.4, 0, 1);
-          this.forwardBatch.rect(particle.x, particle.y, size, size, color[0], color[1], color[2], alpha);
+          this.particleBatch.particle(particle.x, particle.y, size, size, color[0], color[1], color[2], alpha);
           break;
         }
         case 'dust':
         case 'exhaust': {
           const size = Math.max(1, Math.round(particle.size + (1 - progress) * 2));
-          this.forwardBatch.rect(
+          this.particleBatch.particle(
             particle.x - size / 2,
             particle.y - size / 2,
             size,
@@ -882,12 +838,12 @@ export class GlWorldRenderer implements WorldView {
         }
         case 'pickup': {
           const height = Math.max(1, Math.round(1 + progress * 2));
-          this.forwardBatch.rect(particle.x, particle.y, 1, height, color[0], color[1], color[2], progress);
+          this.particleBatch.particle(particle.x, particle.y, 1, height, color[0], color[1], color[2], progress);
           break;
         }
         case 'ring': {
           const radius = Math.max(0.5, (1 - progress) * particle.size * 8);
-          this.forwardBatch.rect(
+          this.particleBatch.particle(
             particle.x - radius,
             particle.y - radius,
             radius * 2,
@@ -896,6 +852,7 @@ export class GlWorldRenderer implements WorldView {
             color[1],
             color[2],
             progress * 0.7,
+            'ring',
           );
           break;
         }

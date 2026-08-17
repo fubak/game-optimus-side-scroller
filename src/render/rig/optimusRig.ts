@@ -1,0 +1,537 @@
+import { clamp, clamp01 } from '../../core/math';
+import { PLAYER_HEIGHT, PLAYER_WIDTH } from '../../game/constants';
+import type { PlayerState } from '../../game/player';
+import { palette } from '../palette';
+import type { RigParts, RigRect } from './types';
+
+/**
+ * Optimus' procedural skeletal rig.
+ *
+ * This is the higher-density sibling of `sprites.ts`' `drawOptimus`: instead of issuing
+ * `ctx.fillRect` calls directly, `buildOptimusRig` returns a flat list of world-space
+ * {@link RigRect}s (torso, head, two-segment arms/legs, boots, …) that any backend can consume —
+ * a Canvas2D `Surface`, or the WebGL2 `GBufferBatch` (see `drawRig.ts`). Classic keeps using
+ * `drawOptimus` unchanged; only the GL path draws Optimus through this rig.
+ *
+ * ## Why a pure function is enough for "blending" and "squash/stretch"
+ *
+ * `Player.setState` (see `game/player.ts`) resets `animationTime` to `0` on every state change.
+ * That means "just entered this state" is already encoded in `animTime` alone, with no need to
+ * remember the previous state on the renderer side (which would break the "simulation read-only
+ * from render" contract by smuggling extra render-only state past frame boundaries):
+ *
+ * - **Blending**: every offset field below (`lean`, `legFrontX`, `headTilt`, …) is expressed
+ *   relative to a neutral rest pose — i.e. their neutral value is `0`. Scaling the whole offset
+ *   vector by a smoothstep of `animTime / TRANSITION_BLEND_SEC` therefore eases *into* the new
+ *   state's characteristic pose instead of snapping to it, with no discontinuity in position.
+ * - **Squash/stretch**: `transientStretchPulse` adds a short, exponentially-decaying wave on top
+ *   of the steady-state `stretch` value, keyed off the same `animTime`. Landing (entering
+ *   `idle`/`run`) dips negative first (a squash) before recovering; taking off (`jump`/`thrust`)
+ *   pulses positive first (a stretch).
+ *
+ * Secondary motion (antenna sway, hip sway, arm lag) is layered on with slightly de-phased
+ * sinusoids so those parts never move in perfect lockstep with the primary limbs.
+ */
+
+/** Rectangle placement is measured up from the feet (the origin), matching `sprites.ts`. */
+const HEAD_TOP = -24;
+const SHOULDER_Y = -18;
+const HIP_Y = -10;
+const LEG_BASE_X = 2;
+const ARM_BASE_X = 5;
+
+/** How long a freshly-entered state takes to blend its offsets in from the neutral rest pose. */
+const TRANSITION_BLEND_SEC = 0.1;
+/** How long the death collapse takes to fully fold, independent of `DEATH_TIME`'s respawn timer. */
+const COLLAPSE_DURATION_SEC = 0.9;
+
+export interface OptimusRigOptions {
+  /** Screen-space top-left of the *collision box* (10×22) — identical contract to `drawOptimus`. */
+  readonly x: number;
+  readonly y: number;
+  readonly facing: 1 | -1;
+  readonly state: PlayerState;
+  readonly animTime: number;
+  readonly speedRatio: number;
+  readonly energyRatio: number;
+}
+
+/** All continuous pose parameters, each expressed as an offset from the neutral rest pose. */
+interface Pose {
+  readonly bob: number;
+  readonly lean: number;
+  /** Multiplicative squash/stretch; 1 = neutral. */
+  readonly stretch: number;
+  readonly headTilt: number;
+  readonly legFrontX: number;
+  readonly legFrontY: number;
+  readonly legBackX: number;
+  readonly legBackY: number;
+  readonly armFrontX: number;
+  readonly armFrontY: number;
+  readonly armBackX: number;
+  readonly armBackY: number;
+  /** Extra fore/aft offset of the lower leg relative to the thigh — reads as a bent knee. */
+  readonly kneeFrontBend: number;
+  readonly kneeBackBend: number;
+  /** Extra fore/aft offset of the forearm relative to the upper arm — reads as a bent elbow. */
+  readonly elbowFrontBend: number;
+  readonly elbowBackBend: number;
+  /** Secondary lateral sway of the hips, independent of the primary leg swing. */
+  readonly hipSway: number;
+  /** Secondary motion on the antenna, phase-shifted from `headTilt` so it visibly lags/whips. */
+  readonly antennaSway: number;
+}
+
+const POSE_NEUTRAL: Pose = {
+  bob: 0,
+  lean: 0,
+  stretch: 1,
+  headTilt: 0,
+  legFrontX: 0,
+  legFrontY: 0,
+  legBackX: 0,
+  legBackY: 0,
+  armFrontX: 0,
+  armFrontY: 0,
+  armBackX: 0,
+  armBackY: 0,
+  kneeFrontBend: 0,
+  kneeBackBend: 0,
+  elbowFrontBend: 0,
+  elbowBackBend: 0,
+  hipSway: 0,
+  antennaSway: 0,
+};
+
+function smoothstep(t: number): number {
+  const c = clamp01(t);
+  return c * c * (3 - 2 * c);
+}
+
+/** The steady-state pose for a state, as a pure function of how long it has been active. */
+function rawPoseFor(state: PlayerState, animTime: number, speedRatio: number): Pose {
+  switch (state) {
+    case 'idle': {
+      const breath = Math.sin(animTime * 2.2);
+      return {
+        ...POSE_NEUTRAL,
+        bob: breath * 0.6,
+        headTilt: breath * 0.3,
+        hipSway: breath * 0.2,
+        antennaSway: Math.sin(animTime * 2.2 + 0.6) * 0.8,
+      };
+    }
+    case 'run': {
+      const cadence = 12 + speedRatio * 6;
+      const rawPhase = animTime * cadence;
+      // Quantised to a fixed number of steps per cycle so the cycle reads as a chunky 8–12 frame
+      // run rather than a perfectly smooth sinusoid, while remaining a pure function of animTime.
+      const stepsPerCycle = 10;
+      const phase = (Math.round((rawPhase / (Math.PI * 2)) * stepsPerCycle) / stepsPerCycle) * (Math.PI * 2);
+      const swing = Math.sin(phase);
+      const lift = Math.abs(Math.cos(phase));
+      // Arms lag the legs by a fixed phase offset instead of swinging in perfect anti-phase.
+      const armSwing = Math.sin(phase - 0.35);
+      return {
+        ...POSE_NEUTRAL,
+        bob: -lift * 1.2,
+        lean: 1.2 + speedRatio,
+        legFrontX: swing * 3,
+        legFrontY: -Math.max(0, swing) * 2.5,
+        legBackX: -swing * 3,
+        legBackY: -Math.max(0, -swing) * 2.5,
+        armFrontX: -armSwing * 2.4,
+        armBackX: armSwing * 2.4,
+        kneeFrontBend: Math.max(0, swing) * 1.4,
+        kneeBackBend: Math.max(0, -swing) * 1.4,
+        elbowFrontBend: -armSwing * 0.8,
+        elbowBackBend: armSwing * 0.8,
+        hipSway: Math.sin(phase * 0.5) * 0.6 * Math.min(1, speedRatio + 0.4),
+        antennaSway: Math.sin(rawPhase * 0.5 + 0.8) * 0.6,
+        headTilt: 0.4,
+      };
+    }
+    case 'jump':
+      return {
+        ...POSE_NEUTRAL,
+        lean: 0.8,
+        legFrontX: 1.5,
+        legFrontY: -2.5,
+        legBackX: -1,
+        legBackY: 0.5,
+        armFrontX: 1,
+        armFrontY: -3,
+        armBackX: -1.5,
+        armBackY: -2,
+        stretch: 1.1,
+        kneeFrontBend: -1,
+        elbowBackBend: 1,
+        antennaSway: -0.6,
+      };
+    case 'fall':
+      return {
+        ...POSE_NEUTRAL,
+        lean: -0.4,
+        legFrontX: 2.5,
+        legFrontY: 0.5,
+        legBackX: -2,
+        legBackY: -0.5,
+        armFrontX: 2,
+        armFrontY: -1,
+        armBackX: -2.5,
+        armBackY: -2.5,
+        stretch: 0.96,
+        kneeFrontBend: 1.2,
+        antennaSway: Math.sin(animTime * 8) * 0.5,
+      };
+    case 'thrust': {
+      const flutter = Math.sin(animTime * 24) * 0.6;
+      return {
+        ...POSE_NEUTRAL,
+        legFrontX: 1,
+        legFrontY: 1 + flutter,
+        legBackX: -1,
+        legBackY: 1 - flutter,
+        armFrontX: 2.5,
+        armFrontY: -1,
+        armBackX: -2.5,
+        armBackY: -1,
+        stretch: 1.06,
+        headTilt: -0.5,
+        hipSway: flutter * 0.4,
+        antennaSway: Math.sin(animTime * 24 + 1) * 0.9,
+      };
+    }
+    case 'dash':
+      return {
+        ...POSE_NEUTRAL,
+        lean: 3,
+        legFrontX: 3.5,
+        legFrontY: 1,
+        legBackX: -1.5,
+        legBackY: 1.5,
+        armFrontX: -3,
+        armFrontY: 1,
+        armBackX: -4.5,
+        stretch: 0.9,
+        headTilt: 1,
+        kneeFrontBend: 1.5,
+        antennaSway: -1.2,
+      };
+    case 'hurt': {
+      const shudder = Math.sin(animTime * 40) * 1.2;
+      return {
+        ...POSE_NEUTRAL,
+        lean: -2 + shudder,
+        legFrontX: -2,
+        legFrontY: 1,
+        legBackX: 2,
+        armFrontX: -3,
+        armFrontY: -3,
+        armBackX: 3,
+        armBackY: -2,
+        headTilt: -1.5,
+        stretch: 0.94,
+        antennaSway: shudder * 0.8,
+      };
+    }
+    case 'dead': {
+      const collapse = clamp01(animTime / COLLAPSE_DURATION_SEC);
+      return {
+        ...POSE_NEUTRAL,
+        bob: collapse * 6,
+        lean: -collapse * 3,
+        legFrontX: -3 * collapse,
+        legFrontY: 4 * collapse,
+        legBackX: 3 * collapse,
+        legBackY: 4 * collapse,
+        armFrontX: -4 * collapse,
+        armFrontY: 3 * collapse,
+        armBackX: 4 * collapse,
+        armBackY: 2 * collapse,
+        stretch: 1 - collapse * 0.35,
+        headTilt: -2 * collapse,
+        // Hinged fold: knees and elbows bend progressively further as the body settles.
+        kneeFrontBend: 3 * collapse,
+        kneeBackBend: -2 * collapse,
+        elbowFrontBend: 4 * collapse,
+        elbowBackBend: -3 * collapse,
+        antennaSway: -1.5 * collapse,
+      };
+    }
+    case 'victory': {
+      const cheer = Math.sin(animTime * 6);
+      return {
+        ...POSE_NEUTRAL,
+        bob: -Math.abs(cheer) * 1.5,
+        armFrontX: 1,
+        armFrontY: -7 - cheer,
+        armBackX: -1,
+        armBackY: -7 + cheer,
+        stretch: 1.04,
+        hipSway: cheer * 0.3,
+        antennaSway: cheer * 0.5,
+      };
+    }
+    default: {
+      const exhaustive: never = state;
+      throw new Error(`Unhandled player state in rig: ${String(exhaustive)}`);
+    }
+  }
+}
+
+/** Blends every offset field in from the neutral rest pose over `TRANSITION_BLEND_SEC`. */
+function blendFromNeutral(raw: Pose, animTime: number): Pose {
+  const t = smoothstep(animTime / TRANSITION_BLEND_SEC);
+  if (t >= 1) return raw;
+  return {
+    bob: raw.bob * t,
+    lean: raw.lean * t,
+    stretch: 1 + (raw.stretch - 1) * t,
+    headTilt: raw.headTilt * t,
+    legFrontX: raw.legFrontX * t,
+    legFrontY: raw.legFrontY * t,
+    legBackX: raw.legBackX * t,
+    legBackY: raw.legBackY * t,
+    armFrontX: raw.armFrontX * t,
+    armFrontY: raw.armFrontY * t,
+    armBackX: raw.armBackX * t,
+    armBackY: raw.armBackY * t,
+    kneeFrontBend: raw.kneeFrontBend * t,
+    kneeBackBend: raw.kneeBackBend * t,
+    elbowFrontBend: raw.elbowFrontBend * t,
+    elbowBackBend: raw.elbowBackBend * t,
+    hipSway: raw.hipSway * t,
+    antennaSway: raw.antennaSway * t,
+  };
+}
+
+/**
+ * A short exponentially-decaying wave layered onto `stretch`, keyed off `animTime` alone.
+ *
+ * Landing (entering `idle`/`run`) dips negative first — a squash — before settling; taking off
+ * (`jump`/`thrust`) pulses positive first — a stretch. Both decay to 0 within a few hundred ms so
+ * they never fight the state's own steady-state `stretch` value for long.
+ */
+function transientStretchPulse(state: PlayerState, animTime: number): number {
+  switch (state) {
+    case 'jump':
+      return Math.exp(-animTime * 14) * Math.sin(animTime * 46) * 0.22;
+    case 'thrust':
+      return Math.exp(-animTime * 12) * Math.sin(animTime * 40) * 0.16;
+    case 'idle':
+    case 'run':
+      return -Math.exp(-animTime * 16) * Math.cos(animTime * 32) * 0.18;
+    case 'dash':
+      return -Math.exp(-animTime * 20) * 0.12;
+    case 'fall':
+    case 'hurt':
+    case 'dead':
+    case 'victory':
+      return 0;
+    default: {
+      const exhaustive: never = state;
+      throw new Error(`Unhandled player state in rig: ${String(exhaustive)}`);
+    }
+  }
+}
+
+/** Resolves the fully blended, transient-pulsed pose for one frame. Pure; never returns NaN. */
+function resolvePose(state: PlayerState, animTime: number, speedRatio: number): Pose {
+  const raw = rawPoseFor(state, animTime, clamp01(speedRatio));
+  // The death collapse curve is itself already a function of elapsed time, so easing it in on
+  // top would just slow the fold down twice; every other state benefits from the ease-in.
+  const eased = state === 'dead' ? raw : blendFromNeutral(raw, animTime);
+  const stretch = clamp(eased.stretch + transientStretchPulse(state, animTime), 0.55, 1.45);
+  return { ...eased, stretch };
+}
+
+interface RectExtras {
+  readonly emissive?: number;
+  readonly roughness?: number;
+  readonly metallic?: number;
+  readonly alpha?: number;
+}
+
+/** Places one anatomy rectangle in world space, applying the horizontal facing flip. */
+function seg(
+  originX: number,
+  originY: number,
+  facing: 1 | -1,
+  localX: number,
+  localY: number,
+  width: number,
+  height: number,
+  color: string,
+  extras: RectExtras = {},
+): RigRect {
+  const leftUnflipped = originX + localX * facing;
+  const rightUnflipped = originX + (localX + width) * facing;
+  const x = Math.min(leftUnflipped, rightUnflipped);
+  const flippedWidth = Math.abs(rightUnflipped - leftUnflipped);
+  return { x, y: originY + localY, width: flippedWidth, height, color, ...extras };
+}
+
+/** Thigh → shin → boot, hanging from the hip at local `x`. */
+function legParts(
+  originX: number,
+  originY: number,
+  facing: 1 | -1,
+  x: number,
+  hipY: number,
+  kneeBend: number,
+  thighColor: string,
+  bootColor: string,
+): RigRect[] {
+  const knee = hipY + 5;
+  return [
+    seg(originX, originY, facing, x - 1.5, hipY, 3, 5, thighColor),
+    seg(originX, originY, facing, x - 1.5 + kneeBend * 0.6, knee, 3, 4, palette.shellDark),
+    seg(originX, originY, facing, x - 1.5 + kneeBend, knee + 4, 3, 2, bootColor),
+  ];
+}
+
+/** Upper arm → forearm → hand, hanging from the shoulder at local `x`. */
+function armParts(
+  originX: number,
+  originY: number,
+  facing: 1 | -1,
+  x: number,
+  shoulderY: number,
+  elbowBend: number,
+  color: string,
+): RigRect[] {
+  return [
+    seg(originX, originY, facing, x - 1, shoulderY + 1, 2, 4, color),
+    seg(originX, originY, facing, x - 1 + elbowBend * 0.6, shoulderY + 5, 2, 3, palette.shellDark),
+    seg(originX, originY, facing, x - 1.5 + elbowBend, shoulderY + 8, 3, 2, palette.joint),
+  ];
+}
+
+function torsoParts(
+  originX: number,
+  originY: number,
+  facing: 1 | -1,
+  shoulderY: number,
+  hipY: number,
+  lean: number,
+  energyRatio: number,
+): RigRect[] {
+  const torsoX = -4.5 + lean * 0.4;
+  const torsoH = hipY - shoulderY;
+  const coreColor = energyRatio > 0.25 ? palette.energy : palette.uiWarn;
+  return [
+    seg(originX, originY, facing, torsoX - 1, shoulderY, 11, 2, palette.shellDark),
+    seg(originX, originY, facing, torsoX, shoulderY, 9, torsoH, palette.shell),
+    seg(originX, originY, facing, torsoX, shoulderY, 9, 1, palette.shellLight),
+    seg(originX, originY, facing, torsoX + 7, shoulderY + 1, 2, torsoH - 1, palette.shellDark),
+    seg(originX, originY, facing, torsoX + 3, shoulderY + 3, 3, 3, palette.joint),
+    seg(originX, originY, facing, torsoX + 3.5, shoulderY + 3.5, 2, 2, coreColor, { emissive: 0.6 }),
+  ];
+}
+
+function headParts(
+  originX: number,
+  originY: number,
+  facing: 1 | -1,
+  headY: number,
+  lean: number,
+  headTilt: number,
+  antennaSway: number,
+  shoulderY: number,
+  state: PlayerState,
+): RigRect[] {
+  const headX = -3.5 + lean * 0.8 + headTilt;
+  const visorLit = state !== 'dead';
+  const parts: RigRect[] = [
+    seg(originX, originY, facing, headX + 3 + antennaSway * 0.5, headY - 1 - Math.abs(antennaSway) * 0.5, 1, 1, palette.joint),
+    seg(originX, originY, facing, headX, headY, 7, 6, palette.shellLight),
+    seg(originX, originY, facing, headX, headY, 7, 1, palette.white),
+    seg(originX, originY, facing, headX + 5, headY + 1, 2, 5, palette.shellDark),
+    seg(originX, originY, facing, headX + 1, headY + 2, 6, 2, palette.joint),
+    seg(originX, originY, facing, headX + 1, headY + 2, 5, 1, visorLit ? palette.visor : palette.plateDark, visorLit ? { emissive: 0.5 } : {}),
+  ];
+  if (visorLit && state !== 'hurt') {
+    parts.push(seg(originX, originY, facing, headX + 4, headY + 2, 2, 1, palette.visorGlow, { emissive: 1 }));
+  }
+  parts.push(seg(originX, originY, facing, -1.5, headY + 6, 3, Math.max(0, shoulderY - headY - 6), palette.joint));
+  return parts;
+}
+
+function thrustFlameParts(
+  originX: number,
+  originY: number,
+  facing: 1 | -1,
+  animTime: number,
+  energyRatio: number,
+): RigRect[] {
+  const flicker = 0.6 + Math.abs(Math.sin(animTime * 30)) * 0.4;
+  const length = (5 + flicker * 5) * clamp(0.35 + energyRatio, 0.35, 1);
+  return [
+    seg(originX, originY, facing, -3, 0, 6, length, palette.flame, { emissive: 1 }),
+    seg(originX, originY, facing, -2, 0, 4, length * 0.6, palette.flameHot, { emissive: 1 }),
+    seg(originX, originY, facing, -1, 0, 2, length * 1.2, palette.spark, { emissive: 1 }),
+  ];
+}
+
+/**
+ * Builds Optimus' full rig for one frame as a flat, painter's-algorithm-ordered list of
+ * world-space rectangles (back-most first): thrust flame (if any), back leg/arm, torso, hips,
+ * front leg/arm, head/neck.
+ *
+ * Pure and allocation-light: everything here is a function of `options` alone, so calling it
+ * every frame for every visible actor never touches or needs to know about the simulation beyond
+ * the read-only pose parameters it was handed.
+ */
+export function buildOptimusRig(options: OptimusRigOptions): RigParts {
+  const { x, y, facing, state, animTime, speedRatio, energyRatio } = options;
+  const pose = resolvePose(state, animTime, speedRatio);
+
+  const originX = x + PLAYER_WIDTH / 2;
+  const originY = y + PLAYER_HEIGHT;
+
+  const hipY = HIP_Y * pose.stretch + pose.bob;
+  const shoulderY = SHOULDER_Y * pose.stretch + pose.bob;
+  const headY = HEAD_TOP * pose.stretch + pose.bob;
+
+  const parts: RigRect[] = [];
+  if (state === 'thrust') {
+    parts.push(...thrustFlameParts(originX, originY, facing, animTime, energyRatio));
+  }
+
+  parts.push(
+    ...legParts(
+      originX,
+      originY,
+      facing,
+      -LEG_BASE_X + pose.legBackX + pose.hipSway,
+      hipY + pose.legBackY,
+      pose.kneeBackBend,
+      palette.shellDark,
+      palette.joint,
+    ),
+  );
+  parts.push(...armParts(originX, originY, facing, -ARM_BASE_X + pose.armBackX, shoulderY + pose.armBackY, pose.elbowBackBend, palette.shellDark));
+
+  parts.push(...torsoParts(originX, originY, facing, shoulderY, hipY, pose.lean, energyRatio));
+  parts.push(seg(originX, originY, facing, -3.5 + pose.lean * 0.3 + pose.hipSway, hipY - 1, 7, 2, palette.joint));
+
+  parts.push(
+    ...legParts(
+      originX,
+      originY,
+      facing,
+      LEG_BASE_X + pose.legFrontX + pose.hipSway,
+      hipY + pose.legFrontY,
+      pose.kneeFrontBend,
+      palette.shell,
+      palette.joint,
+    ),
+  );
+  parts.push(...armParts(originX, originY, facing, ARM_BASE_X + pose.armFrontX, shoulderY + pose.armFrontY, pose.elbowFrontBend, palette.shell));
+
+  parts.push(...headParts(originX, originY, facing, headY, pose.lean, pose.headTilt, pose.antennaSway, shoulderY, state));
+
+  return parts;
+}

@@ -39,9 +39,16 @@ describe('render settings', () => {
   it('forces motion-sensitive effects off under reduced motion', () => {
     const settings = withReducedMotion(parseRenderSettings({ quality: 'ultra' }));
     expect(settings.bloom).toBe(false);
+    expect(settings.vignette).toBe(false);
     expect(settings.grain).toBe(false);
     expect(settings.chromaticAberration).toBe(false);
     expect(settings.motionBlur).toBe(false);
+  });
+
+  it('defaults the tonemap operator to ACES and round-trips AgX', () => {
+    expect(parseRenderSettings({}).tonemap).toBe('aces');
+    expect(parseRenderSettings({ tonemap: 'agx' }).tonemap).toBe('agx');
+    expect(parseRenderSettings({ tonemap: 'not-a-real-operator' }).tonemap).toBe('aces');
   });
 
   it('resolves backend from URL params', () => {

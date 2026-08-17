@@ -10,6 +10,9 @@ export type RendererBackendPreference = 'auto' | 'classic' | 'webgl2';
 
 export type QualityPreset = 'low' | 'medium' | 'high' | 'ultra';
 
+/** Tonemap operator the post-processing composite pass uses (`src/render/gl/post/composite.ts`). */
+export type TonemapOperator = 'aces' | 'agx';
+
 export interface RenderSettings {
   /** Backend selection. `auto` prefers WebGL2 and falls back to Classic. */
   backend: RendererBackendPreference;
@@ -19,6 +22,8 @@ export interface RenderSettings {
   renderScale: number;
   /** Hold ~60 fps by shrinking the backbuffer when frame time spikes. */
   dynamicResolution: boolean;
+  /** Filmic tonemap curve applied by the composite pass. Independent of `quality`. */
+  tonemap: TonemapOperator;
   bloom: boolean;
   vignette: boolean;
   grain: boolean;
@@ -35,6 +40,7 @@ export const DEFAULT_RENDER_SETTINGS: RenderSettings = {
   quality: 'high',
   renderScale: 1,
   dynamicResolution: true,
+  tonemap: 'aces',
   bloom: true,
   vignette: true,
   grain: true,
@@ -133,6 +139,16 @@ function parseQuality(value: unknown): QualityPreset {
   }
 }
 
+function parseTonemap(value: unknown): TonemapOperator {
+  switch (value) {
+    case 'aces':
+    case 'agx':
+      return value;
+    default:
+      return DEFAULT_RENDER_SETTINGS.tonemap;
+  }
+}
+
 function parseBool(value: unknown, fallback: boolean): boolean {
   return typeof value === 'boolean' ? value : fallback;
 }
@@ -151,6 +167,7 @@ export function parseRenderSettings(value: unknown): RenderSettings {
     quality,
     renderScale: parseScale(value.renderScale ?? preset.renderScale),
     dynamicResolution: parseBool(value.dynamicResolution, preset.dynamicResolution),
+    tonemap: parseTonemap(value.tonemap),
     bloom: parseBool(value.bloom, preset.bloom),
     vignette: parseBool(value.vignette, preset.vignette),
     grain: parseBool(value.grain, preset.grain),
@@ -196,11 +213,17 @@ export function saveRenderSettings(storage: StorageLike, settings: RenderSetting
 /**
  * Reduced-motion accessibility: force motion-sensitive post effects off.
  * Does not mutate the stored preferences — callers pass the result into the renderer.
+ *
+ * `vignette` is included even though a static vignette has no motion of its own: Stage 7's
+ * post-processing pass groups it with the other screen-space effects for a11y simplicity (one
+ * "reduced motion turns off post FX" rule to reason about, rather than a vignette-shaped
+ * exception), so `GlWorldRenderer` never needs a separate reduced-motion check for it.
  */
 export function withReducedMotion(settings: RenderSettings): RenderSettings {
   return {
     ...settings,
     bloom: false,
+    vignette: false,
     grain: false,
     chromaticAberration: false,
     motionBlur: false,

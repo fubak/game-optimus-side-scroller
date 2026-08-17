@@ -41,7 +41,16 @@ export { GBufferBatch } from './gbufferBatch';
 
 export { BackgroundBatch } from './backgroundBatch';
 
+export type { ParticleBlendGroup, ParticleShape } from './particleBatch';
+export { ParticleBatch, particleBlendGroup, shapeValue } from './particleBatch';
+
 export type { LightingPassInputs } from './lightingPass';
 export { LightingPass } from './lightingPass';
+
+export type { BloomInputs } from './post/bloom';
+export { BloomPass } from './post/bloom';
+
+export type { CompositeInputs } from './post/composite';
+export { CompositePass, tonemapOperatorIndex } from './post/composite';
 
 export { TonemapPass } from './tonemap';

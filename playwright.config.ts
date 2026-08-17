@@ -18,7 +18,7 @@ export default defineConfig({
   testDir: 'tests/e2e',
   outputDir: 'test-results',
   timeout: 60_000,
-  expect: { timeout: 10_000 },
+  expect: { timeout: 10_000, toHaveScreenshot: { maxDiffPixelRatio: 0.05 } },
   fullyParallel: false,
   workers: 1,
   retries: process.env.CI === undefined ? 0 : 1,

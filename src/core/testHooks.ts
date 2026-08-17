@@ -1,3 +1,5 @@
+import type { LoopMetrics } from './loop';
+
 /**
  * Bridge that lets automated browser tests drive the game deterministically.
  *
@@ -16,6 +18,16 @@ export interface TestHooks {
   resumeDriver(): void;
   /** JSON-safe snapshot of the current game state, for assertions. */
   snapshot(): unknown;
+  /** Smoothed loop performance metrics (fps, frame/update/render time, dropped steps). */
+  metrics(): LoopMetrics;
+  /**
+   * Raw wall-clock time (ms) between consecutive real `requestAnimationFrame` render calls, since
+   * the last `resetFrameSamples()` — used by `scripts/bench.ts` to compute frame-time percentiles.
+   * Unlike `metrics().frameTimeMs` (an exponential moving average), these are unsmoothed samples.
+   */
+  frameSamples(): readonly number[];
+  /** Clear the frame-sample buffer, so a bench run can discard warm-up frames before measuring. */
+  resetFrameSamples(): void;
 }
 
 declare global {
