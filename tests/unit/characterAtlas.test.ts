@@ -74,4 +74,14 @@ describe('buildCharacterAtlas', () => {
     const dash = OPTIMUS_CLIPS.find((c) => c.id === 'optimus:dash');
     expect(dash!.fps).toBeGreaterThanOrEqual(24);
   });
+
+  it('draws Optimus larger than the 10×22 collision box', () => {
+    const atlas = buildCharacterAtlas();
+    const draw = atlas.drawSizes.get('optimus:run');
+    expect(draw).toBeDefined();
+    expect(draw!.width).toBeGreaterThanOrEqual(20);
+    expect(draw!.height).toBeGreaterThanOrEqual(40);
+    expect(atlas.cellWidth).toBeGreaterThanOrEqual(128);
+    expect(atlas.cellHeight).toBeGreaterThanOrEqual(240);
+  });
 });

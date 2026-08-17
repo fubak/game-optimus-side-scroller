@@ -61,7 +61,9 @@ the Enhanced-only changes above touch it.
 
 Optimus plays **procedural sprite sheets** baked at Enhanced load from a Tesla Optimus Gen 2–inspired
 skeletal rig: pearl polymer panels, charcoal joint covers, black face screen with twin status LEDs,
-and elliptical limb segments (not chunky armour bricks). Soft alpha fringes keep the silhouette
-smooth at supersampling. Clip rates stay dense — run 20@20fps, dash @ 30fps — for Dead Cells–smooth
-motion. Classic (`?classic=1`) is unchanged and still uses Canvas2D industrial sprites.
+and elliptical limb segments (not chunky armour bricks). The Enhanced visual is ~1.8× the gameplay
+hitbox so he reads clearly in the world view; left/right facing follows movement (sheet UVs flip —
+he is not camera-locked). Soft alpha fringes keep the silhouette smooth at supersampling. Clip rates
+stay dense — run 20@20fps, dash @ 30fps — for Dead Cells–smooth motion. Classic (`?classic=1`) is
+unchanged and still uses Canvas2D industrial sprites.
 Previews: `npm run generate:spritesheets` → `public/generated/spritesheets/`.

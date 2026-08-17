@@ -969,9 +969,12 @@ export class GlWorldRenderer implements WorldView {
       player.isInvulnerable && Math.floor(player.invulnerableTime * INVULNERABLE_BLINK_HZ) % 2 === 1;
     if (blinkedOut) return;
 
-    // Soft contact shadow under the feet — a Dead Cells silhouette cue that anchors the character
-    // to the ground plane without a full shadow map for the player.
-    this.gbufferBatch.rect(playerPos.x - 1, playerPos.y + PLAYER_HEIGHT - 1, PLAYER_WIDTH + 2, 3, {
+    // Soft contact shadow under the feet — scales with the Enhanced visual (larger than the
+    // 10×22 hitbox) so the bigger Tesla silhouette still reads grounded.
+    const drawSize = this.characterAtlas.drawSizes.get(optimusClipId(player.state));
+    const shadowW = drawSize?.width ?? PLAYER_WIDTH + 4;
+    const shadowX = playerPos.x + PLAYER_WIDTH / 2 - shadowW / 2;
+    this.gbufferBatch.rect(shadowX, playerPos.y + PLAYER_HEIGHT - 1, shadowW, 3, {
       r: 0.02,
       g: 0.03,
       b: 0.05,

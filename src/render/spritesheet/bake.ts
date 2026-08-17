@@ -17,14 +17,17 @@ import { outlineMask, softEdgeAlpha } from './style';
 import type { AtlasRect, CharacterAtlas, ClipDesc, ClipId, EnemyClipId, OptimusClipId } from './types';
 import { frameKey } from './types';
 
-/** Cell pixel size — enough for soft edges at Enhanced supersampling. */
-export const CELL_WIDTH = 96;
-export const CELL_HEIGHT = 160;
+/** Cell pixel size — high enough for Tesla polymer detail at Enhanced supersampling. */
+export const CELL_WIDTH = 144;
+export const CELL_HEIGHT = 288;
 /** Padding around each cell so linear filtering never bleeds into a neighbour frame. */
 const CELL_PAD = 2;
-/** World-space draw size for Optimus (slightly taller than the 10×22 collision box). */
-export const WORLD_DRAW_WIDTH = 14;
-export const WORLD_DRAW_HEIGHT = 28;
+/**
+ * World-space draw size for Optimus (~1.8× the 10×22 collision box). Visual only — hitbox
+ * stays `PLAYER_WIDTH`×`PLAYER_HEIGHT`.
+ */
+export const WORLD_DRAW_WIDTH = 24;
+export const WORLD_DRAW_HEIGHT = 48;
 /** Extra world padding around an enemy AABB when baking/drawing its sheet cell. */
 export const ENEMY_DRAW_PAD = 1.3;
 

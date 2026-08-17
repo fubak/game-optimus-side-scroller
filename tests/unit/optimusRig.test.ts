@@ -124,8 +124,9 @@ describe('buildOptimusRig — pose continuity (no NaNs)', () => {
       for (const animTime of animTimes) {
         const parts = buildOptimusRig(baseOptions({ state, animTime, speedRatio: 1, energyRatio: 1 }));
         const bounds = boundsOf(parts);
-        expect(bounds.maxX - bounds.minX).toBeLessThan(40);
-        expect(bounds.maxY - bounds.minY).toBeLessThan(60);
+        // Enhanced visual is ~1.8× the collision box; keep a firm ceiling so poses cannot explode.
+        expect(bounds.maxX - bounds.minX).toBeLessThan(70);
+        expect(bounds.maxY - bounds.minY).toBeLessThan(100);
       }
     }
   });
@@ -152,8 +153,8 @@ describe('buildOptimusRig — pose continuity (no NaNs)', () => {
     let previous = boundsOf(buildOptimusRig(baseOptions({ state: 'run', animTime: 0, speedRatio: 1 })));
     for (let t = dt; t <= 0.5; t += dt) {
       const current = boundsOf(buildOptimusRig(baseOptions({ state: 'run', animTime: t, speedRatio: 1 })));
-      expect(Math.abs(current.minX - previous.minX)).toBeLessThan(4);
-      expect(Math.abs(current.maxX - previous.maxX)).toBeLessThan(4);
+      expect(Math.abs(current.minX - previous.minX)).toBeLessThan(8);
+      expect(Math.abs(current.maxX - previous.maxX)).toBeLessThan(8);
       previous = current;
     }
   });
@@ -212,5 +213,23 @@ describe('buildOptimusRig — Tesla Optimus Gen 2 language', () => {
     expect(colors.has(OPTIMUS_ENHANCED.panel)).toBe(true);
     expect(colors.has(OPTIMUS_ENHANCED.joint)).toBe(true);
     expect(colors.has(OPTIMUS_ENHANCED.face)).toBe(true);
+  });
+
+  it('draws larger than the collision box (Enhanced visual scale)', () => {
+    const parts = buildOptimusRig(baseOptions({ state: 'idle', animTime: 0.2, x: 0, y: 0 }));
+    const bounds = boundsOf(parts);
+    expect(bounds.maxY - bounds.minY).toBeGreaterThan(30);
+    expect(bounds.maxX - bounds.minX).toBeGreaterThan(14);
+  });
+
+  it('mirrors left/right facing (not camera-facing only)', () => {
+    const right = buildOptimusRig(baseOptions({ facing: 1, x: 0, y: 0, animTime: 0.3, state: 'run' }));
+    const left = buildOptimusRig(baseOptions({ facing: -1, x: 0, y: 0, animTime: 0.3, state: 'run' }));
+    const rightBounds = boundsOf(right);
+    const leftBounds = boundsOf(left);
+    expect(rightBounds.maxX - rightBounds.minX).toBeCloseTo(leftBounds.maxX - leftBounds.minX, 5);
+    // Face LEDs exist on both; the silhouette must actually flip around the body centre.
+    const centre = 5; // PLAYER_WIDTH / 2
+    expect(Math.abs(rightBounds.minX - (2 * centre - leftBounds.maxX))).toBeLessThan(0.01);
   });
 });
