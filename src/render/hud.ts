@@ -10,8 +10,9 @@ import type { DrawTextFn } from './text';
 /**
  * Heads-up display: health, energy, dash charge, score, timer and transient toasts.
  *
- * Everything is drawn with the bitmap font and flat rectangles at the internal resolution, so the
- * HUD is pixel-crisp at every window size.
+ * Layout is always in 480×270 world-view units. On Enhanced, `main.ts` scales the canvas
+ * transform and rasterizes MSDF text at backbuffer resolution (see `uiSpace.ts`) so bars and
+ * labels stay sharp; Classic keeps the bitmap font at 1:1.
  */
 
 export interface Toast {

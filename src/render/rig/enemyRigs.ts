@@ -59,6 +59,8 @@ function buildWalkerRig(options: EnemyRigOptions): RigParts {
   if (alpha <= 0) return [];
   const dropY = y + dyingDrop(dying);
   const wobble = Math.sin(animTime * 10) * 0.5;
+  const bodyY = dropY + 3 + wobble;
+  const bodyH = height - 6;
 
   const parts: RigRect[] = [rect(x, dropY + height - 4, width, 4, palette.joint, { alpha })];
   // Idler wheels: two small hubs riding under the tread frame, giving the belt a visible axle
@@ -76,11 +78,20 @@ function buildWalkerRig(options: EnemyRigOptions): RigParts {
     const blockX = dropY + height - 3;
     parts.push(rect(x + ((offset + width) % width), blockX, 2, Math.max(1, 2 * flex), palette.plateLight, { alpha }));
   }
-  parts.push(rect(x + 1, dropY + 3 + wobble, width - 2, height - 6, palette.rust, { alpha }));
-  parts.push(rect(x + 1, dropY + 3 + wobble, width - 2, 1, palette.uiWarn, { alpha }));
-  parts.push(rect(x + 2, dropY + 5 + wobble, width - 4, 2, palette.plateDark, { alpha }));
+  // Softened hull: slightly inset mid-body + layered plating instead of one rust box.
+  parts.push(rect(x + 1, bodyY, width - 2, bodyH, palette.rust, { alpha }));
+  parts.push(rect(x + 1, bodyY, width - 2, 1, palette.uiWarn, { alpha }));
+  parts.push(rect(x + 2, bodyY + 1, width - 4, bodyH - 2, palette.plateDark, { alpha }));
+  // Horizontal panel seams + vertical rivet strips for denser HD-2D silhouette.
+  parts.push(rect(x + 2, bodyY + bodyH * 0.4, width - 4, 1, palette.plateShadow, { alpha }));
+  parts.push(rect(x + 2, bodyY + bodyH * 0.7, width - 4, 1, palette.plateShadow, { alpha }));
+  parts.push(rect(x + 3, bodyY + 2, 1, bodyH - 3, palette.plateShadow, { alpha }));
+  parts.push(rect(x + width - 4, bodyY + 2, 1, bodyH - 3, palette.plateShadow, { alpha }));
+  parts.push(rect(x + 2, bodyY + 5 + wobble * 0.2, width - 4, 2, palette.plateDark, { alpha }));
   const eyeX = facing === 1 ? x + width - 5 : x + 2;
-  parts.push(rect(eyeX, dropY + 5 + wobble, 3, 2, palette.hazard, { alpha, emissive: 0.6 }));
+  parts.push(rect(eyeX, bodyY + 2, 3, 3, palette.hazardDark, { alpha }));
+  parts.push(rect(eyeX, bodyY + 2.5, 3, 2, palette.hazard, { alpha, emissive: 0.85 }));
+  parts.push(rect(eyeX + (facing === 1 ? 1 : 0), bodyY + 3, 2, 1, palette.white, { alpha, emissive: 1 }));
   return parts;
 }
 
@@ -100,18 +111,25 @@ function buildDroneRig(options: EnemyRigOptions): RigParts {
   // which is enough for the eye to fill in a spinning rotor disc rather than a single wing.
   const rotor2 = Math.cos(animTime * 18) * 2;
   const rotor2BlurWidth = width - 4 + Math.abs(Math.cos(animTime * 36)) * 1.5;
+  const bodyX = x + 1 + bank * 0.5;
+  const bodyW = width - 2;
 
   const parts: RigRect[] = [
-    rect(x + 1 + rotor + bank, dropY, rotorBlurWidth, 1, palette.plateLight, { alpha, emissive: 0.15 }),
-    rect(x + 2 + rotor2 + bank, dropY, rotor2BlurWidth, 1, palette.plateLight, { alpha, emissive: 0.1 }),
+    rect(x + 1 + rotor + bank, dropY, rotorBlurWidth, 1, palette.plateLight, { alpha, emissive: 0.2 }),
+    rect(x + 2 + rotor2 + bank, dropY, rotor2BlurWidth, 1, palette.plateLight, { alpha, emissive: 0.12 }),
     rect(x + width / 2 - 1 + bank, dropY + 1, 2, 2, palette.joint, { alpha }),
-    rect(x + 1 + bank * 0.5, dropY + 3, width - 2, height - 4, palette.plateFace, { alpha }),
-    rect(x + 1 + bank * 0.5, dropY + 3, width - 2, 1, palette.plateLight, { alpha }),
+    // Softened fuselage: tapered underside + layered panels rather than a single plateFace box.
+    rect(bodyX, dropY + 3, bodyW, height - 4, palette.plateFace, { alpha }),
+    rect(bodyX, dropY + 3, bodyW, 1, palette.plateLight, { alpha }),
+    rect(bodyX + 1, dropY + 4, bodyW - 2, height - 6, palette.plateDark, { alpha }),
+    rect(bodyX + 1, dropY + 4 + (height - 6) * 0.45, bodyW - 2, 1, palette.plateShadow, { alpha }),
+    rect(bodyX + bodyW * 0.5 - 0.5, dropY + 4, 1, height - 6, palette.plateShadow, { alpha }),
     rect(x + 2 + bank * 0.5, dropY + height - 2, width - 4, 1, palette.plateShadow, { alpha }),
   ];
   const eyeX = (facing === 1 ? x + width - 6 : x + 3) + bank * 0.5;
   parts.push(rect(eyeX, dropY + 5, 3, 3, palette.hazardDark, { alpha }));
-  parts.push(rect(eyeX + (facing === 1 ? 1 : 0), dropY + 6, 2, 1, palette.hazard, { alpha, emissive: 0.7 }));
+  parts.push(rect(eyeX + (facing === 1 ? 1 : 0), dropY + 5.5, 2, 2, palette.hazard, { alpha, emissive: 0.9 }));
+  parts.push(rect(eyeX + (facing === 1 ? 1.5 : 0.5), dropY + 6, 1, 1, palette.white, { alpha, emissive: 1 }));
   return parts;
 }
 
@@ -124,32 +142,46 @@ function buildTurretRig(options: EnemyRigOptions): RigParts {
   // Recoil: the barrel kicks back proportionally to charge, snapping forward again once it drops
   // (i.e. right after a shot), and the heat glow ramps with the same charge value.
   const recoil = telegraph === true ? -Math.max(0, Math.sin(animTime * 6)) * 1.5 : 0;
+  const muzzleEmissive = Math.min(1, charge * 0.95);
+  const domeEmissive = Math.min(1, charge * 0.95);
 
   const parts: RigRect[] = [
     rect(x, dropY + height - 5, width, 5, palette.plateDark, { alpha }),
     rect(x + 1, dropY + height - 5, width - 2, 1, palette.plateFace, { alpha }),
+    // Softened bunker: inset grate with panel seams rather than one flat grate block.
     rect(x + 2, dropY + 3, width - 4, height - 7, palette.grate, { alpha }),
     rect(x + 3, dropY + 3, width - 6, 1, palette.plateLight, { alpha }),
+    rect(x + 3, dropY + 3 + (height - 7) * 0.4, width - 6, 1, palette.plateShadow, { alpha }),
+    rect(x + 3, dropY + 3 + (height - 7) * 0.7, width - 6, 1, palette.plateShadow, { alpha }),
+    rect(x + width / 2 - 0.5, dropY + 4, 1, height - 9, palette.plateShadow, { alpha }),
   ];
   // Barrel: three segments (mount, tube, muzzle) instead of one flat rect, so the heat glow can
   // localise to the muzzle tip rather than washing over the whole barrel.
   const barrelX = (facing === 1 ? x + width - 3 : x - 3) + recoil * facing;
   parts.push(rect(barrelX, dropY + 6, 2, 3, palette.plateDark, { alpha }));
   parts.push(rect(barrelX + 2, dropY + 6, 2, 3, palette.plateFace, { alpha }));
+  parts.push(rect(barrelX + 2, dropY + 6, 2, 1, palette.plateLight, { alpha }));
   parts.push(
     rect(barrelX + 4, dropY + 6, 2, 3, charge > 0.6 ? palette.hazard : palette.plateShadow, {
       alpha,
-      emissive: charge * 0.7,
+      emissive: muzzleEmissive,
+    }),
+  );
+  // Hot muzzle tip spark — stronger Dead Cells accent, clamped to [0,1].
+  parts.push(
+    rect(barrelX + 5, dropY + 6.5, 1, 2, charge > 0.55 ? palette.white : palette.plateDark, {
+      alpha,
+      emissive: Math.min(1, charge),
     }),
   );
   parts.push(
     rect(x + width / 2 - 1, dropY + 5, 2, 2, charge > 0.8 ? palette.hazard : palette.hazardDark, {
       alpha,
-      emissive: charge * 0.8,
+      emissive: domeEmissive,
     }),
   );
   // Heat glow: a soft emissive halo around the dome that brightens with sustained charge.
-  parts.push(rect(x + 1, dropY + 3, width - 2, height - 7, palette.hazardDark, { alpha, emissive: charge * 0.12 }));
+  parts.push(rect(x + 1, dropY + 3, width - 2, height - 7, palette.hazardDark, { alpha, emissive: charge * 0.18 }));
   return parts;
 }
 
@@ -163,13 +195,18 @@ function buildCrusherRig(options: EnemyRigOptions): RigParts {
   const parts: RigRect[] = [
     rect(x + width / 2 - 3, -1, 6, dropY + 2, palette.plateDark, { alpha }),
     rect(x + width / 2 - 1, -1, 2, dropY + 2, palette.plateFace, { alpha }),
+    // Softened press head: layered face plates + bevels instead of one solid block.
     rect(x + shake, dropY, width, height, palette.plateFace, { alpha }),
     rect(x + shake, dropY, width, 2, palette.plateLight, { alpha }),
+    rect(x + 2 + shake, dropY + 2, width - 4, height - 6, palette.plateDark, { alpha }),
+    rect(x + 2 + shake, dropY + height * 0.4, width - 4, 1, palette.plateShadow, { alpha }),
+    rect(x + 2 + shake, dropY + height * 0.65, width - 4, 1, palette.plateShadow, { alpha }),
+    rect(x + width / 2 - 0.5 + shake, dropY + 2, 1, height - 6, palette.plateShadow, { alpha }),
     rect(x + shake, dropY + height - 4, width, 4, palette.joint, { alpha }),
   ];
   for (let i = 0; i < width; i += 6) {
     const warn = telegraph === true ? palette.hazard : palette.uiWarn;
-    parts.push(rect(x + i + shake, dropY + height - 4, 3, 4, warn, { alpha, emissive: telegraph === true ? 0.4 : 0 }));
+    parts.push(rect(x + i + shake, dropY + height - 4, 3, 4, warn, { alpha, emissive: telegraph === true ? 0.55 : 0 }));
   }
   return parts;
 }
@@ -186,21 +223,25 @@ function buildOverseerRig(options: EnemyRigOptions): RigParts {
     rect(x + 4, -2, width - 8, 3, palette.plateDark, { alpha }),
     rect(x + width / 2 - 4, -2, 8, dropY + 4, palette.plateDark, { alpha }),
     rect(x + width / 2 - 1, -2, 2, dropY + 4, palette.plateFace, { alpha }),
-    // Chassis.
+    // Softened chassis: bevelled face with denser panel lines.
     rect(x + shake, dropY, width, height, palette.plateFace, { alpha }),
     rect(x + shake, dropY, width, 3, palette.plateLight, { alpha }),
     rect(x + shake, dropY + height - 5, width, 5, palette.joint, { alpha }),
     rect(x + 3 + shake, dropY + 4, width - 6, height - 11, palette.plateDark, { alpha }),
-    // Plating seam and corner rivets: mechanical detail on the flat chassis face so it reads as
-    // riveted armour plate rather than a solid block, even where the core cover hides the iris.
+    // Plating seams + corner rivets: denser mechanical detail on the flat chassis face.
+    rect(x + 3 + shake, dropY + height * 0.35, width - 6, 1, palette.plateShadow, { alpha }),
     rect(x + 3 + shake, dropY + height / 2, width - 6, 1, palette.plateShadow, { alpha }),
+    rect(x + 3 + shake, dropY + height * 0.68, width - 6, 1, palette.plateShadow, { alpha }),
+    rect(x + width / 2 - 0.5 + shake, dropY + 4, 1, height - 11, palette.plateShadow, { alpha }),
     rect(x + 2 + shake, dropY + 2, 2, 2, palette.joint, { alpha }),
     rect(x + width - 4 + shake, dropY + 2, 2, 2, palette.joint, { alpha }),
+    rect(x + 2 + shake, dropY + height - 8, 2, 2, palette.joint, { alpha }),
+    rect(x + width - 4 + shake, dropY + height - 8, 2, 2, palette.joint, { alpha }),
   ];
 
   for (let i = 0; i < width - 6; i += 8) {
     const warn = telegraph === true ? palette.hazard : palette.uiWarn;
-    parts.push(rect(x + 3 + i + shake, dropY + height - 5, 4, 5, warn, { alpha, emissive: telegraph === true ? 0.4 : 0 }));
+    parts.push(rect(x + 3 + i + shake, dropY + height - 5, 4, 5, warn, { alpha, emissive: telegraph === true ? 0.55 : 0 }));
   }
 
   const coreX = x + width / 2 - 7 + shake;
@@ -210,14 +251,20 @@ function buildOverseerRig(options: EnemyRigOptions): RigParts {
     // rectangle — the widest, dimmest ring first, the brightest pupil last.
     const pulse = 0.6 + 0.4 * Math.sin(animTime * 14);
     parts.push(rect(coreX - 2, coreY - 2, 18, 12, palette.hazardDark, { alpha }));
-    parts.push(rect(coreX, coreY, 14, 8, pulse > 0.75 ? palette.visorGlow : palette.visor, { alpha, emissive: 0.5 + pulse * 0.4 }));
-    parts.push(rect(coreX + 2, coreY + 1, 10, 6, palette.visorGlow, { alpha, emissive: 0.3 + pulse * 0.3 }));
-    parts.push(rect(coreX + 3, coreY + 2, 8, 4, palette.white, { alpha, emissive: 0.8 }));
+    parts.push(
+      rect(coreX, coreY, 14, 8, pulse > 0.75 ? palette.visorGlow : palette.visor, {
+        alpha,
+        emissive: 0.65 + pulse * 0.35,
+      }),
+    );
+    parts.push(rect(coreX + 2, coreY + 1, 10, 6, palette.visorGlow, { alpha, emissive: 0.45 + pulse * 0.4 }));
+    parts.push(rect(coreX + 3, coreY + 2, 8, 4, palette.white, { alpha, emissive: 1 }));
   } else {
     parts.push(rect(coreX, coreY, 14, 8, palette.grate, { alpha }));
     for (let i = 0; i < 14; i += 4) {
       parts.push(rect(coreX + i, coreY, 2, 8, palette.plateShadow, { alpha }));
     }
+    parts.push(rect(coreX + 1, coreY + 3, 12, 1, palette.plateDark, { alpha }));
   }
 
   for (let i = 0; i < 3; i += 1) {

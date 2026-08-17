@@ -24,6 +24,7 @@ import {
 } from './render/settings';
 import { drawText } from './render/text';
 import type { DrawTextFn } from './render/text';
+import { beginUiSpace, endUiSpace, makeBufferSpaceTextDraw } from './render/uiSpace';
 import type { WorldView } from './render/view';
 
 /**
@@ -240,33 +241,35 @@ function hudTextDraw(): DrawTextFn {
 
 function draw(alpha = 0): void {
   const { ctx } = display;
-  const textDraw = hudTextDraw();
   const world = game.showsWorldBehind ? game.world : game.attractWorld;
   if (world !== null) {
     renderer.draw(ctx, world, alpha, effectiveRenderSettings(), game.save.settings.reducedMotion);
-    if (game.showsWorldBehind) {
-      game.hud.draw(ctx, world, INTERNAL_WIDTH, textDraw);
-    }
   } else {
     ctx.fillStyle = palette.skyTop;
     ctx.fillRect(0, 0, INTERNAL_WIDTH, INTERNAL_HEIGHT);
   }
 
+  // Enhanced: scale the CTM to the backbuffer and rasterize MSDF at true buffer-pixel size so
+  // HUD/menus stay sharp (see `uiSpace.ts`). Classic keeps identity + bitmap font.
+  const uiScale = beginUiSpace(ctx, display);
+  const textDraw = makeBufferSpaceTextDraw(uiScale, hudTextDraw());
+  if (world !== null && game.showsWorldBehind) {
+    game.hud.draw(ctx, world, INTERNAL_WIDTH, textDraw);
+  }
   drawDamageFeedback(ctx, game);
   drawScene(ctx, game, textDraw);
   drawSceneTransition(ctx, game);
-
   if (touch !== null) {
     drawTouchControls(ctx, touchButtons, touch.activeActions, textDraw);
   }
-
   if (debugVisible) {
     if (world !== null) renderer.drawDebug(ctx, world);
-    drawDebugPanel(ctx);
+    drawDebugPanel(ctx, textDraw);
   }
+  endUiSpace(ctx, uiScale);
 }
 
-function drawDebugPanel(ctx: CanvasRenderingContext2D): void {
+function drawDebugPanel(ctx: CanvasRenderingContext2D, textDraw: DrawTextFn): void {
   const { fps, frameTimeMs, updateMs, renderMs, droppedSteps } = loop.metrics;
   const world = game.world ?? game.attractWorld;
   const player = world?.player;
@@ -288,7 +291,7 @@ function drawDebugPanel(ctx: CanvasRenderingContext2D): void {
   ctx.fillStyle = 'rgb(0 0 0 / 0.7)';
   ctx.fillRect(INTERNAL_WIDTH - 150, 32, 146, lines.length * 8 + 6);
   lines.forEach((line, index) => {
-    drawText(ctx, line, INTERNAL_WIDTH - 146, 35 + index * 8, { color: palette.energy, tracking: 0 });
+    textDraw(ctx, line, INTERNAL_WIDTH - 146, 35 + index * 8, { color: palette.energy, tracking: 0 });
   });
 }
 

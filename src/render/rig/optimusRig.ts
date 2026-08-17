@@ -395,15 +395,23 @@ function legParts(
   bootColor: string,
 ): RigRect[] {
   const knee = hipY + 5;
+  const shinX = x - 1.4 + kneeBend * 0.6;
+  const bootX = x - 1.4 + kneeBend;
   return [
-    seg(originX, originY, facing, x - 1.5, hipY, 3, 5, thighColor),
+    // Softened thigh plate: slightly tapered (wider at hip, narrower toward knee).
+    seg(originX, originY, facing, x - 1.6, hipY, 3.2, 3, thighColor),
+    seg(originX, originY, facing, x - 1.4, hipY + 3, 2.8, 2, thighColor),
+    // Thigh bevel + vertical panel line so the limb reads as stamped plate, not a box.
+    seg(originX, originY, facing, x - 1.6, hipY, 3.2, 1, palette.shellLight),
+    seg(originX, originY, facing, x - 0.2, hipY + 1, 1, 3, palette.plateShadow),
     // Knee seam: a 1px darker line right at the thigh/shin joint, so the two segments read as
     // separate plates instead of one continuous limb even when the knee bend is near zero.
     seg(originX, originY, facing, x - 1.5 + kneeBend * 0.3, knee - 1, 3, 1, palette.plateShadow),
-    seg(originX, originY, facing, x - 1.5 + kneeBend * 0.6, knee, 3, 4, palette.shellDark),
-    seg(originX, originY, facing, x - 1.5 + kneeBend, knee + 4, 3, 2, bootColor),
+    seg(originX, originY, facing, shinX, knee, 2.8, 4, palette.shellDark),
+    seg(originX, originY, facing, shinX + 0.9, knee + 1, 1, 2, palette.plateShadow),
+    seg(originX, originY, facing, bootX, knee + 4, 3.1, 2, bootColor),
     // Boot sole: a thin tread strip beneath the boot, distinct from the boot shell colour.
-    seg(originX, originY, facing, x - 1.5 + kneeBend, knee + 6, 3, 1, palette.joint),
+    seg(originX, originY, facing, bootX - 0.2, knee + 6, 3.4, 1, palette.joint),
   ];
 }
 
@@ -418,8 +426,12 @@ function armParts(
   color: string,
 ): RigRect[] {
   return [
-    seg(originX, originY, facing, x - 1, shoulderY + 1, 2, 4, color),
+    // Softened upper arm: pauldron cap + tapered plating instead of a single 2×4 box.
+    seg(originX, originY, facing, x - 1.3, shoulderY, 2.6, 2, palette.shellDark),
+    seg(originX, originY, facing, x - 1, shoulderY + 1.5, 2, 3.5, color),
+    seg(originX, originY, facing, x - 1, shoulderY + 1.5, 2, 1, palette.shellLight),
     seg(originX, originY, facing, x - 1 + elbowBend * 0.6, shoulderY + 5, 2, 3, palette.shellDark),
+    seg(originX, originY, facing, x - 0.5 + elbowBend * 0.6, shoulderY + 5.5, 1, 2, palette.plateShadow),
     seg(originX, originY, facing, x - 1.5 + elbowBend, shoulderY + 8, 3, 2, palette.joint),
   ];
 }
@@ -434,24 +446,39 @@ function torsoParts(
   torsoTwist: number,
   energyRatio: number,
 ): RigRect[] {
-  const torsoX = -4.5 + lean * 0.4 + torsoTwist * 0.3;
+  // Softened chassis: slightly tapered (shoulders wider than hips) instead of one 9-wide box.
+  const torsoX = -4.3 + lean * 0.4 + torsoTwist * 0.3;
   const torsoH = hipY - shoulderY;
   const coreColor = energyRatio > 0.25 ? palette.energy : palette.uiWarn;
-  const seamY1 = shoulderY + torsoH * 0.38;
-  const seamY2 = shoulderY + torsoH * 0.72;
+  const seamY1 = shoulderY + torsoH * 0.28;
+  const seamY2 = shoulderY + torsoH * 0.52;
+  const seamY3 = shoulderY + torsoH * 0.76;
+  const hipInset = 0.45;
   return [
-    seg(originX, originY, facing, torsoX - 1, shoulderY, 11, 2, palette.shellDark),
-    seg(originX, originY, facing, torsoX, shoulderY, 9, torsoH, palette.shell),
-    seg(originX, originY, facing, torsoX, shoulderY, 9, 1, palette.shellLight),
-    // Left/right flank plates — a matching pair (the original only had the right one), so the
-    // chassis reads as three riveted plates rather than a flat block from either facing direction.
-    seg(originX, originY, facing, torsoX - 1 + torsoTwist * 0.1, shoulderY + 1, 2, torsoH - 1, palette.shellDark),
-    seg(originX, originY, facing, torsoX + 7, shoulderY + 1, 2, torsoH - 1, palette.shellDark),
-    // Chest plate seams: two horizontal seam lines splitting the torso into plate segments.
-    seg(originX, originY, facing, torsoX + 1, seamY1, 7, 1, palette.plateShadow),
-    seg(originX, originY, facing, torsoX + 1, seamY2, 7, 1, palette.plateShadow),
-    seg(originX, originY, facing, torsoX + 3, shoulderY + 3, 3, 3, palette.joint),
-    seg(originX, originY, facing, torsoX + 3.5, shoulderY + 3.5, 2, 2, coreColor, { emissive: 0.6 }),
+    // Shoulder shelf / collar bevel.
+    seg(originX, originY, facing, torsoX - 1.2, shoulderY - 0.5, 11.4, 2, palette.shellDark),
+    seg(originX, originY, facing, torsoX - 0.4, shoulderY, 9.8, 1, palette.shellLight),
+    // Main chest plate (upper) and tapered abdomen (lower).
+    seg(originX, originY, facing, torsoX, shoulderY, 9, torsoH * 0.55, palette.shell),
+    seg(originX, originY, facing, torsoX + hipInset, shoulderY + torsoH * 0.52, 9 - hipInset * 2, torsoH * 0.48, palette.shell),
+    // Top bevel highlight across the collarbone.
+    seg(originX, originY, facing, torsoX + 0.5, shoulderY, 8, 1, palette.shellLight),
+    // Left/right flank plates — matching pair so the chassis reads as riveted segments.
+    seg(originX, originY, facing, torsoX - 1 + torsoTwist * 0.1, shoulderY + 1, 2, torsoH - 1.5, palette.shellDark),
+    seg(originX, originY, facing, torsoX + 7.2, shoulderY + 1, 2, torsoH - 1.5, palette.shellDark),
+    // Flank bevel strips (inner edge of each side plate).
+    seg(originX, originY, facing, torsoX + 0.6, shoulderY + 1.5, 1, torsoH - 2.5, palette.plateShadow),
+    seg(originX, originY, facing, torsoX + 6.4, shoulderY + 1.5, 1, torsoH - 2.5, palette.plateShadow),
+    // Chest / mid / abdomen horizontal panel seams.
+    seg(originX, originY, facing, torsoX + 1.2, seamY1, 6.6, 1, palette.plateShadow),
+    seg(originX, originY, facing, torsoX + 1.2, seamY2, 6.6, 1, palette.plateShadow),
+    seg(originX, originY, facing, torsoX + 1.5, seamY3, 6, 1, palette.plateShadow),
+    // Vertical sternum panel line splitting left/right chest plates.
+    seg(originX, originY, facing, torsoX + 4, shoulderY + 1.5, 1, torsoH * 0.7, palette.plateShadow),
+    // Core well + bright energy cell (stronger emissive for Dead Cells bloom punch).
+    seg(originX, originY, facing, torsoX + 2.8, shoulderY + 2.8, 3.4, 3.4, palette.joint),
+    seg(originX, originY, facing, torsoX + 3.2, shoulderY + 3.2, 2.6, 2.6, coreColor, { emissive: 0.85 }),
+    seg(originX, originY, facing, torsoX + 3.7, shoulderY + 3.6, 1.4, 1.4, coreColor, { emissive: 1 }),
   ];
 }
 
@@ -466,28 +493,50 @@ function headParts(
   shoulderY: number,
   state: PlayerState,
 ): RigRect[] {
-  const headX = -3.5 + lean * 0.8 + headTilt;
+  // Softened dome: slightly rounder silhouette via crest + cheek taper, not a bigger box.
+  const headX = -3.4 + lean * 0.8 + headTilt;
   const visorLit = state !== 'dead';
   const antennaBaseX = headX + 3 + antennaSway * 0.3;
   const antennaTipX = headX + 3 + antennaSway;
   const parts: RigRect[] = [
-    // Helmet crest: a raised ridge along the top-centre of the head, giving the silhouette a
-    // peak instead of a flat dome — reads clearly even at 4K where the flat top used to vanish.
-    seg(originX, originY, facing, headX + 2, headY - 2, 3, 2, palette.shellDark),
-    seg(originX, originY, facing, headX + 2.5, headY - 3, 2, 1, palette.shellLight),
-    // Antenna: two segments (mast + tip node) instead of one pixel, so the sway reads as a
-    // hinged rod rather than a single floating dot.
+    // Helmet crest: raised ridge + side fins so the silhouette peaks instead of reading as a flat dome.
+    seg(originX, originY, facing, headX + 1.5, headY - 2, 4, 2, palette.shellDark),
+    seg(originX, originY, facing, headX + 2.2, headY - 3, 2.6, 1, palette.shellLight),
+    seg(originX, originY, facing, headX + 0.5, headY - 1, 1.5, 1, palette.shellDark),
+    seg(originX, originY, facing, headX + 5, headY - 1, 1.5, 1, palette.shellDark),
+    // Antenna: mast + tip node so sway reads as a hinged rod.
     seg(originX, originY, facing, antennaBaseX, headY - 2 - Math.abs(antennaSway) * 0.3, 1, 2, palette.joint),
-    seg(originX, originY, facing, antennaTipX, headY - 3 - Math.abs(antennaSway) * 0.5, 1, 1, palette.visorGlow, { emissive: 0.4 }),
+    seg(originX, originY, facing, antennaTipX, headY - 3 - Math.abs(antennaSway) * 0.5, 1, 1, palette.visorGlow, {
+      emissive: 0.65,
+    }),
+    // Dome plates: main shell, top bevel, cheek / rear plate.
     seg(originX, originY, facing, headX, headY, 7, 6, palette.shellLight),
+    seg(originX, originY, facing, headX + 0.5, headY + 5, 6, 1, palette.shell),
     seg(originX, originY, facing, headX, headY, 7, 1, palette.white),
     seg(originX, originY, facing, headX + 5, headY + 1, 2, 5, palette.shellDark),
+    // Helmet panel lines (brow + vertical cheek seam).
+    seg(originX, originY, facing, headX + 1, headY + 1, 5, 1, palette.plateShadow),
+    seg(originX, originY, facing, headX + 3.5, headY + 1, 1, 4, palette.plateShadow),
+    // Visor well + lit slit with a hotter glow core.
     seg(originX, originY, facing, headX + 1, headY + 2, 6, 2, palette.joint),
-    seg(originX, originY, facing, headX + 1, headY + 2, 5, 1, visorLit ? palette.visor : palette.plateDark, visorLit ? { emissive: 0.5 } : {}),
+    seg(
+      originX,
+      originY,
+      facing,
+      headX + 1,
+      headY + 2,
+      5,
+      1,
+      visorLit ? palette.visor : palette.plateDark,
+      visorLit ? { emissive: 0.75 } : {},
+    ),
   ];
   if (visorLit && state !== 'hurt') {
-    parts.push(seg(originX, originY, facing, headX + 4, headY + 2, 2, 1, palette.visorGlow, { emissive: 1 }));
+    parts.push(seg(originX, originY, facing, headX + 3.5, headY + 2, 2.5, 1, palette.visorGlow, { emissive: 1 }));
+    parts.push(seg(originX, originY, facing, headX + 4.5, headY + 2, 1, 1, palette.white, { emissive: 1 }));
   }
+  // Chin guard + neck collar.
+  parts.push(seg(originX, originY, facing, headX + 1.5, headY + 5, 4, 1, palette.shellDark));
   parts.push(seg(originX, originY, facing, -1.5, headY + 6, 3, Math.max(0, shoulderY - headY - 6), palette.joint));
   return parts;
 }
@@ -502,9 +551,10 @@ function thrustFlameParts(
   const flicker = 0.6 + Math.abs(Math.sin(animTime * 30)) * 0.4;
   const length = (5 + flicker * 5) * clamp(0.35 + energyRatio, 0.35, 1);
   return [
-    seg(originX, originY, facing, -3, 0, 6, length, palette.flame, { emissive: 1 }),
-    seg(originX, originY, facing, -2, 0, 4, length * 0.6, palette.flameHot, { emissive: 1 }),
-    seg(originX, originY, facing, -1, 0, 2, length * 1.2, palette.spark, { emissive: 1 }),
+    seg(originX, originY, facing, -3.5, 0, 7, length * 0.85, palette.flame, { emissive: 0.85, alpha: 0.7 }),
+    seg(originX, originY, facing, -2.5, 0, 5, length, palette.flame, { emissive: 1 }),
+    seg(originX, originY, facing, -1.5, 0, 3, length * 0.7, palette.flameHot, { emissive: 1 }),
+    seg(originX, originY, facing, -1, 0, 2, length * 1.25, palette.spark, { emissive: 1 }),
   ];
 }
 

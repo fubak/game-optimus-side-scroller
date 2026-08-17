@@ -63,16 +63,16 @@ void main() {
   float alpha;
   if (v_shape > 0.5) {
     // Ring: a soft annulus around radius 0.7, matching Classic's stroked-circle ring particle.
-    alpha = 1.0 - smoothstep(0.0, 0.45, abs(dist - 0.7));
+    alpha = 1.0 - smoothstep(0.0, 0.55, abs(dist - 0.7));
   } else {
-    // Blob: hot soft core with a wider falloff so additive sparks read as glowing motes
+    // Blob: hotter soft core with a wider falloff so additive sparks read as glowing motes
     // (Dead Cells VFX), not hard discs.
-    float core = 1.0 - smoothstep(0.0, 0.45, dist);
-    float halo = 1.0 - smoothstep(0.2, 1.0, dist);
-    alpha = max(core, halo * 0.55);
+    float core = 1.0 - smoothstep(0.0, 0.5, dist);
+    float halo = 1.0 - smoothstep(0.15, 1.0, dist);
+    alpha = max(core, halo * 0.65);
   }
   // Brighten the centre of additive-looking particles without changing the caller's RGB.
-  float hot = 1.0 + (1.0 - smoothstep(0.0, 0.55, dist)) * 0.35;
+  float hot = 1.0 + (1.0 - smoothstep(0.0, 0.6, dist)) * 0.45;
   outColor = vec4(min(v_color.rgb * hot, vec3(1.0)), v_color.a * alpha);
 }
 `;

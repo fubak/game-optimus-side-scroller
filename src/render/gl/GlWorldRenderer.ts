@@ -119,15 +119,15 @@ const TIME_WRAP_SEC = 1000;
  * the real backbuffer the deferred pipeline's render targets actually use. Index 0 (no reduction)
  * is preferred; higher indices trade sharpness for GPU headroom under sustained load.
  */
-const DYNAMIC_RES_SCALE_STEPS: readonly number[] = [1, 0.85, 0.7, 0.6];
+const DYNAMIC_RES_SCALE_STEPS: readonly number[] = [1, 0.85, 0.7, 0.55, 0.45];
 /** Sustained GPU frame time (ms) above which dynamic resolution drops a step. */
-const DYNAMIC_RES_HIGH_MS = 14;
+const DYNAMIC_RES_HIGH_MS = 13;
 /** Sustained GPU frame time (ms) below which dynamic resolution recovers a step. */
-const DYNAMIC_RES_LOW_MS = 8;
+const DYNAMIC_RES_LOW_MS = 9;
 /** Smoothing factor for the GPU-time EMA — small, so single-frame spikes do not trigger a resize. */
 const DYNAMIC_RES_EMA_ALPHA = 0.15;
 /** Minimum frames between dynamic-resolution steps, so the ladder cannot thrash every frame. */
-const DYNAMIC_RES_COOLDOWN_FRAMES = 45;
+const DYNAMIC_RES_COOLDOWN_FRAMES = 40;
 /**
  * Dynamic resolution only engages once the backbuffer is at least this multiple of the internal
  * world-view's pixel area — a Classic-sized buffer is already cheap enough that throttling it
@@ -147,8 +147,8 @@ interface DashGhost {
   age: number;
 }
 
-/** Matches a slightly longer Dead Cells-style after-image than Classic's short `drawDashGhost`. */
-const GHOST_LIFETIME = 0.28;
+/** Longer Dead Cells-style after-image than Classic's short `drawDashGhost` — denser trail copies. */
+const GHOST_LIFETIME = 0.4;
 
 function lerp(a: number, b: number, t: number): number {
   return a + (b - a) * t;
@@ -164,12 +164,28 @@ function parseDebugChannel(value: string | null): DebugChannel | null {
   return match ?? null;
 }
 
+/**
+ * Half-texel bleed into each material's wrapped atlas padding (`ATLAS_PADDING` in
+ * `materials/generate.ts`). Logical rects already sit inset by that padding; expanding UVs
+ * slightly into the border lets bilinear filtering soften Enhanced tile edges without sampling a
+ * neighbouring material cell.
+ */
+const TILE_UV_PAD_BLEED_TEXELS = 0.5;
+
+/**
+ * World-space half-overlap when queuing Enhanced tile quads. Adjacent 16px tiles overlap by 1px
+ * total so the deferred G-buffer seam blends instead of reading as a hard grid; gameplay
+ * collision (`game/`) and Classic Canvas2D tiles are untouched.
+ */
+const TILE_EDGE_OVERLAP_PX = 0.5;
+
 function uvRectFromAtlasRect(rect: AtlasRect, atlasWidth: number, atlasHeight: number): UvRect {
+  const bleed = TILE_UV_PAD_BLEED_TEXELS;
   return {
-    u0: rect.x / atlasWidth,
-    v0: rect.y / atlasHeight,
-    u1: (rect.x + rect.width) / atlasWidth,
-    v1: (rect.y + rect.height) / atlasHeight,
+    u0: (rect.x - bleed) / atlasWidth,
+    v0: (rect.y - bleed) / atlasHeight,
+    u1: (rect.x + rect.width + bleed) / atlasWidth,
+    v1: (rect.y + rect.height + bleed) / atlasHeight,
   };
 }
 
@@ -334,9 +350,10 @@ export class GlWorldRenderer implements WorldView {
     // Enhanced always samples the material atlas with linear filtering, regardless of
     // supersampling ratio — smooth-shaded HD-2D materials, not Classic's crisp nearest-neighbour
     // pixel look (see `docs/art-direction.md`). Atlas tiles are padded with a wrapped border
-    // (`materials/generate.ts`) precisely so linear sampling never bleeds one material into its
-    // neighbour. Classic (`ClassicWorldRenderer`) is a separate Canvas2D painter untouched by
-    // this and stays nearest-only.
+    // (`materials/generate.ts`); UV rects bleed slightly into that padding (see
+    // `uvRectFromAtlasRect`) so linear sampling softens tile edges without bleeding one material
+    // into its neighbour. Classic (`ClassicWorldRenderer`) is a separate Canvas2D painter untouched
+    // by this and stays nearest-only.
     this.materialTextures.setFilter(Filter.Linear);
     const uvRects = new Map<MaterialId, UvRect>();
     for (const id of ALL_MATERIAL_IDS) {
@@ -387,7 +404,18 @@ export class GlWorldRenderer implements WorldView {
 
     const { player } = world;
     if (player.state === 'dash') {
-      this.ghosts.push({ x: player.body.x, y: player.body.y, age: 0 });
+      const px = player.body.x;
+      const py = player.body.y;
+      // Dense trail: current pose plus a soft mid-copy toward the previous sample so the streak
+      // reads continuous even when the sim ticks below the display refresh.
+      this.ghosts.push({ x: px, y: py, age: 0 });
+      if (this.currPlayer !== null) {
+        this.ghosts.push({
+          x: (px + this.currPlayer.x) * 0.5,
+          y: (py + this.currPlayer.y) * 0.5,
+          age: GHOST_LIFETIME * 0.06,
+        });
+      }
     }
     for (const ghost of this.ghosts) ghost.age += dtSec;
     this.ghosts = this.ghosts.filter((ghost) => ghost.age < GHOST_LIFETIME);
@@ -732,7 +760,17 @@ export class GlWorldRenderer implements WorldView {
         const uv = this.materialUvRects.get(material);
         if (uv === undefined) continue;
         const emissive = tileEmissive(kind, tx, ty, world);
-        this.tileBatch.tile(tx * tileSize, ty * tileSize, tileSize, tileSize, uv, emissive);
+        // Slightly oversized quads + UV bleed into atlas padding (see uvRectFromAtlasRect) soften
+        // the visible 16px grid under linear-filtered Enhanced sampling. Classic stays exact.
+        const overlap = TILE_EDGE_OVERLAP_PX;
+        this.tileBatch.tile(
+          tx * tileSize - overlap,
+          ty * tileSize - overlap,
+          tileSize + overlap * 2,
+          tileSize + overlap * 2,
+          uv,
+          emissive,
+        );
       }
     }
   }
@@ -965,25 +1003,46 @@ export class GlWorldRenderer implements WorldView {
 
   private drawGhosts(): void {
     if (this.ghosts.length === 0) return;
-    const color = parseColor(palette.visorGlow);
-    const hot = parseColor(palette.visor);
+    const outer = parseColor(palette.visorGlow);
+    const mid = parseColor(palette.visor);
+    const core = parseColor(palette.white);
     for (const ghost of this.ghosts) {
       const life = 1 - ghost.age / GHOST_LIFETIME;
-      const alpha = 0.42 * life * life;
-      if (alpha <= 0) continue;
-      // Soft cyan after-image: outer halo + hotter core, closer to Dead Cells dash streaks than a
-      // single flat AABB copy of the collision box.
+      // Soft cubic fade keeps older trail copies readable without a harsh cutoff.
+      const alpha = 0.48 * life * life * life;
+      if (alpha <= 0.02) continue;
+      // Multi-layer cyan streak: wide soft halo → mid body → hot core (Dead Cells dash juice).
+      this.forwardBatch.rect(
+        ghost.x - 2.5,
+        ghost.y - 2,
+        PLAYER_WIDTH + 5,
+        PLAYER_HEIGHT + 4,
+        outer[0],
+        outer[1],
+        outer[2],
+        alpha * 0.28,
+      );
       this.forwardBatch.rect(
         ghost.x - 1,
         ghost.y - 1,
         PLAYER_WIDTH + 2,
         PLAYER_HEIGHT + 2,
-        color[0],
-        color[1],
-        color[2],
-        alpha * 0.45,
+        mid[0],
+        mid[1],
+        mid[2],
+        alpha * 0.55,
       );
-      this.forwardBatch.rect(ghost.x, ghost.y, PLAYER_WIDTH, PLAYER_HEIGHT, hot[0], hot[1], hot[2], alpha);
+      this.forwardBatch.rect(ghost.x, ghost.y, PLAYER_WIDTH, PLAYER_HEIGHT, mid[0], mid[1], mid[2], alpha * 0.85);
+      this.forwardBatch.rect(
+        ghost.x + 2,
+        ghost.y + 3,
+        PLAYER_WIDTH - 4,
+        PLAYER_HEIGHT - 6,
+        core[0],
+        core[1],
+        core[2],
+        alpha * 0.35,
+      );
     }
   }
 
@@ -994,12 +1053,18 @@ export class GlWorldRenderer implements WorldView {
     const hot = parseColor(palette.flameHot);
     const spark = parseColor(palette.spark);
     const flicker = 0.6 + Math.abs(Math.sin(player.animTime * 30)) * 0.4;
-    const length = (6 + flicker * 6) * clamp(0.35 + player.energyRatio, 0.35, 1);
+    const side = Math.sin(player.animTime * 42) * 0.8;
+    const length = (7 + flicker * 7) * clamp(0.35 + player.energyRatio, 0.35, 1);
     const centerX = player.body.x + PLAYER_WIDTH / 2;
     const topY = player.body.y + PLAYER_HEIGHT;
-    this.forwardBatch.rect(centerX - 4, topY, 8, length, flame[0], flame[1], flame[2], 0.55);
-    this.forwardBatch.rect(centerX - 2.5, topY, 5, length * 0.85, hot[0], hot[1], hot[2], 0.9);
-    this.forwardBatch.rect(centerX - 1, topY, 2, length * 1.15, spark[0], spark[1], spark[2], 0.95);
+    // Punchy multi-layer plume: outer haze → warm body → hot core → white tip + side wisps.
+    this.forwardBatch.rect(centerX - 5.5, topY, 11, length * 0.75, flame[0], flame[1], flame[2], 0.28);
+    this.forwardBatch.rect(centerX - 4, topY, 8, length, flame[0], flame[1], flame[2], 0.62);
+    this.forwardBatch.rect(centerX - 2.5, topY, 5, length * 0.9, hot[0], hot[1], hot[2], 0.95);
+    this.forwardBatch.rect(centerX - 1.2, topY, 2.4, length * 1.2, spark[0], spark[1], spark[2], 1);
+    this.forwardBatch.rect(centerX - 0.6, topY + length * 0.15, 1.2, length * 0.55, hot[0], hot[1], hot[2], 0.85);
+    this.forwardBatch.rect(centerX - 3.5 + side, topY + length * 0.2, 2, length * 0.45, flame[0], flame[1], flame[2], 0.4);
+    this.forwardBatch.rect(centerX + 1.5 - side, topY + length * 0.25, 2, length * 0.4, flame[0], flame[1], flame[2], 0.35);
   }
 
   /**
@@ -1018,13 +1083,13 @@ export class GlWorldRenderer implements WorldView {
       switch (particle.kind) {
         case 'spark':
         case 'debris': {
-          // Slightly oversized soft quads so additive sparks read as glowing motes (Dead Cells),
+          // Larger/brighter soft quads so additive sparks read as glowing motes (Dead Cells juice),
           // not 1px flecks once the deferred target is supersampled.
-          const size = Math.max(1.5, particle.size * progress * 1.35 + 0.6);
-          const alpha = clamp(progress * 1.65, 0, 1);
+          const size = Math.max(1.85, particle.size * progress * 1.65 + 0.85);
+          const alpha = clamp(progress * 1.9, 0, 1);
           this.particleBatch.particle(
-            particle.x - size * 0.15,
-            particle.y - size * 0.15,
+            particle.x - size * 0.2,
+            particle.y - size * 0.2,
             size,
             size,
             color[0],
@@ -1036,7 +1101,7 @@ export class GlWorldRenderer implements WorldView {
         }
         case 'dust':
         case 'exhaust': {
-          const size = Math.max(1.5, particle.size + (1 - progress) * 2.6);
+          const size = Math.max(1.85, particle.size + (1 - progress) * 3.4);
           this.particleBatch.particle(
             particle.x - size / 2,
             particle.y - size / 2,
@@ -1045,17 +1110,17 @@ export class GlWorldRenderer implements WorldView {
             color[0],
             color[1],
             color[2],
-            progress * (particle.kind === 'exhaust' ? 0.75 : 0.5),
+            progress * (particle.kind === 'exhaust' ? 0.95 : 0.6),
           );
           break;
         }
         case 'pickup': {
-          const height = Math.max(1.5, 1.5 + progress * 2.5);
-          this.particleBatch.particle(particle.x - 0.5, particle.y, 2, height, color[0], color[1], color[2], progress);
+          const height = Math.max(1.75, 1.75 + progress * 3);
+          this.particleBatch.particle(particle.x - 0.65, particle.y, 2.4, height, color[0], color[1], color[2], progress);
           break;
         }
         case 'ring': {
-          const radius = Math.max(0.75, (1 - progress) * particle.size * 9);
+          const radius = Math.max(0.95, (1 - progress) * particle.size * 11);
           this.particleBatch.particle(
             particle.x - radius,
             particle.y - radius,
@@ -1064,7 +1129,7 @@ export class GlWorldRenderer implements WorldView {
             color[0],
             color[1],
             color[2],
-            progress * 0.85,
+            progress * 0.95,
             'ring',
           );
           break;

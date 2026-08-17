@@ -45,3 +45,5 @@ the Enhanced-only changes above touch it.
 | Enhanced parallax / light shafts | `src/render/parallaxEnhanced.ts`, `src/render/gl/backgroundBatch.ts` |
 | Soft GPU particles | `src/render/gl/particleBatch.ts`, `GlWorldRenderer.drawParticles` |
 | Skeletal animation fluidity | `src/render/rig/optimusRig.ts` |
+| Full-res Enhanced HUD/menus | `src/render/uiSpace.ts`, `src/main.ts` |
+| Softened tile grid (Enhanced) | `GlWorldRenderer` tile UV bleed + quad overlap |
