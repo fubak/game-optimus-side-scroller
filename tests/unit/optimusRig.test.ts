@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { buildOptimusRig } from '../../src/render/rig/optimusRig';
 import type { OptimusRigOptions } from '../../src/render/rig/optimusRig';
+import { OPTIMUS_ENHANCED } from '../../src/render/rig/optimusColors';
 import type { PlayerState } from '../../src/game/player';
 
 /**
@@ -195,5 +196,21 @@ describe('buildOptimusRig — facing', () => {
     // The collision box centre (x=0 + PLAYER_WIDTH/2) is the mirror axis; both silhouettes should
     // have the same width and be reflections of one another around it.
     expect(right.maxX - right.minX).toBeCloseTo(left.maxX - left.minX, 5);
+  });
+});
+
+describe('buildOptimusRig — Tesla Optimus Gen 2 language', () => {
+  it('uses elliptical polymer parts instead of only hard rects', () => {
+    const parts = buildOptimusRig(baseOptions({ state: 'idle', animTime: 0.2 }));
+    const ellipses = parts.filter((part) => part.shape === 'ellipse');
+    expect(ellipses.length).toBeGreaterThan(20);
+  });
+
+  it('uses pearl / charcoal colours, not the Classic industrial shell palette', () => {
+    const parts = buildOptimusRig(baseOptions({ state: 'run', animTime: 0.25, speedRatio: 1 }));
+    const colors = new Set(parts.map((part) => part.color));
+    expect(colors.has(OPTIMUS_ENHANCED.panel)).toBe(true);
+    expect(colors.has(OPTIMUS_ENHANCED.joint)).toBe(true);
+    expect(colors.has(OPTIMUS_ENHANCED.face)).toBe(true);
   });
 });

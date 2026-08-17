@@ -52,7 +52,7 @@ export const ENEMY_CLIPS: readonly ClipDesc[] = [
   { id: 'enemy:overseer', frameCount: 14, fps: 14, loop: true },
 ];
 
-const INK: readonly [number, number, number] = [12, 14, 22];
+const INK: readonly [number, number, number] = [28, 32, 40];
 
 export function enemyCanonicalSize(kind: EnemyKind): { width: number; height: number } {
   switch (kind) {
@@ -152,6 +152,53 @@ function fillRectAlpha(
   }
 }
 
+/** Soft elliptical coverage — Tesla limbs/panels read as rounded polymer, not bricks. */
+function fillEllipseAlpha(
+  hard: Uint8Array,
+  rgb: Uint8Array,
+  emissive: Uint8Array,
+  width: number,
+  height: number,
+  x0: number,
+  y0: number,
+  w: number,
+  h: number,
+  color: readonly [number, number, number],
+  alpha: number,
+  emit: number,
+): void {
+  if (w <= 0 || h <= 0) return;
+  const cx = x0 + w * 0.5;
+  const cy = y0 + h * 0.5;
+  const rx = Math.max(0.5, w * 0.5);
+  const ry = Math.max(0.5, h * 0.5);
+  const invRx2 = 1 / (rx * rx);
+  const invRy2 = 1 / (ry * ry);
+  const xStart = Math.max(0, Math.floor(x0));
+  const yStart = Math.max(0, Math.floor(y0));
+  const xEnd = Math.min(width, Math.ceil(x0 + w));
+  const yEnd = Math.min(height, Math.ceil(y0 + h));
+  const aByte = Math.round(Math.max(0, Math.min(1, alpha)) * 255);
+  for (let y = yStart; y < yEnd; y += 1) {
+    const dy = y + 0.5 - cy;
+    for (let x = xStart; x < xEnd; x += 1) {
+      const dx = x + 0.5 - cx;
+      if (dx * dx * invRx2 + dy * dy * invRy2 > 1) continue;
+      const i = y * width + x;
+      hard[i] = Math.max(hard[i] ?? 0, aByte);
+      const o = i * 4;
+      rgb[o] = color[0];
+      rgb[o + 1] = color[1];
+      rgb[o + 2] = color[2];
+      if (emit > 0) {
+        emissive[o] = Math.min(255, Math.round(color[0] * emit));
+        emissive[o + 1] = Math.min(255, Math.round(color[1] * emit));
+        emissive[o + 2] = Math.min(255, Math.round(color[2] * emit));
+      }
+    }
+  }
+}
+
 function rasterizeParts(
   parts: RigParts,
   feetWorldX: number,
@@ -178,10 +225,12 @@ function rasterizeParts(
     const y0 = Math.min(tl.y, br.y);
     const w = Math.abs(br.x - tl.x);
     const h = Math.abs(br.y - tl.y);
-    fillRectAlpha(hard, rgb, emissive, CELL_WIDTH, CELL_HEIGHT, x0, y0, w, h, color, alpha, part.emissive ?? 0);
+    const fill = part.shape === 'ellipse' ? fillEllipseAlpha : fillRectAlpha;
+    fill(hard, rgb, emissive, CELL_WIDTH, CELL_HEIGHT, x0, y0, w, h, color, alpha, part.emissive ?? 0);
   }
 
-  const soft = softEdgeAlpha(hard, CELL_WIDTH, CELL_HEIGHT, 1.5);
+  // Softer fringe + lighter ink — polymer silhouette, not comic-ink armour.
+  const soft = softEdgeAlpha(hard, CELL_WIDTH, CELL_HEIGHT, 2.25);
   const outline = outlineMask(hard, CELL_WIDTH, CELL_HEIGHT, 1);
   const albedo = new Uint8Array(CELL_WIDTH * CELL_HEIGHT * 4);
 
@@ -192,7 +241,7 @@ function rasterizeParts(
       albedo[o] = INK[0];
       albedo[o + 1] = INK[1];
       albedo[o + 2] = INK[2];
-      albedo[o + 3] = Math.min(255, a + 80);
+      albedo[o + 3] = Math.min(255, Math.round(a * 0.55));
     } else {
       albedo[o] = rgb[o] ?? 0;
       albedo[o + 1] = rgb[o + 1] ?? 0;

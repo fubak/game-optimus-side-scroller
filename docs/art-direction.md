@@ -38,7 +38,7 @@ the Enhanced-only changes above touch it.
 | --- | --- |
 | Materials | 128px hand-authored panels, drips, bold hazard (`materials/generate.ts`) |
 | Parallax | 6× factory skyline, warm windows, dual haze (`parallaxEnhanced.ts`) |
-| Characters | High-FPS hand-drawn-style sheets baked from rigs (`spritesheet/`) |
+| Characters | Tesla Optimus–inspired sheets baked from elliptical polymer rigs (`spritesheet/`, `rig/optimusRig.ts`) |
 | Lighting | Cool key, punchy beacons, atmospheric fog (`lightingPass.ts`, `lights.ts`) |
 | HUD | Full-res MSDF on Enhanced (`uiSpace.ts`) |
 
@@ -59,8 +59,9 @@ the Enhanced-only changes above touch it.
 
 ## Character animation (Enhanced)
 
-Optimus and enemies play **procedural sprite sheets** generated at Enhanced load from the skeletal
-rigs (soft alpha fringe + dark ink outline). Clip rates are intentionally dense — run is 20 frames
-@ 20fps, dash @ 30fps, thrust @ 24fps — so motion reads closer to Dead Cells' painted fluidity than
-to sparse keyframe swaps. Classic (`?classic=1`) is unchanged and still uses Canvas2D sprites.
+Optimus plays **procedural sprite sheets** baked at Enhanced load from a Tesla Optimus Gen 2–inspired
+skeletal rig: pearl polymer panels, charcoal joint covers, black face screen with twin status LEDs,
+and elliptical limb segments (not chunky armour bricks). Soft alpha fringes keep the silhouette
+smooth at supersampling. Clip rates stay dense — run 20@20fps, dash @ 30fps — for Dead Cells–smooth
+motion. Classic (`?classic=1`) is unchanged and still uses Canvas2D industrial sprites.
 Previews: `npm run generate:spritesheets` → `public/generated/spritesheets/`.

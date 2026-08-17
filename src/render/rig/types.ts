@@ -8,6 +8,9 @@
  * three needing to know about the others.
  */
 
+/** Axis-aligned fill shape for one rig part. Ellipses round off Enhanced sheet silhouettes. */
+export type RigShape = 'rect' | 'ellipse';
+
 /** One coloured (and optionally emissive) rectangle, already placed in world space. */
 export interface RigRect {
   readonly x: number;
@@ -23,6 +26,8 @@ export interface RigRect {
   readonly metallic?: number;
   /** Alpha multiplier, e.g. for death fade-outs. Defaults to 1. */
   readonly alpha?: number;
+  /** Defaults to `rect`. Enhanced sprite baking honours `ellipse` for softer limbs/panels. */
+  readonly shape?: RigShape;
 }
 
 /** A complete rig pose: every rectangle needed to draw one character this frame, back-to-front. */

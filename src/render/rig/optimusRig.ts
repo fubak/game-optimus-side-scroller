@@ -2,16 +2,20 @@ import { clamp, clamp01 } from '../../core/math';
 import { PLAYER_HEIGHT, PLAYER_WIDTH } from '../../game/constants';
 import type { PlayerState } from '../../game/player';
 import { palette } from '../palette';
-import type { RigParts, RigRect } from './types';
+import { OPTIMUS_ENHANCED as C } from './optimusColors';
+import type { RigParts, RigRect, RigShape } from './types';
 
 /**
- * Optimus' procedural skeletal rig.
+ * Optimus' procedural skeletal rig (Enhanced path).
+ *
+ * Visual target: Tesla Optimus Gen 2 — pearl polymer panels, charcoal joint covers, black face
+ * screen with soft status LEDs, slim humanoid proportions. Classic Canvas2D keeps using
+ * `sprites.ts` + the industrial `palette` unchanged.
  *
  * This is the higher-density sibling of `sprites.ts`' `drawOptimus`: instead of issuing
  * `ctx.fillRect` calls directly, `buildOptimusRig` returns a flat list of world-space
- * {@link RigRect}s (torso, head, two-segment arms/legs, boots, …) that any backend can consume —
- * a Canvas2D `Surface`, or the WebGL2 `GBufferBatch` (see `drawRig.ts`). Classic keeps using
- * `drawOptimus` unchanged; only the GL path draws Optimus through this rig.
+ * {@link RigRect}s that Enhanced bakes into hand-drawn-style sprite sheets (and that
+ * `drawRig.ts` can emit into a G-buffer).
  *
  * ## Why a pure function is enough for "blending" and "squash/stretch"
  *
@@ -29,7 +33,7 @@ import type { RigParts, RigRect } from './types';
  *   `idle`/`run`) dips negative first (a squash) before recovering; taking off (`jump`/`thrust`)
  *   pulses positive first (a stretch).
  *
- * Secondary motion (antenna sway, hip sway, arm lag) is layered on with slightly de-phased
+ * Secondary motion (head lag, hip sway, arm lag) is layered on with slightly de-phased
  * sinusoids so those parts never move in perfect lockstep with the primary limbs.
  */
 
@@ -37,8 +41,8 @@ import type { RigParts, RigRect } from './types';
 const HEAD_TOP = -24;
 const SHOULDER_Y = -18;
 const HIP_Y = -10;
-const LEG_BASE_X = 2;
-const ARM_BASE_X = 5;
+const LEG_BASE_X = 1.85;
+const ARM_BASE_X = 4.2;
 
 /**
  * How long a freshly-entered state takes to blend its offsets in from the neutral rest pose.
@@ -83,7 +87,7 @@ interface Pose {
   readonly elbowBackBend: number;
   /** Secondary lateral sway of the hips, independent of the primary leg swing. */
   readonly hipSway: number;
-  /** Secondary motion on the antenna, phase-shifted from `headTilt` so it visibly lags/whips. */
+  /** Secondary head lag (historically antenna sway); phase-shifted from `headTilt`. */
   readonly antennaSway: number;
   /** Torso counter-rotation, out of phase with the hips — reads as the chest twisting against the stride. */
   readonly torsoTwist: number;
@@ -362,9 +366,10 @@ interface RectExtras {
   readonly roughness?: number;
   readonly metallic?: number;
   readonly alpha?: number;
+  readonly shape?: RigShape;
 }
 
-/** Places one anatomy rectangle in world space, applying the horizontal facing flip. */
+/** Places one anatomy part in world space, applying the horizontal facing flip. */
 function seg(
   originX: number,
   originY: number,
@@ -383,7 +388,25 @@ function seg(
   return { x, y: originY + localY, width: flippedWidth, height, color, ...extras };
 }
 
-/** Thigh → shin → boot, hanging from the hip at local `x`. */
+/** Compact ellipse helper — Tesla limbs read as polymer cylinders, not armour bricks. */
+function oval(
+  originX: number,
+  originY: number,
+  facing: 1 | -1,
+  localX: number,
+  localY: number,
+  width: number,
+  height: number,
+  color: string,
+  extras: RectExtras = {},
+): RigRect {
+  return seg(originX, originY, facing, localX, localY, width, height, color, { shape: 'ellipse', ...extras });
+}
+
+/**
+ * Thigh → knee ring → shin → foot, hanging from the hip at local `x`.
+ * Slim white polymer tubes with charcoal actuator rings (Tesla Gen 2 language).
+ */
 function legParts(
   originX: number,
   originY: number,
@@ -392,35 +415,27 @@ function legParts(
   hipY: number,
   kneeBend: number,
   thighColor: string,
-  bootColor: string,
 ): RigRect[] {
-  const knee = hipY + 5;
-  const shinX = x - 1.35 + kneeBend * 0.6;
-  const shinTipX = x - 1.15 + kneeBend * 0.85;
-  const bootX = x - 1.5 + kneeBend;
+  const knee = hipY + 4.6;
+  const shinX = x - 0.85 + kneeBend * 0.55;
+  const footX = x - 1.15 + kneeBend * 0.85;
   return [
-    // Hip ball joint — separates pelvis from thigh so the silhouette hinges cleanly.
-    seg(originX, originY, facing, x - 1.1, hipY - 0.5, 2.2, 1.2, palette.joint),
-    // Softened thigh: three-step taper (wide hip → mid plate → narrow toward knee).
-    seg(originX, originY, facing, x - 1.7, hipY, 3.4, 2.2, thighColor),
-    seg(originX, originY, facing, x - 1.5, hipY + 2, 3, 1.8, thighColor),
-    seg(originX, originY, facing, x - 1.3, hipY + 3.6, 2.6, 1.4, thighColor),
-    // Thigh bevel + vertical panel line so the limb reads as stamped plate, not a box.
-    seg(originX, originY, facing, x - 1.7, hipY, 3.4, 0.9, palette.shellLight),
-    seg(originX, originY, facing, x - 0.15, hipY + 0.8, 0.9, 3.2, palette.plateShadow),
-    // Knee cap: a distinct plate so the joint reads even when bend is near zero.
-    seg(originX, originY, facing, x - 1.45 + kneeBend * 0.3, knee - 0.8, 2.9, 1.3, palette.shellDark),
-    // Shin: tapered (wider at knee, narrower at ankle) + panel seam.
-    seg(originX, originY, facing, shinX, knee, 2.7, 2.2, palette.shellDark),
-    seg(originX, originY, facing, shinTipX, knee + 2, 2.3, 2, palette.shellDark),
-    seg(originX, originY, facing, shinX + 0.85, knee + 0.6, 0.9, 2.8, palette.plateShadow),
-    // Boot: toe flare + sole tread for a grounded silhouette.
-    seg(originX, originY, facing, bootX, knee + 4, 3.2, 1.8, bootColor),
-    seg(originX, originY, facing, bootX - 0.35, knee + 5.6, 3.7, 1.1, palette.joint),
+    oval(originX, originY, facing, x - 1.05, hipY - 0.55, 2.1, 1.4, C.joint),
+    oval(originX, originY, facing, x - 1.15, hipY, 2.3, 2.4, thighColor),
+    oval(originX, originY, facing, x - 1.0, hipY + 2.1, 2.0, 2.2, thighColor),
+    oval(originX, originY, facing, x - 0.95 + kneeBend * 0.25, knee - 0.55, 1.9, 1.3, C.joint),
+    oval(originX, originY, facing, x - 0.85 + kneeBend * 0.25, knee - 0.25, 1.7, 0.55, C.metal),
+    oval(originX, originY, facing, shinX, knee + 0.4, 1.7, 2.3, C.panelShade),
+    oval(originX, originY, facing, shinX + 0.05, knee + 2.4, 1.55, 1.9, C.panelShade),
+    oval(originX, originY, facing, footX, knee + 4.1, 2.5, 1.15, C.joint),
+    oval(originX, originY, facing, footX - 0.15, knee + 4.85, 2.85, 0.85, C.jointSoft),
   ];
 }
 
-/** Upper arm → forearm → hand, hanging from the shoulder at local `x`. */
+/**
+ * Upper arm → elbow ring → forearm → hand, hanging from the shoulder at local `x`.
+ * Soft rounded pauldrons; black distal hand (Tesla glove).
+ */
 function armParts(
   originX: number,
   originY: number,
@@ -430,21 +445,17 @@ function armParts(
   elbowBend: number,
   color: string,
 ): RigRect[] {
-  const forearmX = x - 0.95 + elbowBend * 0.6;
-  const handX = x - 1.45 + elbowBend;
+  const forearmX = x - 0.7 + elbowBend * 0.55;
+  const handX = x - 0.95 + elbowBend;
   return [
-    // Pauldron: outer cap + inner bevel so the shoulder reads as armour, not a stump.
-    seg(originX, originY, facing, x - 1.45, shoulderY - 0.2, 2.9, 2.1, palette.shellDark),
-    seg(originX, originY, facing, x - 1.2, shoulderY, 2.4, 0.9, palette.shellLight),
-    // Upper arm: slight taper toward the elbow.
-    seg(originX, originY, facing, x - 1.05, shoulderY + 1.6, 2.1, 2.2, color),
-    seg(originX, originY, facing, x - 0.9, shoulderY + 3.5, 1.8, 1.6, color),
-    seg(originX, originY, facing, x - 1.05, shoulderY + 1.6, 2.1, 0.8, palette.shellLight),
-    // Forearm + panel line, offset by elbow bend.
-    seg(originX, originY, facing, forearmX, shoulderY + 5.1, 1.9, 2.8, palette.shellDark),
-    seg(originX, originY, facing, forearmX + 0.5, shoulderY + 5.5, 0.8, 2, palette.plateShadow),
-    // Gauntlet / hand block — wider than the forearm for a readable fist silhouette.
-    seg(originX, originY, facing, handX, shoulderY + 7.8, 2.9, 2.1, palette.joint),
+    oval(originX, originY, facing, x - 1.25, shoulderY - 0.35, 2.5, 2.0, C.panelShade),
+    oval(originX, originY, facing, x - 1.05, shoulderY + 0.15, 2.1, 1.0, C.panelLight),
+    oval(originX, originY, facing, x - 0.85, shoulderY + 1.5, 1.7, 2.15, color),
+    oval(originX, originY, facing, x - 0.75, shoulderY + 3.3, 1.5, 1.55, color),
+    oval(originX, originY, facing, x - 0.85 + elbowBend * 0.25, shoulderY + 4.55, 1.7, 1.15, C.joint),
+    oval(originX, originY, facing, x - 0.7 + elbowBend * 0.25, shoulderY + 4.85, 1.4, 0.45, C.metal),
+    oval(originX, originY, facing, forearmX, shoulderY + 5.4, 1.45, 2.35, C.panelShade),
+    oval(originX, originY, facing, handX, shoulderY + 7.55, 2.05, 1.85, C.joint),
   ];
 }
 
@@ -458,51 +469,31 @@ function torsoParts(
   torsoTwist: number,
   energyRatio: number,
 ): RigRect[] {
-  // Softened chassis: shoulders wider than hips, stacked chest → abdomen plates.
-  const torsoX = -4.3 + lean * 0.4 + torsoTwist * 0.3;
+  // Slim humanoid chassis: rounded white chest, charcoal waist belt, soft shoulder slope.
+  const torsoX = -3.55 + lean * 0.35 + torsoTwist * 0.25;
   const torsoH = hipY - shoulderY;
-  const coreColor = energyRatio > 0.25 ? palette.energy : palette.uiWarn;
-  const seamY1 = shoulderY + torsoH * 0.28;
-  const seamY2 = shoulderY + torsoH * 0.52;
-  const seamY3 = shoulderY + torsoH * 0.76;
-  const hipInset = 0.55;
+  const status = energyRatio > 0.25 ? C.status : palette.uiWarn;
+  const waistY = shoulderY + torsoH * 0.62;
   return [
-    // Shoulder shelf / collar bevel — wider than the chest for a hero silhouette.
-    seg(originX, originY, facing, torsoX - 1.35, shoulderY - 0.6, 11.7, 2.1, palette.shellDark),
-    seg(originX, originY, facing, torsoX - 0.5, shoulderY - 0.1, 10, 1, palette.shellLight),
-    // Main chest plate (upper) and tapered abdomen (lower).
-    seg(originX, originY, facing, torsoX, shoulderY, 9, torsoH * 0.54, palette.shell),
-    seg(
-      originX,
-      originY,
-      facing,
-      torsoX + hipInset,
-      shoulderY + torsoH * 0.5,
-      9 - hipInset * 2,
-      torsoH * 0.5,
-      palette.shell,
-    ),
-    // Top bevel highlight across the collarbone.
-    seg(originX, originY, facing, torsoX + 0.5, shoulderY, 8, 1, palette.shellLight),
-    // Left/right flank plates — matching pair so the chassis reads as riveted segments.
-    seg(originX, originY, facing, torsoX - 1.05 + torsoTwist * 0.1, shoulderY + 1, 2.1, torsoH - 1.5, palette.shellDark),
-    seg(originX, originY, facing, torsoX + 7.15, shoulderY + 1, 2.1, torsoH - 1.5, palette.shellDark),
-    // Flank bevel strips (inner edge of each side plate).
-    seg(originX, originY, facing, torsoX + 0.55, shoulderY + 1.5, 1, torsoH - 2.5, palette.plateShadow),
-    seg(originX, originY, facing, torsoX + 6.45, shoulderY + 1.5, 1, torsoH - 2.5, palette.plateShadow),
-    // Chest / mid / abdomen horizontal panel seams.
-    seg(originX, originY, facing, torsoX + 1.2, seamY1, 6.6, 1, palette.plateShadow),
-    seg(originX, originY, facing, torsoX + 1.2, seamY2, 6.6, 1, palette.plateShadow),
-    seg(originX, originY, facing, torsoX + 1.55, seamY3, 5.9, 1, palette.plateShadow),
-    // Vertical sternum panel line splitting left/right chest plates.
-    seg(originX, originY, facing, torsoX + 4, shoulderY + 1.5, 1, torsoH * 0.7, palette.plateShadow),
-    // Core well + nested energy cell (cell → hot pupil) for Dead Cells bloom punch.
-    seg(originX, originY, facing, torsoX + 2.55, shoulderY + 2.55, 3.9, 3.9, palette.joint),
-    seg(originX, originY, facing, torsoX + 3.05, shoulderY + 3.05, 2.9, 2.9, coreColor, { emissive: 0.95 }),
-    seg(originX, originY, facing, torsoX + 3.7, shoulderY + 3.65, 1.5, 1.5, palette.white, { emissive: 1 }),
+    oval(originX, originY, facing, torsoX - 0.85, shoulderY - 0.35, 9.0, 1.7, C.panelShade),
+    oval(originX, originY, facing, torsoX, shoulderY + 0.2, 7.3, torsoH * 0.58, C.panel),
+    oval(originX, originY, facing, torsoX + 0.35, shoulderY + 0.45, 6.6, 1.0, C.panelLight),
+    // Soft flank shading — reads as curved polymer, not riveted armour plates.
+    oval(originX, originY, facing, torsoX - 0.15, shoulderY + 1.2, 1.35, torsoH * 0.45, C.panelShade),
+    oval(originX, originY, facing, torsoX + 6.1, shoulderY + 1.2, 1.35, torsoH * 0.45, C.panelShade),
+    // Charcoal midriff / battery housing band (Tesla waist language).
+    oval(originX, originY, facing, torsoX + 0.55, waistY - 0.35, 6.2, torsoH * 0.42, C.joint),
+    oval(originX, originY, facing, torsoX + 1.05, waistY, 5.2, 0.55, C.metal),
+    // Tiny chest status pip — bloom-friendly without a sci-fi core well.
+    oval(originX, originY, facing, torsoX + 3.15, shoulderY + 2.6, 1.0, 1.0, C.jointSoft),
+    oval(originX, originY, facing, torsoX + 3.3, shoulderY + 2.75, 0.7, 0.7, status, { emissive: 0.9 }),
   ];
 }
 
+/**
+ * Smooth pearl dome + black face screen with twin status LEDs.
+ * No antenna / crest fins — closer to Tesla Optimus Gen 2.
+ */
 function headParts(
   originX: number,
   originY: number,
@@ -510,57 +501,35 @@ function headParts(
   headY: number,
   lean: number,
   headTilt: number,
-  antennaSway: number,
+  headLag: number,
   shoulderY: number,
   state: PlayerState,
 ): RigRect[] {
-  // Softened dome: crest + cheek taper read as a rounder helmet without growing the hit-box.
-  const headX = -3.4 + lean * 0.8 + headTilt;
-  const visorLit = state !== 'dead';
-  const antennaBaseX = headX + 3 + antennaSway * 0.3;
-  const antennaTipX = headX + 3 + antennaSway;
+  const headX = -2.85 + lean * 0.7 + headTilt + headLag * 0.15;
+  const faceLit = state !== 'dead';
   const parts: RigRect[] = [
-    // Helmet crest: raised ridge + side fins so the silhouette peaks instead of reading as a flat dome.
-    seg(originX, originY, facing, headX + 1.5, headY - 2.1, 4, 2.1, palette.shellDark),
-    seg(originX, originY, facing, headX + 2.2, headY - 3.1, 2.6, 1, palette.shellLight),
-    seg(originX, originY, facing, headX + 0.35, headY - 1.1, 1.6, 1.1, palette.shellDark),
-    seg(originX, originY, facing, headX + 5.05, headY - 1.1, 1.6, 1.1, palette.shellDark),
-    // Antenna: mast + tip node so sway reads as a hinged rod.
-    seg(originX, originY, facing, antennaBaseX, headY - 2 - Math.abs(antennaSway) * 0.3, 1, 2, palette.joint),
-    seg(originX, originY, facing, antennaTipX, headY - 3.1 - Math.abs(antennaSway) * 0.5, 1, 1.1, palette.visorGlow, {
-      emissive: 0.85,
-    }),
-    // Dome plates: main shell, cheek taper, top bevel, rear plate.
-    seg(originX, originY, facing, headX, headY, 7, 5.6, palette.shellLight),
-    seg(originX, originY, facing, headX + 0.55, headY + 4.8, 5.9, 1.2, palette.shell),
-    seg(originX, originY, facing, headX + 0.15, headY + 0.15, 6.7, 0.9, palette.white),
-    seg(originX, originY, facing, headX + 5.1, headY + 1, 1.9, 4.6, palette.shellDark),
-    // Cheek inset — softens the lower dome corners.
-    seg(originX, originY, facing, headX - 0.15, headY + 3.2, 1.1, 2.2, palette.shellDark),
-    // Helmet panel lines (brow + vertical cheek seam).
-    seg(originX, originY, facing, headX + 1, headY + 1, 5, 1, palette.plateShadow),
-    seg(originX, originY, facing, headX + 3.5, headY + 1, 1, 3.8, palette.plateShadow),
-    // Visor well + lit slit with a hotter glow core.
-    seg(originX, originY, facing, headX + 0.9, headY + 1.9, 5.4, 2.2, palette.joint),
-    seg(
-      originX,
-      originY,
-      facing,
-      headX + 1.05,
-      headY + 2.05,
-      5,
-      1.15,
-      visorLit ? palette.visor : palette.plateDark,
-      visorLit ? { emissive: 0.9 } : {},
-    ),
+    // Soft cranial dome (stacked ovals ≈ rounded polymer shell).
+    oval(originX, originY, facing, headX + 0.35, headY - 0.55, 5.3, 2.2, C.panelShade),
+    oval(originX, originY, facing, headX, headY + 0.35, 6.0, 4.6, C.panel),
+    oval(originX, originY, facing, headX + 0.35, headY + 0.55, 5.3, 1.1, C.panelLight),
+    // Chin taper.
+    oval(originX, originY, facing, headX + 0.7, headY + 4.2, 4.6, 1.5, C.panelShade),
+    // Black face OLED panel.
+    oval(originX, originY, facing, headX + 0.85, headY + 1.55, 4.3, 2.55, C.face),
+    seg(originX, originY, facing, headX + 1.05, headY + 1.75, 3.9, 2.15, C.face, { shape: 'rect' }),
   ];
-  if (visorLit && state !== 'hurt') {
-    parts.push(seg(originX, originY, facing, headX + 3.4, headY + 2.05, 2.6, 1.15, palette.visorGlow, { emissive: 1 }));
-    parts.push(seg(originX, originY, facing, headX + 4.55, headY + 2.15, 1.05, 0.9, palette.white, { emissive: 1 }));
+  if (faceLit && state !== 'hurt') {
+    // Twin teal status LEDs (software face), not a full cyan visor bar.
+    parts.push(oval(originX, originY, facing, headX + 1.55, headY + 2.25, 0.95, 0.85, C.eye, { emissive: 0.95 }));
+    parts.push(oval(originX, originY, facing, headX + 3.45, headY + 2.25, 0.95, 0.85, C.eye, { emissive: 0.95 }));
+    parts.push(oval(originX, originY, facing, headX + 1.75, headY + 2.4, 0.5, 0.45, C.eyeHot, { emissive: 1 }));
+    parts.push(oval(originX, originY, facing, headX + 3.65, headY + 2.4, 0.5, 0.45, C.eyeHot, { emissive: 1 }));
+  } else if (faceLit) {
+    parts.push(oval(originX, originY, facing, headX + 1.7, headY + 2.35, 2.6, 0.55, C.eye, { emissive: 0.55 }));
   }
-  // Chin guard + neck collar.
-  parts.push(seg(originX, originY, facing, headX + 1.4, headY + 5.1, 4.2, 1.1, palette.shellDark));
-  parts.push(seg(originX, originY, facing, -1.5, headY + 6.1, 3, Math.max(0, shoulderY - headY - 6.1), palette.joint));
+  // Slim neck column into the collar.
+  parts.push(oval(originX, originY, facing, -1.05, headY + 5.5, 2.1, Math.max(0.4, shoulderY - headY - 5.5), C.jointSoft));
+  parts.push(oval(originX, originY, facing, -1.55, shoulderY - 0.85, 3.1, 1.1, C.joint));
   return parts;
 }
 
@@ -574,16 +543,16 @@ function thrustFlameParts(
   const flicker = 0.6 + Math.abs(Math.sin(animTime * 30)) * 0.4;
   const length = (5 + flicker * 5) * clamp(0.35 + energyRatio, 0.35, 1);
   return [
-    seg(originX, originY, facing, -3.5, 0, 7, length * 0.85, palette.flame, { emissive: 0.85, alpha: 0.7 }),
-    seg(originX, originY, facing, -2.5, 0, 5, length, palette.flame, { emissive: 1 }),
-    seg(originX, originY, facing, -1.5, 0, 3, length * 0.7, palette.flameHot, { emissive: 1 }),
-    seg(originX, originY, facing, -1, 0, 2, length * 1.25, palette.spark, { emissive: 1 }),
+    oval(originX, originY, facing, -3.2, 0, 6.4, length * 0.85, palette.flame, { emissive: 0.85, alpha: 0.7 }),
+    oval(originX, originY, facing, -2.3, 0, 4.6, length, palette.flame, { emissive: 1 }),
+    oval(originX, originY, facing, -1.4, 0, 2.8, length * 0.7, palette.flameHot, { emissive: 1 }),
+    oval(originX, originY, facing, -0.9, 0, 1.8, length * 1.25, palette.spark, { emissive: 1 }),
   ];
 }
 
 /**
  * Builds Optimus' full rig for one frame as a flat, painter's-algorithm-ordered list of
- * world-space rectangles (back-most first): thrust flame (if any), back leg/arm, torso, hips,
+ * world-space parts (back-most first): thrust flame (if any), back leg/arm, torso, hips,
  * front leg/arm, head/neck.
  *
  * Pure and allocation-light: everything here is a function of `options` alone, so calling it
@@ -614,14 +583,24 @@ export function buildOptimusRig(options: OptimusRigOptions): RigParts {
       -LEG_BASE_X + pose.legBackX + pose.hipSway,
       hipY + pose.legBackY,
       pose.kneeBackBend,
-      palette.shellDark,
-      palette.joint,
+      C.panelShade,
     ),
   );
-  parts.push(...armParts(originX, originY, facing, -ARM_BASE_X + pose.armBackX, shoulderY + pose.armBackY, pose.elbowBackBend, palette.shellDark));
+  parts.push(
+    ...armParts(
+      originX,
+      originY,
+      facing,
+      -ARM_BASE_X + pose.armBackX,
+      shoulderY + pose.armBackY,
+      pose.elbowBackBend,
+      C.panelShade,
+    ),
+  );
 
   parts.push(...torsoParts(originX, originY, facing, shoulderY, hipY, pose.lean, pose.torsoTwist, energyRatio));
-  parts.push(seg(originX, originY, facing, -3.5 + pose.lean * 0.3 + pose.hipSway, hipY - 1, 7, 2, palette.joint));
+  // Pelvis hinge — charcoal belt sitting on the white thighs.
+  parts.push(oval(originX, originY, facing, -2.6 + pose.lean * 0.25 + pose.hipSway, hipY - 0.85, 5.2, 1.7, C.joint));
 
   parts.push(
     ...legParts(
@@ -631,13 +610,34 @@ export function buildOptimusRig(options: OptimusRigOptions): RigParts {
       LEG_BASE_X + pose.legFrontX + pose.hipSway,
       hipY + pose.legFrontY,
       pose.kneeFrontBend,
-      palette.shell,
-      palette.joint,
+      C.panel,
     ),
   );
-  parts.push(...armParts(originX, originY, facing, ARM_BASE_X + pose.armFrontX, shoulderY + pose.armFrontY, pose.elbowFrontBend, palette.shell));
+  parts.push(
+    ...armParts(
+      originX,
+      originY,
+      facing,
+      ARM_BASE_X + pose.armFrontX,
+      shoulderY + pose.armFrontY,
+      pose.elbowFrontBend,
+      C.panel,
+    ),
+  );
 
-  parts.push(...headParts(originX, originY, facing, headY, pose.lean, pose.headTilt, pose.antennaSway, shoulderY, state));
+  parts.push(
+    ...headParts(
+      originX,
+      originY,
+      facing,
+      headY,
+      pose.lean,
+      pose.headTilt,
+      pose.antennaSway,
+      shoulderY,
+      state,
+    ),
+  );
 
   return parts;
 }
