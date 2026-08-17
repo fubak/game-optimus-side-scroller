@@ -1,0 +1,43 @@
+{
+  "name": "game-optimus-side-scroller",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Optimus — a side-scrolling platformer about a humanoid factory robot escaping a decaying robotics plant.",
+  "type": "module",
+  "license": "MIT",
+  "scripts": {
+    "dev": "vite",
+    "build": "vite build",
+    "preview": "vite preview",
+    "lint": "eslint .",
+    "lint:fix": "eslint . --fix",
+    "format": "prettier --write .",
+    "format:check": "prettier --check .",
+    "typecheck": "tsc --noEmit",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "test:coverage": "vitest run --coverage",
+    "test:e2e": "playwright test",
+    "levels": "vite-node scripts/levelReport.ts",
+    "bench": "vite-node scripts/bench.ts",
+    "generate:fonts": "vite-node scripts/generateMsdfFont.ts",
+    "generate:materials": "vite-node scripts/generateMaterials.ts",
+    "generate:spritesheets": "vite-node scripts/generateCharacterSheets.ts",
+    "ci": "npm run lint && npm run typecheck && npm run test && npm run build && npm run test:e2e"
+  },
+  "devDependencies": {
+    "@eslint/js": "^10.0.1",
+    "@playwright/test": "^1.62.1",
+    "@types/node": "^26.2.0",
+    "@vitest/coverage-v8": "^4.1.10",
+    "eslint": "^10.8.1",
+    "eslint-config-prettier": "^10.1.8",
+    "globals": "^17.11.0",
+    "prettier": "^3.9.6",
+    "typescript": "^6.0.3",
+    "typescript-eslint": "^8.67.0",
+    "vite": "^8.2.1",
+    "vite-node": "^6.0.0",
+    "vitest": "^4.1.10"
+  }
+}
