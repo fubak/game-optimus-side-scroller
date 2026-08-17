@@ -5,8 +5,8 @@ import type { ParallaxLayer, ParallaxOptions } from './parallax';
 import { palette } from './palette';
 
 /**
- * Enhanced-quality parallax backdrop: a dense, detailed factory skyline for `GlWorldRenderer`'s
- * WebGL2 path.
+ * Enhanced-quality parallax backdrop: a dense, Dead Cells-leaning factory skyline for
+ * `GlWorldRenderer`'s WebGL2 path.
  *
  * `parallax.ts`'s classic generator paints straight onto a `CanvasRenderingContext2D` at 1 texel
  * per screen pixel — fine for Classic's pixel-art look, but "chunky silhouette" once blown up
@@ -19,24 +19,24 @@ import { palette } from './palette';
  *  - gives every structure (window grids, pipe flanges, hazard stripes) enough texels to read as
  *    detail instead of single blocky pixels once uploaded with linear filtering
  *    (`BackgroundBatch.setLayers`);
- *  - lets the far layer get a cheap one-time box blur baked into its own texture — a "distance
- *    blur"/DoF stand-in that costs nothing per frame, unlike a real screen-space blur pass.
+ *  - lets the far layer get a cheap one-time box blur baked into its own texture — a soft
+ *    "distance blur"/DoF stand-in that costs nothing per frame, unlike a real screen-space blur.
  *
  * Layer content, seeded the same way as Classic (`seed ^ <constant>` per layer) so a level's
  * skyline is stable but each layer is independent:
- *  - far: cool/dark, sparse towers with floor lines and rare dim windows, softened by
- *    {@link boxBlurPremultiplied} to read as distant and slightly out of focus.
- *  - mid: warmer lit windows, denser towers with smokestacks, gantries/conveyor links between
- *    neighbouring buildings, and the occasional cooling tower silhouette. Left crisp.
- *  - near: horizontal pipe runs with flanges, brackets and valve wheels, vertical drops, and a
- *    hazard-stripe band along the very bottom edge — the "readable" foreground layer.
+ *  - far: cool/dark tower silhouettes, sparse dim windows, dual-tone atmospheric haze, then a
+ *    soft {@link boxBlurPremultiplied} so the layer reads distant and slightly out of focus.
+ *  - mid: warmer amber/spark window glows against cooler steel bodies, denser smokestacks,
+ *    gantries/conveyor links, and the occasional cooling tower. Left crisp.
+ *  - near: pipe runs with flange collars, brackets and valve wheels, vertical drops, and a
+ *    hazard-stripe band along the bottom edge — the "readable" foreground layer.
  *
- * Every layer also gets a subtle vertical haze gradient baked in (denser toward its base), giving
- * the backdrop atmospheric depth without any extra per-frame shader work.
+ * Every layer also gets a richer vertical haze wash baked in (cool fog near the top, denser
+ * warmer haze toward the base), giving atmospheric factory depth without per-frame shader work.
  */
 
 /** Texels per logical screen pixel for every Enhanced layer's canvas. */
-export const ENHANCED_SCALE = 5;
+export const ENHANCED_SCALE = 6;
 
 interface Rgb {
   readonly r: number;
@@ -108,6 +108,10 @@ function clamp01(value: number): number {
   return value < 0 ? 0 : value > 1 ? 1 : value;
 }
 
+function mixRgb(a: Rgb, b: Rgb, t: number): Rgb {
+  return { r: a.r + (b.r - a.r) * t, g: a.g + (b.g - a.g) * t, b: a.b + (b.b - a.b) * t };
+}
+
 /**
  * Fractional-coverage rect fill: edge texels are alpha-blended by how much of that texel the rect
  * actually covers, instead of rounding to the nearest whole texel. Painting at
@@ -156,12 +160,25 @@ function strokeCircle(layer: PixelLayer, cx: number, cy: number, radius: number,
   }
 }
 
-/** A subtle vertical haze wash, denser toward the base — baked-in atmospheric depth. */
-function paintHaze(layer: PixelLayer, color: Rgb, topAlpha: number, bottomAlpha: number): void {
+/**
+ * Vertical atmospheric haze. A single-colour wash (denser toward the base) is the common case;
+ * pass `bottomColor` for a dual-tone Dead Cells factory gradient — cooler fog aloft, warmer
+ * denser haze near the ground.
+ */
+function paintHaze(
+  layer: PixelLayer,
+  topColor: Rgb,
+  topAlpha: number,
+  bottomAlpha: number,
+  bottomColor: Rgb = topColor,
+): void {
   const { width, height } = layer;
   for (let y = 0; y < height; y += 1) {
     const t = height <= 1 ? 0 : y / (height - 1);
-    const alpha = topAlpha + (bottomAlpha - topAlpha) * t;
+    // Ease toward the base so mid-height stays clearer and the densest haze pools at the floor.
+    const eased = t * t * (3 - 2 * t);
+    const alpha = topAlpha + (bottomAlpha - topAlpha) * eased;
+    const color = mixRgb(topColor, bottomColor, eased);
     blendRect(layer, 0, y, width, 1, color, alpha);
   }
 }
@@ -246,10 +263,16 @@ function boxBlurPremultiplied(layer: PixelLayer, radius: number): void {
 interface TowerFieldStyle {
   readonly body: Rgb;
   readonly trim: Rgb;
+  /** Amber / rust window panes — the common warm lit look. */
   readonly windowWarm: Rgb;
+  /** Hotter spark / flame panes — occasional bright accents. */
+  readonly windowHot: Rgb;
+  /** Cool cyan/fog panes for contrast against warm glows. */
   readonly windowCool: Rgb;
-  /** Fraction of lit windows that use `windowWarm` instead of `windowCool`. */
+  /** Fraction of lit windows that use a warm tone (amber or hot) instead of cool. */
   readonly warmChance: number;
+  /** Within warm windows, fraction that use `windowHot` instead of `windowWarm`. */
+  readonly hotChance: number;
   readonly windowChance: number;
   readonly widthRange: readonly [number, number];
   readonly heightFrac: readonly [number, number];
@@ -258,9 +281,11 @@ interface TowerFieldStyle {
   readonly windowGap: readonly [number, number];
   readonly smokestackChance: number;
   readonly linkChance: number;
+  /** Gap between towers in logical (pre-scale) pixels. */
+  readonly gapRange: readonly [number, number];
 }
 
-/** Smokestack: a thin column above the roofline plus a soft blended puff of smoke at its cap. */
+/** Smokestack: a thin column above the roofline plus soft blended smoke puffs at its cap. */
 function paintSmokestack(layer: PixelLayer, rng: Rng, x: number, roofY: number, towerWidth: number, style: TowerFieldStyle, scale: number): void {
   const stackWidth = Math.max(2 * scale, Math.round(towerWidth * 0.12));
   const stackHeight = rng.int(6, 18) * scale;
@@ -268,9 +293,33 @@ function paintSmokestack(layer: PixelLayer, rng: Rng, x: number, roofY: number, 
   const stackTop = roofY - stackHeight;
   fillRectAA(layer, stackX, stackTop, stackWidth, stackHeight, style.body);
   blendRect(layer, stackX - 1, stackTop, stackWidth + 2, Math.max(1, scale), style.trim, 0.5);
-  // Soft smoke puff, translucent so it reads as haze rather than a solid cap.
-  const puffRadius = stackWidth * rng.range(0.9, 1.4);
-  fillCircleBlend(layer, stackX + stackWidth / 2, stackTop - puffRadius * 0.3, puffRadius, style.trim, 0.22);
+  // Cap lip — a slightly wider collar so the stack reads as industrial ductwork.
+  fillRectAA(layer, stackX - scale * 0.4, stackTop, stackWidth + scale * 0.8, Math.max(1, scale * 0.7), style.trim);
+  // Soft smoke puffs, translucent so they read as haze rather than a solid cap.
+  const puffRadius = stackWidth * rng.range(0.9, 1.5);
+  const puffCx = stackX + stackWidth / 2;
+  fillCircleBlend(layer, puffCx, stackTop - puffRadius * 0.3, puffRadius, style.trim, 0.22);
+  if (rng.chance(0.55)) {
+    fillCircleBlend(
+      layer,
+      puffCx + rng.range(-puffRadius, puffRadius) * 0.4,
+      stackTop - puffRadius * rng.range(0.7, 1.3),
+      puffRadius * rng.range(0.55, 0.9),
+      style.trim,
+      0.14,
+    );
+  }
+  // Occasional second stack on the same roof for denser factory silhouettes.
+  if (towerWidth > 14 * scale && rng.chance(0.4)) {
+    const stack2Width = Math.max(2 * scale, Math.round(stackWidth * 0.75));
+    const stack2Height = rng.int(4, 12) * scale;
+    const stack2X = x + rng.int(1, Math.max(1, towerWidth - stack2Width - 1));
+    if (Math.abs(stack2X - stackX) > stackWidth + scale) {
+      const stack2Top = roofY - stack2Height;
+      fillRectAA(layer, stack2X, stack2Top, stack2Width, stack2Height, style.body);
+      fillCircleBlend(layer, stack2X + stack2Width / 2, stack2Top - stack2Width * 0.4, stack2Width * 1.1, style.trim, 0.16);
+    }
+  }
 }
 
 function fillCircleBlend(layer: PixelLayer, cx: number, cy: number, radius: number, color: Rgb, alpha: number): void {
@@ -293,13 +342,24 @@ function paintLink(layer: PixelLayer, rng: Rng, x0: number, gapWidth: number, y0
   const diagonal = rng.chance(0.4);
   const beamThickness = Math.max(2 * scale, Math.round(1.5 * scale));
   const steps = Math.max(3, Math.round(gapWidth / (2 * scale)));
+  const railY0 = diagonal ? y0 : Math.min(y0, y1);
+  // Dual rails for a walkway gantry; single beam for a conveyor.
+  const dualRail = !diagonal && rng.chance(0.65);
   for (let i = 0; i <= steps; i += 1) {
     const t = i / steps;
     const px = x0 + t * gapWidth;
-    const py = diagonal ? y0 + t * (y1 - y0) : Math.min(y0, y1);
+    const py = diagonal ? y0 + t * (y1 - y0) : railY0;
     fillRectAA(layer, px, py, gapWidth / steps + scale, beamThickness, style.trim);
-    if (i % 3 === 0) {
-      blendRect(layer, px, py + beamThickness, Math.max(1, scale), scale * 2, style.trim, 0.4);
+    if (dualRail) {
+      fillRectAA(layer, px, py + scale * 3, gapWidth / steps + scale, Math.max(1, scale), style.trim);
+    }
+    // Vertical hangers / cross-braces every few steps.
+    if (i % 2 === 0) {
+      blendRect(layer, px, py + beamThickness, Math.max(1, scale * 0.8), scale * 2.5, style.trim, 0.45);
+    }
+    if (dualRail && i % 3 === 0) {
+      // Cross brace between the two rails.
+      blendRect(layer, px, py + beamThickness, Math.max(1, scale), scale * 3, style.trim, 0.35);
     }
   }
 }
@@ -352,9 +412,9 @@ function paintTowerField(layer: PixelLayer, rng: Rng, style: TowerFieldStyle, sc
         blendRect(layer, x + scale * 0.5, fy, towerWidth - scale, Math.max(1, scale * 0.4), style.trim, 0.35);
       }
 
-      // Windows: a soft-edged rect for the pane itself, plus — for lit ones — a wider, much
-      // fainter glow blended behind it so light appears to spill onto the facade instead of the
-      // window reading as a single flat-coloured dot.
+      // Windows: soft-edged panes with varied glow — warm amber, hot spark accents, and cooler
+      // cyan/fog lights for Dead Cells warm-emissive / cool-silhouette contrast. Lit panes get a
+      // wider, fainter glow so light appears to spill onto the facade.
       const [winW, winH] = style.windowSize;
       const [gapX, gapY] = style.windowGap;
       const stepX = (winW + gapX) * scale;
@@ -363,11 +423,19 @@ function paintTowerField(layer: PixelLayer, rng: Rng, style: TowerFieldStyle, sc
         for (let wx = x + gapX * scale; wx < x + towerWidth - winW * scale; wx += stepX) {
           if (!rng.chance(style.windowChance)) continue;
           const isWarm = rng.chance(style.warmChance);
-          const color = isWarm ? style.windowWarm : style.windowCool;
-          const paneW = winW * scale;
-          const paneH = winH * scale;
-          const glowRadius = Math.max(paneW, paneH) * (isWarm ? 1.9 : 1.3);
-          fillCircleBlend(layer, wx + paneW / 2, wy + paneH / 2, glowRadius, color, isWarm ? 0.16 : 0.09);
+          const isHot = isWarm && rng.chance(style.hotChance);
+          const color = isHot ? style.windowHot : isWarm ? style.windowWarm : style.windowCool;
+          const paneW = winW * scale * (isHot ? 1.15 : 1);
+          const paneH = winH * scale * (isHot ? 1.1 : 1);
+          // Glow variety: hot > warm > cool, with a touch of per-window jitter for denser sparkle.
+          const glowScale = (isHot ? 2.4 : isWarm ? 1.9 : 1.25) * rng.range(0.85, 1.15);
+          const glowAlpha = (isHot ? 0.22 : isWarm ? 0.16 : 0.08) * rng.range(0.8, 1.15);
+          const glowRadius = Math.max(paneW, paneH) * glowScale;
+          fillCircleBlend(layer, wx + paneW / 2, wy + paneH / 2, glowRadius, color, glowAlpha);
+          // Secondary outer halo on hot windows — bloom-like spill without a real bloom pass.
+          if (isHot) {
+            fillCircleBlend(layer, wx + paneW / 2, wy + paneH / 2, glowRadius * 1.55, color, glowAlpha * 0.35);
+          }
           fillRectAA(layer, wx, wy, paneW, paneH, color);
         }
       }
@@ -379,7 +447,7 @@ function paintTowerField(layer: PixelLayer, rng: Rng, style: TowerFieldStyle, sc
 
     prevRight = x + towerWidth;
     prevTop = top;
-    x = prevRight + rng.int(2, 10) * scale;
+    x = prevRight + rng.int(style.gapRange[0], style.gapRange[1]) * scale;
   }
 }
 
@@ -393,10 +461,6 @@ interface PipelineStyle {
   readonly hazardDark: Rgb;
 }
 
-function mixRgb(a: Rgb, b: Rgb, t: number): Rgb {
-  return { r: a.r + (b.r - a.r) * t, g: a.g + (b.g - a.g) * t, b: a.b + (b.b - a.b) * t };
-}
-
 function smoothstep01(t: number): number {
   const c = clamp01(t);
   return c * c * (3 - 2 * c);
@@ -405,33 +469,53 @@ function smoothstep01(t: number): number {
 /** Horizontal pipe runs with flanges/brackets, valve wheels and soft rail ticks, plus a few vertical drops. */
 function paintPipeRuns(layer: PixelLayer, rng: Rng, style: PipelineStyle, scale: number): void {
   const { width, height } = layer;
-  for (let i = 0; i < 3; i += 1) {
-    const y = Math.round(height * rng.range(0.25, 0.85));
+  const runCount = 4;
+  for (let i = 0; i < runCount; i += 1) {
+    const y = Math.round(height * rng.range(0.18, 0.88));
     const thickness = rng.int(3, 6) * scale;
     fillRectAA(layer, 0, y, width, thickness, style.pipe);
     blendRect(layer, 0, y, width, Math.max(1, scale), style.pipeLight, 0.4);
     blendRect(layer, 0, y + thickness - scale, width, Math.max(1, scale), style.pipeDark, 0.55);
-    // A soft repeating rail tick along the underside — reads as segment/rivet detail without
-    // resorting to a single hard-edged dot every bracket.
-    const tickSpacing = 6 * scale;
+    // Soft repeating rail tick along the underside — segment/rivet detail.
+    const tickSpacing = 5 * scale;
     for (let tx = rng.int(0, tickSpacing); tx < width; tx += tickSpacing) {
       blendRect(layer, tx, y + thickness - scale * 1.4, scale * 2, scale * 0.6, style.pipeDark, 0.3);
     }
 
-    for (let x = rng.int(0, 40) * scale; x < width; x += rng.int(28, 70) * scale) {
-      fillRectAA(layer, x, y - 2 * scale, 3 * scale, thickness + 4 * scale, style.bracket);
-      if (rng.chance(0.3)) {
-        strokeCircle(layer, x + 1.5 * scale, y + thickness / 2, 3 * scale, Math.max(1, scale), style.bracket);
+    for (let x = rng.int(0, 28) * scale; x < width; x += rng.int(18, 48) * scale) {
+      // Flange collar: a thicker disc around the pipe with a darker rim and light face.
+      if (rng.chance(0.55)) {
+        const flangeW = Math.max(3 * scale, Math.round(thickness * 0.55));
+        const flangeH = thickness + 3 * scale;
+        const flangeY = y - 1.5 * scale;
+        fillRectAA(layer, x, flangeY, flangeW, flangeH, style.bracket);
+        blendRect(layer, x, flangeY, Math.max(1, scale * 0.6), flangeH, style.pipeLight, 0.45);
+        blendRect(layer, x + flangeW - scale * 0.6, flangeY, Math.max(1, scale * 0.6), flangeH, style.pipeDark, 0.5);
+        // Bolt dots across the flange face.
+        const boltY = flangeY + flangeH * 0.5;
+        blendRect(layer, x + flangeW * 0.25, boltY - scale * 0.3, scale * 0.7, scale * 0.7, style.pipeDark, 0.55);
+        blendRect(layer, x + flangeW * 0.6, boltY - scale * 0.3, scale * 0.7, scale * 0.7, style.pipeDark, 0.55);
+      } else {
+        fillRectAA(layer, x, y - 2 * scale, 3 * scale, thickness + 4 * scale, style.bracket);
       }
       if (rng.chance(0.35)) {
-        // A small soft rust blotch rather than a single hard-edged pixel dot.
+        strokeCircle(layer, x + 1.5 * scale, y + thickness / 2, 3 * scale, Math.max(1, scale), style.bracket);
+      }
+      if (rng.chance(0.4)) {
+        // Soft rust blotch rather than a single hard-edged pixel dot.
         fillCircleBlend(layer, x + scale * 1.5, y - 2 * scale, scale * 1.6, style.rust, 0.5);
       }
     }
   }
-  for (let i = 0; i < 6; i += 1) {
+  for (let i = 0; i < 8; i += 1) {
     const x = rng.int(0, width - 4 * scale);
-    fillRectAA(layer, x, 0, rng.int(2, 4) * scale, height, style.pipeDark);
+    const dropW = rng.int(2, 4) * scale;
+    fillRectAA(layer, x, 0, dropW, height, style.pipeDark);
+    // Flange rings on vertical drops.
+    if (rng.chance(0.5)) {
+      const fy = Math.round(height * rng.range(0.25, 0.75));
+      fillRectAA(layer, x - scale, fy, dropW + 2 * scale, Math.max(2 * scale, Math.round(2.5 * scale)), style.bracket);
+    }
   }
 }
 
@@ -442,13 +526,15 @@ function paintPipeRuns(layer: PixelLayer, rng: Rng, style: PipelineStyle, scale:
  */
 function paintHazardStripes(layer: PixelLayer, style: PipelineStyle, scale: number): void {
   const { width, height } = layer;
-  const bandHeight = Math.max(4 * scale, Math.round(height * 0.05));
+  const bandHeight = Math.max(5 * scale, Math.round(height * 0.065));
   const y0 = height - bandHeight;
-  const period = 10 * scale;
+  const period = 9 * scale;
   const half = period / 2;
-  const edgeSoft = Math.max(1, scale * 0.6);
+  const edgeSoft = Math.max(1, scale * 0.7);
   for (let y = y0; y < height; y += 1) {
     const rowIndex = y - y0;
+    // Soft fade at the top of the band so the stripes don't hard-cut against the pipes.
+    const bandFade = clamp01((y - y0) / Math.max(1, scale * 1.2));
     for (let x = 0; x < width; x += 1) {
       const phase = (((x + rowIndex) % period) + period) % period;
       const local = phase % half;
@@ -457,7 +543,9 @@ function paintHazardStripes(layer: PixelLayer, style: PipelineStyle, scale: numb
       const isHazard = Math.floor(phase / half) % 2 === 0;
       const nearColor = isHazard ? style.hazard : style.hazardDark;
       const farColor = isHazard ? style.hazardDark : style.hazard;
-      plot(layer, x, y, mixRgb(farColor, nearColor, t));
+      const color = mixRgb(farColor, nearColor, t);
+      if (bandFade >= 0.999) plot(layer, x, y, color);
+      else plotBlend(layer, x, y, color, 0.55 + 0.45 * bandFade);
     }
   }
 }
@@ -482,32 +570,46 @@ export function buildEnhancedParallaxData(options: ParallaxOptions): readonly En
   const scale = ENHANCED_SCALE;
   const logicalWidth = viewWidth * 2;
 
+  // Dead Cells contrast: cooler steel silhouettes vs warmer amber/spark window lights.
+  const coolFarBody = mixRgb(rgbOf(palette.farStructure), rgbOf(palette.skyTop), 0.45);
+  const coolMidBody = mixRgb(rgbOf(palette.midStructure), rgbOf(palette.fog), 0.35);
+  const coolTrim = mixRgb(rgbOf(palette.fog), rgbOf(palette.visor), 0.12);
+  const warmAmber = mixRgb(rgbOf(palette.flame), rgbOf(palette.rust), 0.35);
+  const warmHot = mixRgb(rgbOf(palette.spark), rgbOf(palette.flameHot), 0.4);
+  const coolPane = mixRgb(rgbOf(palette.fog), rgbOf(palette.visorGlow), 0.25);
+  const hazeCool = mixRgb(rgbOf(palette.fog), rgbOf(palette.skyTop), 0.4);
+  const hazeWarm = mixRgb(rgbOf(palette.fog), rgbOf(palette.rust), 0.22);
+
   const farLogicalHeight = Math.round(viewHeight * 0.75);
   const far = createPixelLayer(logicalWidth * scale, farLogicalHeight * scale);
   paintTowerField(
     far,
     createRng(seed ^ 0x9e37),
     {
-      body: rgbOf(palette.farStructure),
-      trim: rgbOf(palette.fog),
-      windowWarm: rgbOf(palette.rust),
-      windowCool: rgbOf(palette.fog),
-      warmChance: 0.06,
-      windowChance: 0.04,
+      body: coolFarBody,
+      trim: coolTrim,
+      windowWarm: warmAmber,
+      windowHot: warmHot,
+      windowCool: coolPane,
+      warmChance: 0.12,
+      hotChance: 0.15,
+      windowChance: 0.05,
       widthRange: [12, 30],
       heightFrac: [0.25, 0.75],
       floorSpacing: 7,
       windowSize: [1.5, 2],
       windowGap: [2, 3],
-      smokestackChance: 0.18,
-      linkChance: 0.1,
+      smokestackChance: 0.22,
+      linkChance: 0.14,
+      gapRange: [2, 10],
     },
     scale,
     false,
   );
-  paintHaze(far, rgbOf(palette.fog), 0.05, 0.26);
-  // One-time distance blur: stands in for a per-frame background DoF pass (see module doc).
-  boxBlurPremultiplied(far, Math.round(scale * 0.75));
+  // Dual-tone atmospheric haze: cool fog aloft, denser warmer wash near the base.
+  paintHaze(far, hazeCool, 0.06, 0.34, hazeWarm);
+  // Soft distance DoF: wider radius at ENHANCED_SCALE so far towers melt gently into haze.
+  boxBlurPremultiplied(far, Math.max(2, Math.round(scale * 1.15)));
 
   const midLogicalHeight = Math.round(viewHeight * 0.6);
   const mid = createPixelLayer(logicalWidth * scale, midLogicalHeight * scale);
@@ -515,29 +617,32 @@ export function buildEnhancedParallaxData(options: ParallaxOptions): readonly En
     mid,
     createRng(seed ^ 0x2f1b),
     {
-      body: rgbOf(palette.midStructure),
-      trim: rgbOf(palette.nearStructure),
-      windowWarm: rgbOf(palette.rust),
-      windowCool: rgbOf(palette.visorGlow),
-      warmChance: 0.55,
-      windowChance: 0.16,
+      body: coolMidBody,
+      trim: mixRgb(rgbOf(palette.nearStructure), coolTrim, 0.4),
+      windowWarm: warmAmber,
+      windowHot: warmHot,
+      windowCool: mixRgb(rgbOf(palette.visorGlow), coolPane, 0.5),
+      warmChance: 0.68,
+      hotChance: 0.28,
+      windowChance: 0.24,
       widthRange: [9, 22],
       heightFrac: [0.3, 0.95],
       floorSpacing: 5,
       windowSize: [1.5, 2],
-      windowGap: [1.5, 2],
-      smokestackChance: 0.32,
-      linkChance: 0.3,
+      windowGap: [1.4, 1.9],
+      smokestackChance: 0.48,
+      linkChance: 0.42,
+      gapRange: [1, 6],
     },
     scale,
     true,
   );
-  paintHaze(mid, rgbOf(palette.fog), 0.03, 0.18);
+  paintHaze(mid, hazeCool, 0.04, 0.24, hazeWarm);
 
   const nearLogicalHeight = Math.round(viewHeight * 0.4);
   const near = createPixelLayer(logicalWidth * scale, nearLogicalHeight * scale);
   const pipelineStyle: PipelineStyle = {
-    pipe: rgbOf(palette.nearStructure),
+    pipe: mixRgb(rgbOf(palette.nearStructure), rgbOf(palette.fog), 0.2),
     pipeLight: rgbOf(palette.midStructure),
     pipeDark: rgbOf(palette.plateShadow),
     bracket: rgbOf(palette.nearStructure),
@@ -546,9 +651,8 @@ export function buildEnhancedParallaxData(options: ParallaxOptions): readonly En
     hazardDark: rgbOf(palette.hazardDark),
   };
   paintPipeRuns(near, createRng(seed ^ 0x77d1), pipelineStyle, scale);
-  // A whisper of haze fading to nothing by the floor — softens the seam where this layer's top
-  // edge meets mid's silhouettes instead of a hard depth cut, without dulling the readable pipes.
-  paintHaze(near, rgbOf(palette.fog), 0.05, 0);
+  // Whisper of cool haze at the top seam — softens the mid/near depth cut without dulling pipes.
+  paintHaze(near, hazeCool, 0.07, 0, hazeWarm);
   paintHazardStripes(near, pipelineStyle, scale);
 
   return [
