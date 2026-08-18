@@ -40,9 +40,9 @@ import type { RigParts, RigRect, RigShape } from './types';
 /** Rectangle placement is measured up from the feet (the origin), matching `sprites.ts`. */
 /**
  * Enhanced on-screen scale vs the 10×22 collision box. Visual only — gameplay hitbox stays
- * `PLAYER_WIDTH`×`PLAYER_HEIGHT`. ~1.8× makes Tesla Optimus readable in the 480×270 world view.
+ * `PLAYER_WIDTH`×`PLAYER_HEIGHT`. ~1.28× stays readable without swallowing the tile underfoot.
  */
-export const OPTIMUS_VISUAL_SCALE = 1.8;
+export const OPTIMUS_VISUAL_SCALE = 1.28;
 
 const S = OPTIMUS_VISUAL_SCALE;
 const HEAD_TOP = -24 * S;
@@ -496,15 +496,26 @@ function torsoParts(
   const waistY = shoulderY + torsoH * 0.62;
   return [
     oval(originX, originY, facing, torsoX - 0.95 * S, shoulderY - 0.4 * S, 9.8 * S, 1.9 * S, C.panelShade),
+    // Chest as a polymer plate (rect) so Optimus is not a stack of ovals.
+    seg(originX, originY, facing, torsoX + 0.35 * S, shoulderY + 0.35 * S, 7.2 * S, torsoH * 0.52, C.panel, {
+      shape: 'rect',
+    }),
     oval(originX, originY, facing, torsoX, shoulderY + 0.25 * S, 7.9 * S, torsoH * 0.58, C.panel),
     oval(originX, originY, facing, torsoX + 0.4 * S, shoulderY + 0.5 * S, 7.1 * S, 1.15 * S, C.panelLight),
     // Soft flank shading — reads as curved polymer, not riveted armour plates.
     oval(originX, originY, facing, torsoX - 0.2 * S, shoulderY + 1.3 * S, 1.5 * S, torsoH * 0.45, C.panelShade),
     oval(originX, originY, facing, torsoX + 6.6 * S, shoulderY + 1.3 * S, 1.5 * S, torsoH * 0.45, C.panelShade),
     // Subtle chest panel seams.
-    oval(originX, originY, facing, torsoX + 1.4 * S, shoulderY + torsoH * 0.28, 5.1 * S, 0.35 * S, C.panelShade),
-    oval(originX, originY, facing, torsoX + 3.7 * S, shoulderY + 1.4 * S, 0.4 * S, torsoH * 0.35, C.panelShade),
+    seg(originX, originY, facing, torsoX + 1.4 * S, shoulderY + torsoH * 0.28, 5.1 * S, 0.28 * S, C.panelShade, {
+      shape: 'rect',
+    }),
+    seg(originX, originY, facing, torsoX + 3.7 * S, shoulderY + 1.4 * S, 0.32 * S, torsoH * 0.32, C.panelShade, {
+      shape: 'rect',
+    }),
     // Charcoal midriff / battery housing band (Tesla waist language).
+    seg(originX, originY, facing, torsoX + 0.85 * S, waistY - 0.25 * S, 6.2 * S, torsoH * 0.38, C.joint, {
+      shape: 'rect',
+    }),
     oval(originX, originY, facing, torsoX + 0.6 * S, waistY - 0.4 * S, 6.7 * S, torsoH * 0.44, C.joint),
     oval(originX, originY, facing, torsoX + 1.15 * S, waistY, 5.6 * S, 0.6 * S, C.metal),
     oval(originX, originY, facing, torsoX + 1.5 * S, waistY + 0.85 * S, 4.9 * S, 0.35 * S, C.jointSoft),
@@ -549,23 +560,35 @@ function headParts(
     oval(originX, originY, facing, headX + 5.7 * S, headY + 2.0 * S, 0.7 * S, 0.7 * S, C.face),
     // Chin taper.
     oval(originX, originY, facing, headX + 0.85 * S, headY + 4.55 * S, 5.0 * S, 1.65 * S, C.panelShade),
-    // Black face OLED panel — shifted toward facing direction.
-    oval(originX, originY, facing, headX + 0.95 * S + faceBias, headY + 1.6 * S, 4.5 * S, 2.8 * S, C.face),
+    // Tesla Gen 2 visor: a full-width black OLED band, not a small oval mask.
+    oval(originX, originY, facing, headX + 0.55 * S + faceBias * 0.35, headY + 1.45 * S, 5.55 * S, 3.15 * S, C.face),
     seg(
       originX,
       originY,
       facing,
-      headX + 1.15 * S + faceBias,
-      headY + 1.85 * S,
-      4.1 * S,
-      2.3 * S,
+      headX + 0.75 * S + faceBias * 0.25,
+      headY + 1.7 * S,
+      5.15 * S,
+      2.55 * S,
       C.face,
+      { shape: 'rect' },
+    ),
+    // Thin visor rim so the screen reads inset.
+    seg(
+      originX,
+      originY,
+      facing,
+      headX + 0.75 * S + faceBias * 0.25,
+      headY + 1.7 * S,
+      5.15 * S,
+      0.28 * S,
+      C.metal,
       { shape: 'rect' },
     ),
   ];
   if (faceLit && state !== 'hurt') {
     // Twin teal status LEDs, also biased toward facing.
-    const eyeY = headY + 2.4 * S;
+    const eyeY = headY + 2.35 * S;
     parts.push(
       oval(originX, originY, facing, headX + 1.55 * S + faceBias, eyeY, 1.05 * S, 0.95 * S, C.eye, {
         emissive: 0.95,

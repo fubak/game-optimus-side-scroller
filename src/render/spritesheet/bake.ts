@@ -24,15 +24,15 @@ export const CELL_HEIGHT = 288;
 /** Padding around each cell so linear filtering never bleeds into a neighbour frame. */
 const CELL_PAD = 2;
 /**
- * World-space draw size for Optimus (~1.8× the 10×22 collision box). Visual only — hitbox
- * stays `PLAYER_WIDTH`×`PLAYER_HEIGHT`.
+ * World-space draw size for Optimus (~1.3× the 10×22 collision box). Visual only — hitbox
+ * stays `PLAYER_WIDTH`×`PLAYER_HEIGHT`. Kept close to the AABB so stomps/ledges still read.
  */
-export const WORLD_DRAW_WIDTH = 24;
-export const WORLD_DRAW_HEIGHT = 48;
+export const WORLD_DRAW_WIDTH = 14;
+export const WORLD_DRAW_HEIGHT = 32;
 /** Extra world padding around an enemy AABB when baking/drawing its sheet cell. */
 export const ENEMY_DRAW_PAD = 1.45;
 /** Extra on-screen scale for Enhanced enemies (visual only; hitboxes unchanged). */
-export const ENEMY_VISUAL_SCALE = 1.35;
+export const ENEMY_VISUAL_SCALE = 1.08;
 
 /**
  * Dead Cells–smooth clip table. Dense frame counts + high FPS so short actions stay fluid

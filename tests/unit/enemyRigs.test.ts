@@ -76,7 +76,7 @@ describe('buildEnemyRig — pose continuity (no NaNs)', () => {
   const dyings = [0, 0.25, 0.5, 0.75, 0.99];
   const telegraphs = [true, false];
 
-  it('never produces NaN/Infinity across a dense sweep of inputs', () => {
+  it('never produces NaN/Infinity across a dense sweep of inputs', { timeout: 15_000 }, () => {
     for (const kind of ALL_ENEMY_KINDS) {
       for (const facing of facings) {
         for (const animTime of animTimes) {

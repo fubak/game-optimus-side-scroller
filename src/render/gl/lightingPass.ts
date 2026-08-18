@@ -51,13 +51,9 @@ const vec3 KEY_LIGHT_DIR = vec3(0.350219, -0.525328, 0.775485); // normalize(vec
 // white sun so lit edges read with a slight "cool rim" contrast against the warm emissive glows
 // (visor/goal/energy cells), and pushed a bit brighter/stronger than before for punchier relief.
 const vec3 KEY_LIGHT_COLOR = vec3(0.88, 0.94, 1.0);
-const float KEY_LIGHT_INTENSITY = 1.25;
-// Gain applied to the key light's raw Lambert term before clamping — a cheap "make the relief
-// read more clearly" contrast boost: bevels/rivets that were only weakly lit now push closer to
-// fully lit, without touching ambient (so open, unlit areas do not brighten/wash out). Clamped to
-// 1.0 downstream, so this cannot wash albedo to flat white — it only steepens how quickly a
-// surface reaches full key-lit brightness as it faces the light.
-const float KEY_LIGHT_GAIN = 1.5;
+const float KEY_LIGHT_INTENSITY = 0.95;
+// Mild gain so rivets still shade without turning tile albedo into sparkle at 16px gameplay scale.
+const float KEY_LIGHT_GAIN = 1.12;
 // Short directional shadow march for the key light only, reusing shadowFactor's occluder ray
 // march (see below) over a small fixed world-space distance instead of a per-light radius — reads
 // as a cheap contact/crevice shadow under overhangs and inside corners. XY of KEY_LIGHT_DIR,

@@ -156,7 +156,7 @@ export function collectLights(params: CollectLightsParams, out: LightList): void
   out.setAmbient(
     [AMBIENT_GROUND[0], AMBIENT_GROUND[1], AMBIENT_GROUND[2]],
     [AMBIENT_SKY[0], AMBIENT_SKY[1], AMBIENT_SKY[2]],
-    0.48,
+    0.62,
   );
 
   const budget = lightBudgetForQuality(params.settings.quality);

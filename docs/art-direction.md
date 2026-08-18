@@ -64,8 +64,8 @@ the Enhanced-only changes above touch it.
 
 Optimus plays **procedural sprite sheets** baked at Enhanced load from a Tesla Optimus Gen 2–inspired
 skeletal rig: pearl polymer panels, charcoal joint covers, black face screen with twin status LEDs,
-and elliptical limb segments (not chunky armour bricks). The Enhanced visual is ~1.8× the gameplay
-hitbox so he reads clearly in the world view; left/right facing follows movement (sheet UVs flip —
+and elliptical limb segments (not chunky armour bricks). The Enhanced visual is ~1.28× the gameplay
+hitbox so he reads clearly without swallowing the tile he stands on; left/right facing follows movement (sheet UVs flip —
 he is not camera-locked). Soft alpha fringes keep the silhouette smooth at supersampling. Clip rates
 stay dense — run 20@20fps, dash @ 30fps — for Dead Cells–smooth motion. Classic (`?classic=1`) is
 unchanged and still uses Canvas2D industrial sprites.
@@ -73,7 +73,7 @@ Previews: `npm run generate:spritesheets` → `public/generated/spritesheets/`.
 
 ## Other Enhanced props
 
-Enemies bake from elliptical factory rigs (wheels, eyes, rotors, cores) and draw ~1.35× hitbox.
+Enemies bake from elliptical factory rigs (wheels, eyes, rotors, cores) and draw ~1.08× hitbox.
 Telegraph / sealed-core / dying combat states select alternate sheet clips (no live-rig fallback).
 Spike tips, conveyor cleats, checkpoint lamps, goal shafts, and scenery pipes are G-buffer overlays
 so hazards and props keep Classic silhouettes. Sheet bake adds procedural panel wear + hatch strokes

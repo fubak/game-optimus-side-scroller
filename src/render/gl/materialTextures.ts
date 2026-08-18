@@ -23,7 +23,7 @@ export interface MaterialTextureSet {
 /** Upload every channel of a material atlas into fresh nearest-filtered, clamped textures. */
 export function uploadMaterialAtlas(gl: WebGL2RenderingContext, atlas: MaterialAtlas): MaterialTextureSet {
   const { width, height } = atlas.layout;
-  const options = { filter: Filter.Nearest, wrap: Wrap.Clamp };
+  const options = { filter: Filter.Linear, wrap: Wrap.Clamp, mipmaps: true };
 
   const albedo = new Texture(gl, TexFormat.RGBA8, options);
   albedo.uploadRGBA(atlas.albedo, width, height);

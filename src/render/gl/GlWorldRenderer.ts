@@ -193,7 +193,7 @@ const SPRITE_UV_PAD_BLEED_TEXELS = 0.5;
  * total so the deferred G-buffer seam blends instead of reading as a hard grid; gameplay
  * collision (`game/`) and Classic Canvas2D tiles are untouched.
  */
-const TILE_EDGE_OVERLAP_PX = 0.5;
+const TILE_EDGE_OVERLAP_PX = 1.25;
 
 function uvRectFromAtlasRect(rect: AtlasRect, atlasWidth: number, atlasHeight: number): UvRect {
   const bleed = TILE_UV_PAD_BLEED_TEXELS;
@@ -1089,10 +1089,10 @@ export class GlWorldRenderer implements WorldView {
   }
 
   private drawPickup(pickup: Pickup, bob: number): void {
-    const x = pickup.x;
-    const y = pickup.y + bob;
-    const w = pickup.width;
-    const h = pickup.height;
+    const x = pickup.x - 1;
+    const y = pickup.y + bob - 1;
+    const w = pickup.width + 2;
+    const h = pickup.height + 2;
     switch (pickup.kind) {
       case 'energyCell': {
         // Tall canister with glowing window — colour-blind shape language matching Classic.
@@ -1326,10 +1326,9 @@ export class GlWorldRenderer implements WorldView {
       player.isInvulnerable && Math.floor(player.invulnerableTime * INVULNERABLE_BLINK_HZ) % 2 === 1;
     if (blinkedOut) return;
 
-    // Soft contact shadow under the feet — scales with the Enhanced visual (larger than the
-    // 10×22 hitbox) so the bigger Tesla silhouette still reads grounded.
-    const drawSize = this.characterAtlas.drawSizes.get(optimusClipId(player.state));
-    const shadowW = drawSize?.width ?? PLAYER_WIDTH + 4;
+    // Soft contact shadow under the feet — slightly wider than the 10×22 hitbox so the
+    // gameplay AABB stays readable under the larger Tesla silhouette.
+    const shadowW = PLAYER_WIDTH + 6;
     const shadowX = playerPos.x + PLAYER_WIDTH / 2 - shadowW / 2;
     this.gbufferBatch.rect(shadowX, playerPos.y + PLAYER_HEIGHT - 1, shadowW, 3, {
       r: 0.02,
@@ -1435,7 +1434,7 @@ export class GlWorldRenderer implements WorldView {
     const outer = parseColor(palette.visorGlow);
     const mid = parseColor(palette.visor);
     const core = parseColor(palette.white);
-    // Match the Enhanced Optimus visual footprint (~1.8× hitbox), not the 10×22 collision box.
+    // Match the Enhanced Optimus visual footprint, not the 10×22 collision box.
     const gw = WORLD_DRAW_WIDTH;
     const gh = WORLD_DRAW_HEIGHT;
     for (const ghost of this.ghosts) {
