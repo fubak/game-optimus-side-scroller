@@ -4,6 +4,8 @@ A browser side-scrolling platformer starring **Optimus**, a humanoid factory rob
 decaying robotics plant. Built from scratch with TypeScript and Canvas2D: **no game engine and no
 binary assets** — every sprite, tile, sound and skyline is generated in code.
 
+**Play:** [fubak.github.io/game-optimus-side-scroller](https://fubak.github.io/game-optimus-side-scroller/)
+
 Four sectors, a jetpack, a dash, and a gantry crane at the end that would rather you stayed.
 
 ![Title screen with the attract-mode demo playing behind it](docs/media/title.png)
@@ -69,7 +71,7 @@ An alternative `Z` / `X` layout is available in **Settings → Key layout**.
 | `npm run test:coverage` | unit suite with coverage thresholds                     |
 | `npm run test:e2e`      | Playwright browser smoke tests against the built bundle |
 | `npm run levels`        | print every level with rulers and a layout audit        |
-| `npm run bench`         | frame-time bench across resolutions/quality (see below) |
+| `npm run generate:og`   | capture Enhanced still → `public/og.png` share card     |
 | `npm run ci`            | lint + typecheck + unit + build + e2e (what CI runs)    |
 
 ## Design notes

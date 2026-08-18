@@ -9,3 +9,6 @@ test-results/
 
 # Procedurally generated — reproducible from scripts/generateMaterials.ts, not hand-authored.
 public/generated/
+
+# Intermediate still used by `npm run generate:og` (the committed share card is `public/og.png`).
+scripts/assets/
