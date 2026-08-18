@@ -169,7 +169,7 @@ export class Texture {
     }
     gl.bindTexture(gl.TEXTURE_2D, this.handle);
     gl.texImage2D(gl.TEXTURE_2D, 0, info.internalFormat, width, height, 0, info.format, info.type, data);
-    if (this.mipmaps) gl.generateMipmap(gl.TEXTURE_2D);
+    if (this.mipmaps && typeof gl.generateMipmap === 'function') gl.generateMipmap(gl.TEXTURE_2D);
     this.texWidth = width;
     this.texHeight = height;
   }
@@ -194,7 +194,7 @@ export class Texture {
     gl.bindTexture(gl.TEXTURE_2D, this.handle);
     gl.pixelStorei(gl.UNPACK_FLIP_Y_WEBGL, false);
     gl.texImage2D(gl.TEXTURE_2D, 0, info.internalFormat, info.format, info.type, source);
-    if (this.mipmaps) gl.generateMipmap(gl.TEXTURE_2D);
+    if (this.mipmaps && typeof gl.generateMipmap === 'function') gl.generateMipmap(gl.TEXTURE_2D);
     this.texWidth = width;
     this.texHeight = height;
   }
@@ -222,7 +222,9 @@ export class Texture {
     const { gl } = this;
     const mag = filterEnum(gl, filter);
     const min =
-      this.mipmaps && filter === Filter.Linear ? gl.LINEAR_MIPMAP_LINEAR : mag;
+      this.mipmaps && filter === Filter.Linear && typeof gl.LINEAR_MIPMAP_LINEAR === 'number'
+        ? gl.LINEAR_MIPMAP_LINEAR
+        : mag;
     gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, min);
     gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, mag);
   }

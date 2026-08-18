@@ -206,6 +206,7 @@ function createMockGl(): { gl: WebGL2RenderingContext; texImage2D: ReturnType<ty
     RED: 0x1903,
     NEAREST: 0x2600,
     LINEAR: 0x2601,
+    LINEAR_MIPMAP_LINEAR: 0x2703,
     CLAMP_TO_EDGE: 0x812f,
     REPEAT: 0x2901,
     MIRRORED_REPEAT: 0x8370,
