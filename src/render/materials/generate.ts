@@ -364,9 +364,9 @@ const paintBrushedSteel: PainterFactory = (seed, rng) => {
   const weldHalf = size * 0.032;
   const mid = size * 0.5;
   return (x, y) => {
-    // Long soft brush bands only — low amplitude so composition, not grit, carries the look.
-    const streaks = fbm(seed, x * 0.006, y * 0.11, size, 2);
-    const wear = fbm(seed + 41, x * 0.01, y * 0.01, size, 2);
+    // Broad brush bands only — wavelengths larger than a gameplay tile so 16px cells do not sparkle.
+    const streaks = fbm(seed, x * 0.004, y * 0.035, size, 2);
+    const wear = fbm(seed + 41, x * 0.007, y * 0.007, size, 2);
     const frameMask = edgeProximity(x, y, size, frame);
     const well = panelWell(x, y, size, wellInset, wellSoft);
     const weldX = 1 - softStep(Math.abs(x - mid), 0, weldHalf);
@@ -374,7 +374,7 @@ const paintBrushedSteel: PainterFactory = (seed, rng) => {
     const weld = Math.max(weldX, weldY) * well;
     const rivet = rivetBump(x, y, rivets, size * 0.09);
 
-    let height = 0.48 + (streaks - 0.5) * 0.04 + (wear - 0.5) * 0.02;
+    let height = 0.48 + (streaks - 0.5) * 0.02 + (wear - 0.5) * 0.01;
     height += frameMask * 0.16;
     height -= well * 0.1;
     height -= weld * 0.12;
@@ -399,7 +399,7 @@ const paintPaintedSteel: PainterFactory = (seed, rng) => {
   const wellInset = size * 0.16;
   const wellSoft = size * 0.07;
   return (x, y) => {
-    const wear = fbm(seed, x * 0.016, y * 0.016, size, 2);
+    const wear = fbm(seed, x * 0.01, y * 0.01, size, 2);
     // A few large flake chips with very soft edges — painted damage, not grit.
     const chipMask = softStep(wear, 0.58, 0.88);
     const rivet = rivetBump(x, y, rivets, size * 0.075);
@@ -461,7 +461,7 @@ const paintRustedPlate: PainterFactory = (seed, rng) => {
   const drips = makeDripXs(rng, size, 4);
   return (x, y) => {
     // Large rust islands + seeded vertical drips (Dead Cells-readable stains).
-    const island = fbm(seed, x * 0.012, y * 0.012, size, 2);
+    const island = fbm(seed, x * 0.008, y * 0.008, size, 2);
     const drip = dripMask(x, y, drips, size, size * 0.055);
     const rustMask = softStep(island * 0.75 + drip * 0.55, 0.32, 0.7);
     const pit = fbm(seed + 7, x * 0.035, y * 0.035, size, 2);
@@ -671,17 +671,17 @@ function deriveMaterialSeed(seed: number, id: MaterialId): number {
  * these stay high enough that bevels/rivets still read once lit, without amplifying grit.
  */
 const NORMAL_STRENGTH: Record<MaterialId, number> = {
-  [MaterialId.BrushedSteel]: 18,
-  [MaterialId.PaintedSteel]: 16,
-  [MaterialId.Grating]: 9,
-  [MaterialId.RustedPlate]: 14,
-  [MaterialId.Concrete]: 10,
-  [MaterialId.ConveyorRubber]: 10,
-  [MaterialId.WarningChevrons]: 13,
-  [MaterialId.HazardSpike]: 7,
-  [MaterialId.Catwalk]: 9,
-  [MaterialId.EmissiveEnergy]: 11,
-  [MaterialId.EmissiveGoal]: 10,
+  [MaterialId.BrushedSteel]: 7,
+  [MaterialId.PaintedSteel]: 6,
+  [MaterialId.Grating]: 5,
+  [MaterialId.RustedPlate]: 6,
+  [MaterialId.Concrete]: 4,
+  [MaterialId.ConveyorRubber]: 5,
+  [MaterialId.WarningChevrons]: 6,
+  [MaterialId.HazardSpike]: 4,
+  [MaterialId.Catwalk]: 5,
+  [MaterialId.EmissiveEnergy]: 5,
+  [MaterialId.EmissiveGoal]: 5,
 };
 
 function paintMaterialInto(

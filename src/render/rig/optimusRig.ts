@@ -40,9 +40,9 @@ import type { RigParts, RigRect, RigShape } from './types';
 /** Rectangle placement is measured up from the feet (the origin), matching `sprites.ts`. */
 /**
  * Enhanced on-screen scale vs the 10×22 collision box. Visual only — gameplay hitbox stays
- * `PLAYER_WIDTH`×`PLAYER_HEIGHT`. ~1.8× makes Tesla Optimus readable in the 480×270 world view.
+ * `PLAYER_WIDTH`×`PLAYER_HEIGHT`. ~1.5× stays readable without swallowing the tile underfoot.
  */
-export const OPTIMUS_VISUAL_SCALE = 1.8;
+export const OPTIMUS_VISUAL_SCALE = 1.5;
 
 const S = OPTIMUS_VISUAL_SCALE;
 const HEAD_TOP = -24 * S;
@@ -549,23 +549,35 @@ function headParts(
     oval(originX, originY, facing, headX + 5.7 * S, headY + 2.0 * S, 0.7 * S, 0.7 * S, C.face),
     // Chin taper.
     oval(originX, originY, facing, headX + 0.85 * S, headY + 4.55 * S, 5.0 * S, 1.65 * S, C.panelShade),
-    // Black face OLED panel — shifted toward facing direction.
-    oval(originX, originY, facing, headX + 0.95 * S + faceBias, headY + 1.6 * S, 4.5 * S, 2.8 * S, C.face),
+    // Tesla Gen 2 visor: a full-width black OLED band, not a small oval mask.
+    oval(originX, originY, facing, headX + 0.55 * S + faceBias * 0.35, headY + 1.45 * S, 5.55 * S, 3.15 * S, C.face),
     seg(
       originX,
       originY,
       facing,
-      headX + 1.15 * S + faceBias,
-      headY + 1.85 * S,
-      4.1 * S,
-      2.3 * S,
+      headX + 0.75 * S + faceBias * 0.25,
+      headY + 1.7 * S,
+      5.15 * S,
+      2.55 * S,
       C.face,
+      { shape: 'rect' },
+    ),
+    // Thin visor rim so the screen reads inset.
+    seg(
+      originX,
+      originY,
+      facing,
+      headX + 0.75 * S + faceBias * 0.25,
+      headY + 1.7 * S,
+      5.15 * S,
+      0.28 * S,
+      C.metal,
       { shape: 'rect' },
     ),
   ];
   if (faceLit && state !== 'hurt') {
     // Twin teal status LEDs, also biased toward facing.
-    const eyeY = headY + 2.4 * S;
+    const eyeY = headY + 2.35 * S;
     parts.push(
       oval(originX, originY, facing, headX + 1.55 * S + faceBias, eyeY, 1.05 * S, 0.95 * S, C.eye, {
         emissive: 0.95,

@@ -82,15 +82,21 @@ function buildWalkerRig(options: EnemyRigOptions): RigParts {
       oval(x + ((offset + width) % width), blockY, 2.2, Math.max(1, 2.2 * flex), palette.plateLight, { alpha }),
     );
   }
-  // Softened hull.
+  // Softened hull with plate seams (rects) so the walker reads as a machine, not a rust blob.
   parts.push(oval(x + 0.4, bodyY, width - 0.8, bodyH, palette.rust, { alpha }));
+  parts.push(rect(x + 0.9, bodyY + 0.4, width - 1.8, bodyH - 0.8, palette.plateDark, { alpha }));
   parts.push(oval(x + 0.4, bodyY, width - 0.8, 1.3, palette.uiWarn, { alpha }));
+  parts.push(rect(x + 1.2, bodyY + 1.4, width - 2.4, 0.45, palette.plateLight, { alpha }));
   parts.push(oval(x + 1.4, bodyY + 1.2, width - 2.8, bodyH - 2.4, palette.plateDark, { alpha }));
   parts.push(oval(x + 2.1, bodyY + 2, width - 4.2, bodyH * 0.55, palette.plateFace, { alpha }));
   parts.push(rect(x + 1.5, bodyY + bodyH * 0.35, width - 3, 0.9, palette.plateShadow, { alpha }));
   parts.push(rect(x + 1.5, bodyY + bodyH * 0.58, width - 3, 0.9, palette.plateShadow, { alpha }));
   parts.push(rect(x + 2.5, bodyY + 2, 0.9, bodyH - 3.2, palette.plateShadow, { alpha }));
   parts.push(rect(x + width - 3.4, bodyY + 2, 0.9, bodyH - 3.2, palette.plateShadow, { alpha }));
+  // Antenna so the silhouette is not a smooth oval.
+  const antennaX = facing === 1 ? x + width - 3.2 : x + 1.6;
+  parts.push(rect(antennaX, bodyY - 2.4, 0.7, 2.6, palette.plateLight, { alpha }));
+  parts.push(oval(antennaX - 0.35, bodyY - 3.1, 1.4, 1.4, palette.hazard, { alpha, emissive: 0.7 }));
   // Sensor eye — well → iris → pupil.
   const eyeX = facing === 1 ? x + width - 5.4 : x + 1.8;
   parts.push(oval(eyeX, bodyY + 1.6, 3.8, 3.8, palette.hazardDark, { alpha }));
