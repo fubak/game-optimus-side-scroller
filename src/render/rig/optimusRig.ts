@@ -40,9 +40,9 @@ import type { RigParts, RigRect, RigShape } from './types';
 /** Rectangle placement is measured up from the feet (the origin), matching `sprites.ts`. */
 /**
  * Enhanced on-screen scale vs the 10×22 collision box. Visual only — gameplay hitbox stays
- * `PLAYER_WIDTH`×`PLAYER_HEIGHT`. ~1.5× stays readable without swallowing the tile underfoot.
+ * `PLAYER_WIDTH`×`PLAYER_HEIGHT`. ~1.28× stays readable without swallowing the tile underfoot.
  */
-export const OPTIMUS_VISUAL_SCALE = 1.5;
+export const OPTIMUS_VISUAL_SCALE = 1.28;
 
 const S = OPTIMUS_VISUAL_SCALE;
 const HEAD_TOP = -24 * S;
@@ -496,15 +496,26 @@ function torsoParts(
   const waistY = shoulderY + torsoH * 0.62;
   return [
     oval(originX, originY, facing, torsoX - 0.95 * S, shoulderY - 0.4 * S, 9.8 * S, 1.9 * S, C.panelShade),
+    // Chest as a polymer plate (rect) so Optimus is not a stack of ovals.
+    seg(originX, originY, facing, torsoX + 0.35 * S, shoulderY + 0.35 * S, 7.2 * S, torsoH * 0.52, C.panel, {
+      shape: 'rect',
+    }),
     oval(originX, originY, facing, torsoX, shoulderY + 0.25 * S, 7.9 * S, torsoH * 0.58, C.panel),
     oval(originX, originY, facing, torsoX + 0.4 * S, shoulderY + 0.5 * S, 7.1 * S, 1.15 * S, C.panelLight),
     // Soft flank shading — reads as curved polymer, not riveted armour plates.
     oval(originX, originY, facing, torsoX - 0.2 * S, shoulderY + 1.3 * S, 1.5 * S, torsoH * 0.45, C.panelShade),
     oval(originX, originY, facing, torsoX + 6.6 * S, shoulderY + 1.3 * S, 1.5 * S, torsoH * 0.45, C.panelShade),
     // Subtle chest panel seams.
-    oval(originX, originY, facing, torsoX + 1.4 * S, shoulderY + torsoH * 0.28, 5.1 * S, 0.35 * S, C.panelShade),
-    oval(originX, originY, facing, torsoX + 3.7 * S, shoulderY + 1.4 * S, 0.4 * S, torsoH * 0.35, C.panelShade),
+    seg(originX, originY, facing, torsoX + 1.4 * S, shoulderY + torsoH * 0.28, 5.1 * S, 0.28 * S, C.panelShade, {
+      shape: 'rect',
+    }),
+    seg(originX, originY, facing, torsoX + 3.7 * S, shoulderY + 1.4 * S, 0.32 * S, torsoH * 0.32, C.panelShade, {
+      shape: 'rect',
+    }),
     // Charcoal midriff / battery housing band (Tesla waist language).
+    seg(originX, originY, facing, torsoX + 0.85 * S, waistY - 0.25 * S, 6.2 * S, torsoH * 0.38, C.joint, {
+      shape: 'rect',
+    }),
     oval(originX, originY, facing, torsoX + 0.6 * S, waistY - 0.4 * S, 6.7 * S, torsoH * 0.44, C.joint),
     oval(originX, originY, facing, torsoX + 1.15 * S, waistY, 5.6 * S, 0.6 * S, C.metal),
     oval(originX, originY, facing, torsoX + 1.5 * S, waistY + 0.85 * S, 4.9 * S, 0.35 * S, C.jointSoft),

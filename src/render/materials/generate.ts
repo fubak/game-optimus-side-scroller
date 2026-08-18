@@ -377,8 +377,8 @@ const paintBrushedSteel: PainterFactory = (seed, rng) => {
     let height = 0.48 + (streaks - 0.5) * 0.02 + (wear - 0.5) * 0.01;
     height += frameMask * 0.16;
     height -= well * 0.1;
-    height -= weld * 0.12;
-    height += rivet * 0.28;
+    height -= weld * 0.05;
+    height += rivet * 0.12;
 
     const tone = mixColor(STEEL_DARK, STEEL_LIGHT, clamp01(streaks * 0.45 + wear * 0.15 + 0.28));
     let albedo = mixColor(tone, STEEL_BASE, well * 0.35);
@@ -387,7 +387,7 @@ const paintBrushedSteel: PainterFactory = (seed, rng) => {
     albedo = mixColor(albedo, STEEL_SHADOW, weld * 0.35);
     const roughness = clamp01(0.3 + (1 - streaks) * 0.08 - rivet * 0.16 + weld * 0.1 + well * 0.04);
     const ao = clamp01(0.96 - frameMask * 0.14 - weld * 0.22 - well * 0.06 + wear * 0.04);
-    const metallic = clamp01(0.92 - rivet * 0.1 - weld * 0.06);
+    const metallic = clamp01(0.55 - rivet * 0.1 - weld * 0.06);
     return { albedo: [albedo[0], albedo[1], albedo[2], 1], height: clamp01(height), roughness, ao, metallic };
   };
 };
@@ -671,17 +671,17 @@ function deriveMaterialSeed(seed: number, id: MaterialId): number {
  * these stay high enough that bevels/rivets still read once lit, without amplifying grit.
  */
 const NORMAL_STRENGTH: Record<MaterialId, number> = {
-  [MaterialId.BrushedSteel]: 7,
-  [MaterialId.PaintedSteel]: 6,
-  [MaterialId.Grating]: 5,
-  [MaterialId.RustedPlate]: 6,
-  [MaterialId.Concrete]: 4,
-  [MaterialId.ConveyorRubber]: 5,
-  [MaterialId.WarningChevrons]: 6,
-  [MaterialId.HazardSpike]: 4,
-  [MaterialId.Catwalk]: 5,
-  [MaterialId.EmissiveEnergy]: 5,
-  [MaterialId.EmissiveGoal]: 5,
+  [MaterialId.BrushedSteel]: 3,
+  [MaterialId.PaintedSteel]: 3,
+  [MaterialId.Grating]: 3,
+  [MaterialId.RustedPlate]: 3,
+  [MaterialId.Concrete]: 2,
+  [MaterialId.ConveyorRubber]: 3,
+  [MaterialId.WarningChevrons]: 3,
+  [MaterialId.HazardSpike]: 2,
+  [MaterialId.Catwalk]: 3,
+  [MaterialId.EmissiveEnergy]: 2,
+  [MaterialId.EmissiveGoal]: 2,
 };
 
 function paintMaterialInto(

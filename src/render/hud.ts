@@ -60,10 +60,10 @@ export class Hud {
 
     // ── Health pips ────────────────────────────────────────────────────────────────────────────
     for (let i = 0; i < HEALTH_MAX; i += 1) {
-      const x = 6 + i * 9;
+      const x = 6 + i * 11;
       const filled = i < player.health;
       if (enhancedChrome) {
-        fillSoftPip(ctx, x, 6, 7, 6, filled, {
+        fillSoftPip(ctx, x, 5, 9, 7, filled, {
           filled: palette.health,
           empty: palette.plateDark,
           highlight: palette.white,
@@ -83,7 +83,7 @@ export class Hud {
     const pulse = low ? 0.55 + 0.45 * Math.sin(world.elapsedSec * 12) : 1;
     if (enhancedChrome) {
       ctx.globalAlpha = pulse;
-      fillSoftBar(ctx, 6, 16, barWidth, 4, player.energyRatio, {
+      fillSoftBar(ctx, 6, 16, barWidth, 5, player.energyRatio, {
         well: palette.plateShadow,
         track: palette.energyDim,
         fill: low ? palette.uiWarn : palette.energy,
@@ -117,7 +117,8 @@ export class Hud {
     textDraw(ctx, 'DASH', 30, 22, { color: dashReady ? palette.visor : palette.uiDim, tracking: 0 });
 
     // ── Lives ─────────────────────────────────────────────────────────────────────────────────
-    textDraw(ctx, `×${String(world.livesLeft)}`, 6 + HEALTH_MAX * 9 + 4, 6, { color: palette.uiText });
+    const pipStride = enhancedChrome ? 11 : 9;
+    textDraw(ctx, `×${String(world.livesLeft)}`, 6 + HEALTH_MAX * pipStride + 4, 6, { color: palette.uiText });
 
     // ── Score, collectables and timer ─────────────────────────────────────────────────────────
     const stats = world.stats;

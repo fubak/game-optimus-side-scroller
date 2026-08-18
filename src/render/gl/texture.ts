@@ -99,18 +99,24 @@ function wrapEnum(gl: WebGL2RenderingContext, wrap: Wrap): GLenum {
 export interface TextureOptions {
   readonly filter?: Filter;
   readonly wrap?: Wrap;
+  /**
+   * Build a mip chain after upload. Material atlases need this: a 128px tile sampled into a 16px
+   * gameplay cell aliases into sparkle without minification filtering.
+   */
+  readonly mipmaps?: boolean;
 }
 
 /**
  * A single 2D texture with a fixed format, resizable in place.
  *
- * No mipmaps: everything this game draws is either pixel-art (nearest filtering, no mip chain
- * needed) or a full-screen HDR target (resolved every frame, so a mip chain would be wasted work).
+ * Mipmaps are opt-in ({@link TextureOptions.mipmaps}) for sampled atlases. Render targets stay
+ * single-level — they are rewritten every frame.
  */
 export class Texture {
   readonly gl: WebGL2RenderingContext;
   readonly handle: WebGLTexture;
   readonly format: TexFormat;
+  private readonly mipmaps: boolean;
 
   private texWidth = 0;
   private texHeight = 0;
@@ -119,12 +125,12 @@ export class Texture {
     this.gl = gl;
     this.format = format;
     this.handle = gl.createTexture();
+    this.mipmaps = options.mipmaps === true;
 
     const filter = options.filter ?? Filter.Nearest;
     const wrap = options.wrap ?? Wrap.Clamp;
     gl.bindTexture(gl.TEXTURE_2D, this.handle);
-    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, filterEnum(gl, filter));
-    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, filterEnum(gl, filter));
+    this.applyFilter(filter);
     gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, wrapEnum(gl, wrap));
     gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, wrapEnum(gl, wrap));
   }
@@ -163,6 +169,7 @@ export class Texture {
     }
     gl.bindTexture(gl.TEXTURE_2D, this.handle);
     gl.texImage2D(gl.TEXTURE_2D, 0, info.internalFormat, width, height, 0, info.format, info.type, data);
+    if (this.mipmaps) gl.generateMipmap(gl.TEXTURE_2D);
     this.texWidth = width;
     this.texHeight = height;
   }
@@ -187,6 +194,7 @@ export class Texture {
     gl.bindTexture(gl.TEXTURE_2D, this.handle);
     gl.pixelStorei(gl.UNPACK_FLIP_Y_WEBGL, false);
     gl.texImage2D(gl.TEXTURE_2D, 0, info.internalFormat, info.format, info.type, source);
+    if (this.mipmaps) gl.generateMipmap(gl.TEXTURE_2D);
     this.texWidth = width;
     this.texHeight = height;
   }
@@ -206,10 +214,17 @@ export class Texture {
    */
   setFilter(filter: Filter): void {
     const { gl } = this;
-    const value = filterEnum(gl, filter);
     gl.bindTexture(gl.TEXTURE_2D, this.handle);
-    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, value);
-    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, value);
+    this.applyFilter(filter);
+  }
+
+  private applyFilter(filter: Filter): void {
+    const { gl } = this;
+    const mag = filterEnum(gl, filter);
+    const min =
+      this.mipmaps && filter === Filter.Linear ? gl.LINEAR_MIPMAP_LINEAR : mag;
+    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, min);
+    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, mag);
   }
 
   /** Reallocate storage at a new size, discarding existing pixel data. */

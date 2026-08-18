@@ -1089,10 +1089,10 @@ export class GlWorldRenderer implements WorldView {
   }
 
   private drawPickup(pickup: Pickup, bob: number): void {
-    const x = pickup.x;
-    const y = pickup.y + bob;
-    const w = pickup.width;
-    const h = pickup.height;
+    const x = pickup.x - 1;
+    const y = pickup.y + bob - 1;
+    const w = pickup.width + 2;
+    const h = pickup.height + 2;
     switch (pickup.kind) {
       case 'energyCell': {
         // Tall canister with glowing window — colour-blind shape language matching Classic.

@@ -137,6 +137,8 @@ function buildDroneRig(options: EnemyRigOptions): RigParts {
     oval(bodyX + 0.75, dropY + 4, bodyW - 1.5, midH - 1.5, palette.plateDark, { alpha }),
     rect(bodyX + 0.8, dropY + 4 + (midH - 1.5) * 0.4, bodyW - 1.6, 0.9, palette.plateShadow, { alpha }),
     oval(x + 2.1 + bank * 0.5, dropY + height - 2.4, width - 4.2, 1.5, palette.plateShadow, { alpha }),
+    rect(x + 1.2 + bank * 0.5, dropY + height - 2.2, 2.2, 2.2, palette.plateDark, { alpha }),
+    rect(x + width - 3.4 + bank * 0.5, dropY + height - 2.2, 2.2, 2.2, palette.plateDark, { alpha }),
     oval(x + 2.9 + bank * 0.5, dropY + height - 1.7, 1.6, 1.15, palette.hazard, { alpha, emissive: 0.55 }),
     oval(x + width - 4.5 + bank * 0.5, dropY + height - 1.7, 1.6, 1.15, palette.hazard, {
       alpha,
@@ -171,8 +173,10 @@ function buildTurretRig(options: EnemyRigOptions): RigParts {
   const domeEmissive = Math.min(1, charge * 0.98);
 
   const parts: RigRect[] = [
+    rect(x + 0.4, dropY + height - 5, width - 0.8, 5.2, palette.plateDark, { alpha }),
     oval(x, dropY + height - 5, width, 5.2, palette.plateDark, { alpha }),
     oval(x + 0.5, dropY + height - 5, width - 1, 1.3, palette.plateFace, { alpha }),
+    rect(x + 1.6, dropY + 2.6, width - 3.2, height - 6.6, palette.grate, { alpha }),
     oval(x + 1.4, dropY + 2.4, width - 2.8, height - 6.2, palette.grate, { alpha }),
     oval(x + 2.3, dropY + 2.4, width - 4.6, 1.2, palette.plateLight, { alpha }),
     rect(x + 2.5, dropY + 2.5 + (height - 6.5) * 0.35, width - 5, 0.9, palette.plateShadow, { alpha }),
@@ -223,6 +227,7 @@ function buildCrusherRig(options: EnemyRigOptions): RigParts {
   const parts: RigRect[] = [
     oval(x + width / 2 - 3.4, railTop, 6.8, dropY - railTop + 2, palette.plateDark, { alpha }),
     oval(x + width / 2 - 1.2, railTop, 2.4, dropY - railTop + 2, palette.plateFace, { alpha }),
+    rect(x + 0.4 + shake, dropY + 0.4, width - 0.8, height - 0.8, palette.plateFace, { alpha }),
     oval(x + shake, dropY, width, height, palette.plateFace, { alpha }),
     oval(x + shake, dropY, width, 2.4, palette.plateLight, { alpha }),
     oval(x + 1.4 + shake, dropY + 2, width - 2.8, height - 6.2, palette.plateDark, { alpha }),

@@ -79,8 +79,8 @@ describe('buildCharacterAtlas', () => {
     const atlas = buildCharacterAtlas();
     const draw = atlas.drawSizes.get('optimus:run');
     expect(draw).toBeDefined();
-    expect(draw!.width).toBeGreaterThanOrEqual(16);
-    expect(draw!.height).toBeGreaterThanOrEqual(32);
+    expect(draw!.width).toBeGreaterThanOrEqual(12);
+    expect(draw!.height).toBeGreaterThanOrEqual(28);
     expect(atlas.cellWidth).toBeGreaterThanOrEqual(128);
     expect(atlas.cellHeight).toBeGreaterThanOrEqual(240);
   });

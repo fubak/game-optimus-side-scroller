@@ -53,6 +53,8 @@ export function fillSoftPip(
     readonly emptyShade: string;
   },
 ): void {
+  ctx.fillStyle = colors.emptyShade;
+  ctx.fillRect(x - 1, y - 1, width + 2, height + 2);
   ctx.fillStyle = filled ? colors.filled : colors.empty;
   ctx.fillRect(x, y, width, height);
   ctx.fillStyle = filled ? colors.highlight : colors.emptyShade;
